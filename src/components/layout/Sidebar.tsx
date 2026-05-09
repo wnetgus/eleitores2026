@@ -19,14 +19,29 @@ import {
   Activity,
   TrendingUp,
   FileSpreadsheet,
+  Globe,
+  Building2,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { getRoleConfig, isAdmin, isCoordenador } from "@/lib/permissions";
+import { isSuperAdmin, isAdmin, isPolitico, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
 import { ROLE_CONFIG } from "@/types";
+
+const superAdminMenu = [
+  { href: "/dashboard", label: "Painel Global", icon: Globe },
+  { href: "/campanhas", label: "Campanhas", icon: Building2 },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/coordenadores", label: "Coordenadores", icon: Target },
+  { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
+  { href: "/metas", label: "Metas", icon: TrendingUp },
+  { href: "/logs", label: "Logs", icon: Activity },
+  { href: "/configuracoes", label: "Configurações", icon: Settings },
+];
 
 const adminMenu = [
   { href: "/dashboard", label: "Dashboard Global", icon: Crown },
@@ -38,6 +53,16 @@ const adminMenu = [
   { href: "/metas", label: "Metas", icon: TrendingUp },
   { href: "/logs", label: "Logs", icon: Activity },
   { href: "/configuracoes", label: "Configurações", icon: Settings },
+];
+
+const politicoMenu = [
+  { href: "/dashboard", label: "Minha Campanha", icon: Crown },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/coordenadores", label: "Coordenadores", icon: Target },
+  { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
+  { href: "/metas", label: "Metas", icon: TrendingUp },
 ];
 
 const coordenadorMenu = [
@@ -66,29 +91,21 @@ export function Sidebar() {
     router.push("/login");
   };
 
-  if (!userData) {
-    console.log("[Sidebar] userData is null");
-    return null;
-  }
+  if (!userData) return null;
 
-  console.log("[Sidebar] userData.role:", userData.role, "ativo:", userData.ativo);
-  console.log("[Sidebar] isAdmin:", isAdmin(userData));
-
-  const config = getRoleConfig(userData);
-  const roleInfo = ROLE_CONFIG[userData.role];
+  const roleInfo = ROLE_CONFIG[userData.role] || ROLE_CONFIG.colaborador;
 
   let menuItems;
-  if (isAdmin(userData)) menuItems = adminMenu;
+  if (isSuperAdmin(userData)) menuItems = superAdminMenu;
+  else if (isAdmin(userData)) menuItems = adminMenu;
+  else if (isPolitico(userData)) menuItems = politicoMenu;
   else if (isCoordenador(userData)) menuItems = coordenadorMenu;
-  else {
-    console.log("[Sidebar] Falling back to colaborador menu - role not admin/coordenador");
-    menuItems = colaboradorMenu;
-  }
+  else menuItems = colaboradorMenu;
 
   return (
     <>
       <button
-        className={`fixed top-4 z-50 lg:hidden bg-white/10 backdrop-blur-xl p-2.5 rounded-xl border border-white/10 ${collapsed ? "left-4" : "left-4"}`}
+        className="fixed top-4 z-50 lg:hidden bg-white/10 backdrop-blur-xl p-2.5 rounded-xl border border-white/10 left-4"
         onClick={() => setMobileOpen(!mobileOpen)}
       >
         <Menu size={20} className="text-white" />
@@ -157,8 +174,7 @@ export function Sidebar() {
           )}
           <button
             onClick={handleLogout}
-            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all
-              ${collapsed ? "justify-center" : ""}`}
+            className={`flex items-center gap-3 w-full px-3 py-2.5 rounded-xl text-white/40 hover:text-red-400 hover:bg-red-500/10 transition-all ${collapsed ? "justify-center" : ""}`}
           >
             <LogOut size={20} />
             {!collapsed && <span className="text-sm font-medium">Sair</span>}
@@ -166,9 +182,7 @@ export function Sidebar() {
         </div>
       </aside>
 
-      {mobileOpen && (
-        <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setMobileOpen(false)} />
-      )}
+      {mobileOpen && <div className="fixed inset-0 bg-black/50 z-30 lg:hidden" onClick={() => setMobileOpen(false)} />}
     </>
   );
 }

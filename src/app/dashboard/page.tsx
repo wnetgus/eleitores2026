@@ -5,7 +5,7 @@ import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAdmin, isCoordenador, isColaborador } from "@/lib/permissions";
+import { getRoleConfig, isSuperAdmin, isAdmin, isPolitico, isCoordenador, isColaborador } from "@/lib/permissions";
 import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ApoiadoresPorCidade } from "@/components/charts/ApoiadoresPorCidade";
@@ -33,6 +33,8 @@ export default function DashboardPage() {
           constraints.unshift(where("colaboradorId", "==", userData!.uid));
         } else if (isCoordenador(userData)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
+        } else if (isPolitico(userData) || isAdmin(userData)) {
+          if (userData!.campanhaId) constraints.unshift(where("campanhaId", "==", userData!.campanhaId));
         }
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);

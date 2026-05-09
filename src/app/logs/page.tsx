@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { isAdmin, getRoleConfig } from "@/lib/permissions";
+import { isSuperAdmin, isAdmin, isPolitico, getRoleConfig } from "@/lib/permissions";
 import { Atividade } from "@/types";
 import { buscarAtividades } from "@/lib/firestore";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -18,17 +18,17 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userData && !isAdmin(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData)) { router.push("/dashboard"); return; }
     async function load() {
       try {
-        const data = await buscarAtividades(100);
+        const data = await buscarAtividades(100, userData?.campanhaId);
         setAtividades(data);
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
     if (userData) load();
   }, [userData]);
 
-  if (!userData || !isAdmin(userData)) return null;
+  if (!userData || (!isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData))) return null;
   const config = getRoleConfig(userData);
 
   return (

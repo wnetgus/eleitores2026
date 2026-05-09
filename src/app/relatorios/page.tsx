@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
+import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { Eleitor } from "@/types";
 import { estados } from "@/lib/estados-cidades";
@@ -27,6 +28,7 @@ const estadoOptions = [
 ];
 
 export default function RelatoriosPage() {
+  const { userData } = useAuth();
   const [eleitores, setEleitores] = useState<Eleitor[]>([]);
   const [filtered, setFiltered] = useState<Eleitor[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,9 @@ export default function RelatoriosPage() {
   useEffect(() => {
     async function load() {
       try {
-        const q = query(collection(db, "eleitores"), orderBy("criadoEm", "desc"));
+        const constraints: any[] = [orderBy("criadoEm", "desc")];
+        if (userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+        const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
         setEleitores(data);

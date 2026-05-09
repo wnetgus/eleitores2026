@@ -1,10 +1,12 @@
-export type UserRole = "admin" | "coordenador" | "colaborador";
+export type UserRole = "super_admin" | "admin" | "politico" | "coordenador" | "colaborador";
 
 export interface AppUser {
   uid: string;
   email: string;
   nome: string;
   role: UserRole;
+  campanhaId?: string;
+  campanhaNome?: string;
   equipe?: string;
   coordenadorId?: string;
   cidadePrincipal?: string;
@@ -14,8 +16,24 @@ export interface AppUser {
   criadoPor?: string;
 }
 
+export interface Campanha {
+  id?: string;
+  nome: string;
+  slug: string;
+  politicoNome: string;
+  politicoEmail: string;
+  cargo: string;
+  corPrincipal: string;
+  logo?: string;
+  slogan?: string;
+  ativo: boolean;
+  criadoEm: Date;
+  criadoPor?: string;
+}
+
 export interface Eleitor {
   id?: string;
+  campanhaId: string;
   nomeCompleto: string;
   telefone: string;
   tituloEleitoral: string;
@@ -36,6 +54,7 @@ export interface Eleitor {
 
 export interface Atividade {
   id?: string;
+  campanhaId?: string;
   acao: string;
   usuarioId: string;
   usuarioNome: string;
@@ -46,6 +65,7 @@ export interface Atividade {
 
 export interface Meta {
   id?: string;
+  campanhaId: string;
   colaboradorId: string;
   colaboradorNome: string;
   coordenadorId?: string;
@@ -65,9 +85,20 @@ export interface Cidade {
   estado: string;
 }
 
-export const ROLE_CONFIG = {
+export const ROLE_CONFIG: Record<string, { label: string; color: string; border: string; bg: string; text: string; badge: string; icon: string; gradient: string; menuTitle: string }> = {
+  super_admin: {
+    label: "Super Admin",
+    color: "from-rose-600 to-rose-800",
+    border: "border-rose-500/30",
+    bg: "bg-rose-500/10",
+    text: "text-rose-400",
+    badge: "bg-rose-500/20 text-rose-400",
+    icon: "🔱",
+    gradient: "from-rose-500 to-rose-700",
+    menuTitle: "Super Admin",
+  },
   admin: {
-    label: "Admin Master",
+    label: "Admin",
     color: "from-purple-600 to-purple-800",
     border: "border-purple-500/30",
     bg: "bg-purple-500/10",
@@ -76,6 +107,17 @@ export const ROLE_CONFIG = {
     icon: "👑",
     gradient: "from-purple-500 to-purple-700",
     menuTitle: "Admin",
+  },
+  politico: {
+    label: "Político",
+    color: "from-amber-600 to-amber-800",
+    border: "border-amber-500/30",
+    bg: "bg-amber-500/10",
+    text: "text-amber-400",
+    badge: "bg-amber-500/20 text-amber-400",
+    icon: "🏛️",
+    gradient: "from-amber-500 to-amber-700",
+    menuTitle: "Campanha",
   },
   coordenador: {
     label: "Coordenador",
@@ -99,4 +141,4 @@ export const ROLE_CONFIG = {
     gradient: "from-emerald-500 to-emerald-700",
     menuTitle: "Colaborador",
   },
-} as const;
+};

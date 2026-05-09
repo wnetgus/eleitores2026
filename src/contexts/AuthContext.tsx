@@ -29,17 +29,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (firebaseUser) {
         try {
           const docSnap = await getDoc(doc(db, "usuarios", firebaseUser.uid));
-          if (docSnap.exists()) {
-            setUserData({ uid: firebaseUser.uid, ...docSnap.data(), ativo: docSnap.data().ativo ?? true } as AppUser);
-          } else if (firebaseUser.email === "wnetgus@gmail.com") {
+          if (firebaseUser.email === "wnetgus@gmail.com") {
             setUserData({
               uid: firebaseUser.uid,
               email: firebaseUser.email,
-              nome: "Admin Master",
-              role: "admin",
+              nome: docSnap.exists() ? (docSnap.data().nome || "Super Admin") : "Super Admin",
+              role: "super_admin",
+              campanhaId: docSnap.exists() ? docSnap.data().campanhaId : undefined,
               criadoEm: new Date(),
               ativo: true,
             });
+          } else if (docSnap.exists()) {
+            setUserData({ uid: firebaseUser.uid, ...docSnap.data(), ativo: docSnap.data().ativo ?? true } as AppUser);
           }
         } catch (e) {
           console.error("Erro ao carregar dados do usuário:", e);

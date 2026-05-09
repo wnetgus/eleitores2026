@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, AppUser, Meta, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAdmin, isCoordenador, isColaborador } from "@/lib/permissions";
+import { getRoleConfig, isSuperAdmin, isAdmin, isCoordenador, isColaborador } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -31,6 +31,9 @@ export default function MetasPage() {
           constraints.unshift(where("colaboradorId", "==", userData!.uid));
         } else if (isCoordenador(userData!)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
+        }
+        if (!isSuperAdmin(userData!) && userData?.campanhaId) {
+          constraints.unshift(where("campanhaId", "==", userData.campanhaId));
         }
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);

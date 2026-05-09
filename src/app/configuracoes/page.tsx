@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { AppUser, UserRole, Atividade } from "@/types";
+import { isSuperAdmin, isAdmin, isPolitico } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -32,13 +33,16 @@ export default function ConfiguracoesPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (userData && userData.role !== "admin") { router.push("/dashboard"); return; }
+    if (userData && !isAdmin(userData) && !isSuperAdmin(userData) && !isPolitico(userData)) { router.push("/dashboard"); return; }
     loadData();
   }, [userData]);
 
   async function loadData() {
     try {
-      const q = query(collection(db, "usuarios"), orderBy("criadoEm", "desc"));
+      const constraints: any[] = [orderBy("criadoEm", "desc")];
+      if (isPolitico(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+      else if (isAdmin(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+      const q = query(collection(db, "usuarios"), ...constraints);
       const snap = await getDocs(q);
       setUsuarios(snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
       const atvs = await buscarAtividades(30);

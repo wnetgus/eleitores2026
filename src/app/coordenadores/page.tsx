@@ -7,17 +7,18 @@ import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { AppUser, UserRole, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAdmin } from "@/lib/permissions";
+import { getRoleConfig, isSuperAdmin, isAdmin, isPolitico } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Target, UserPlus, Shield, Mail, MapPin } from "lucide-react";
+import { Target, UserPlus, Shield, Mail, MapPin, Pencil, Power } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
 import { estados } from "@/lib/estados-cidades";
+import { Modal } from "@/components/ui/Modal";
 
 export default function CoordenadoresPage() {
   const { userData } = useAuth();
@@ -26,15 +27,20 @@ export default function CoordenadoresPage() {
   const [form, setForm] = useState({ email: "", password: "", nome: "", cidadePrincipal: "", regiao: "" });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editModal, setEditModal] = useState<AppUser | null>(null);
+  const [editForm, setEditForm] = useState({ nome: "", cidadePrincipal: "", regiao: "" });
 
   useEffect(() => {
-    if (userData && !isAdmin(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData)) { router.push("/dashboard"); return; }
     loadCoordenadores();
   }, [userData]);
 
   async function loadCoordenadores() {
     try {
-      const q = query(collection(db, "usuarios"), where("role", "==", "coordenador"), orderBy("criadoEm", "desc"));
+      const constraints: any[] = [where("role", "==", "coordenador")];
+      if (!isSuperAdmin(userData) && userData?.campanhaId) constraints.push(where("campanhaId", "==", userData.campanhaId));
+      constraints.push(orderBy("criadoEm", "desc"));
+      const q = query(collection(db, "usuarios"), ...constraints);
       const snap = await getDocs(q);
       setCoordenadores(snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
     } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -48,9 +54,9 @@ export default function CoordenadoresPage() {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
       await setDoc(doc(db, "usuarios", cred.user.uid), {
         email: form.email, nome: form.nome, role: "coordenador", cidadePrincipal: form.cidadePrincipal, regiao: form.regiao,
-        criadoEm: new Date(), ativo: true, criadoPor: userData?.uid,
+        campanhaId: userData?.campanhaId || "", criadoEm: new Date(), ativo: true, criadoPor: userData?.uid,
       });
-      await registrarAtividade({ acao: "criar_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: "admin", detalhes: `Criou coordenador ${form.nome}` });
+      await registrarAtividade({ acao: "criar_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Criou coordenador ${form.nome}` });
       toast.success("Coordenador criado!");
       setForm({ email: "", password: "", nome: "", cidadePrincipal: "", regiao: "" });
       loadCoordenadores();
@@ -61,7 +67,21 @@ export default function CoordenadoresPage() {
     try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Coordenador ${ativo ? "desativado" : "ativado"}`); loadCoordenadores(); } catch (e) { toast.error("Erro"); }
   }
 
-  if (!userData || !isAdmin(userData)) return null;
+  function openEdit(c: AppUser) {
+    setEditForm({ nome: c.nome, cidadePrincipal: c.cidadePrincipal || "", regiao: c.regiao || "" });
+    setEditModal(c);
+  }
+
+  async function handleEdit() {
+    if (!editModal) return;
+    try {
+      await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, cidadePrincipal: editForm.cidadePrincipal, regiao: editForm.regiao });
+      await registrarAtividade({ acao: "editou_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Editou coordenador ${editModal.nome}` });
+      toast.success("Coordenador atualizado!"); setEditModal(null); loadCoordenadores();
+    } catch (e) { toast.error("Erro ao atualizar"); }
+  }
+
+  if (!userData || (!isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData))) return null;
   const config = getRoleConfig(userData);
 
   return (
@@ -102,7 +122,10 @@ export default function CoordenadoresPage() {
                       <div className="flex items-center gap-1"><Mail size={12} className="text-white/30" /><p className="text-xs text-white/40">{c.email}</p></div>
                     </div>
                   </div>
-                  <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => openEdit(c)} className="text-white/30 hover:text-blue-400 transition-colors" title="Editar"><Pencil size={14} /></button>
+                    <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>
+                  </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-white/50"><MapPin size={12} />{c.cidadePrincipal || "N/I"} {c.regiao ? `• ${c.regiao}` : ""}</div>
                 <div className="flex items-center justify-between text-xs">
@@ -119,6 +142,17 @@ export default function CoordenadoresPage() {
           </div>
         )}
       </GlassCard>
+      <Modal open={!!editModal} onClose={() => setEditModal(null)} title="Editar Coordenador">
+        <div className="space-y-4">
+          <Input label="Nome" value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
+          <Input label="Cidade Principal" value={editForm.cidadePrincipal} onChange={(e) => setEditForm({ ...editForm, cidadePrincipal: e.target.value })} />
+          <Input label="Região" value={editForm.regiao} onChange={(e) => setEditForm({ ...editForm, regiao: e.target.value })} />
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleEdit} className="flex-1">Salvar</Button>
+            <Button variant="ghost" onClick={() => setEditModal(null)} className="flex-1">Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -11,9 +11,10 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { UserPlus, Search, Trash2, Loader2, Crown, Target } from "lucide-react";
+import { UserPlus, Search, Trash2, Loader2, Edit3, Pencil } from "lucide-react";
+import { EditarEleitorModal } from "@/components/forms/EditarEleitorModal";
 import toast from "react-hot-toast";
-import { isAdmin, isCoordenador, getRoleConfig } from "@/lib/permissions";
+import { isSuperAdmin, isAdmin, isPolitico, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
 
 const grauOptions = [
   { value: "forte", label: "Forte" },
@@ -30,13 +31,16 @@ export default function EleitoresPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  const [editingEleitor, setEditingEleitor] = useState<Eleitor | null>(null);
 
   useEffect(() => { loadEleitores(); }, [userData]);
 
   async function loadEleitores() {
     setLoading(true);
     try {
-      const data = await buscarEleitores(userData?.role === "colaborador" ? userData?.uid : undefined);
+      const campanhaId = isSuperAdmin(userData) ? undefined : userData?.campanhaId;
+      const colaboradorId = isColaborador(userData) ? userData?.uid : undefined;
+      const data = await buscarEleitores(campanhaId, colaboradorId);
       setEleitores(data);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
@@ -58,6 +62,7 @@ export default function EleitoresPage() {
       const duplicado = await verificarTituloDuplicado(form.tituloEleitoral);
       if (duplicado) { toast.error("Título eleitoral já cadastrado!"); setSaving(false); return; }
       await cadastrarEleitor({
+        campanhaId: userData.campanhaId || "",
         nomeCompleto: form.nomeCompleto, telefone: form.telefone, tituloEleitoral: form.tituloEleitoral,
         estado: form.estado, cidade: form.cidade, bairro: form.bairro, grauApoio: form.grauApoio as any,
         observacoes: form.observacoes, colaboradorId: userData.uid, colaboradorNome: userData.nome,
@@ -121,7 +126,7 @@ export default function EleitoresPage() {
                 <th className="text-left py-3 px-2 font-medium">Grau</th>
                 <th className="text-left py-3 px-2 font-medium">Colaborador</th>
                 <th className="text-left py-3 px-2 font-medium">Data</th>
-                {(userData?.role === "admin") && <th className="text-left py-3 px-2 font-medium">Ação</th>}
+                {(isAdmin(userData) || isSuperAdmin(userData) || isPolitico(userData) || isCoordenador(userData)) && <th className="text-left py-3 px-2 font-medium">Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -133,13 +138,34 @@ export default function EleitoresPage() {
                   <td className="py-3 px-2"><Badge variant={eleitor.grauApoio === "forte" ? "success" : eleitor.grauApoio === "medio" ? "warning" : eleitor.grauApoio === "fraco" ? "danger" : "info"}>{eleitor.grauApoio}</Badge></td>
                   <td className="py-3 px-2 text-white/60">{eleitor.colaboradorNome}</td>
                   <td className="py-3 px-2 text-white/40 text-xs">{formatDate(eleitor.criadoEm)}</td>
-                  {userData?.role === "admin" && <td className="py-3 px-2"><button onClick={() => handleExcluir(eleitor.id!, eleitor.nomeCompleto)} className="text-white/30 hover:text-red-400 transition-colors"><Trash2 size={16} /></button></td>}
+                  {(isAdmin(userData) || isSuperAdmin(userData) || isPolitico(userData) || isCoordenador(userData)) && (
+                    <td className="py-3 px-2">
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setEditingEleitor(eleitor)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar">
+                          <Pencil size={16} />
+                        </button>
+                        {(isAdmin(userData) || isSuperAdmin(userData)) && (
+                          <button onClick={() => handleExcluir(eleitor.id!, eleitor.nomeCompleto)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filtered.length === 0 && <tr><td colSpan={7} className="py-12 text-center text-white/30">{search ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado ainda"}</td></tr>}
             </tbody>
           </table>
         </div>
+      )}
+      {editingEleitor && (
+        <EditarEleitorModal
+          eleitor={editingEleitor}
+          open={!!editingEleitor}
+          onClose={() => setEditingEleitor(null)}
+          onSaved={loadEleitores}
+        />
       )}
     </div>
   );

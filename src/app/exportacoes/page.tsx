@@ -6,7 +6,8 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAdmin } from "@/lib/permissions";
+import { where } from "firebase/firestore";
+import { getRoleConfig, isSuperAdmin, isAdmin, isPolitico } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
@@ -22,10 +23,12 @@ export default function ExportacoesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userData && !isAdmin(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData)) { router.push("/dashboard"); return; }
     async function load() {
       try {
-        const q = query(collection(db, "eleitores"), orderBy("criadoEm", "desc"));
+        const constraints: any[] = [orderBy("criadoEm", "desc")];
+        if (!isSuperAdmin(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+        const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
       } catch (e) { console.error(e); } finally { setLoading(false); }
@@ -33,7 +36,7 @@ export default function ExportacoesPage() {
     if (userData) load();
   }, [userData]);
 
-  if (!userData || !isAdmin(userData)) return null;
+  if (!userData || (!isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData))) return null;
   const config = getRoleConfig(userData);
 
   const data = eleitores.map((e) => ({
