@@ -7,7 +7,7 @@ import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAdmin, isCoordenador, isColaborador, canManageColaboradores } from "@/lib/permissions";
+import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColaboradores } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
@@ -56,7 +56,8 @@ export default function ColaboradoresPage() {
       const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
       await setDoc(doc(db, "usuarios", cred.user.uid), {
         email: form.email, nome: form.nome, role: "colaborador",
-        coordenadorId: isCoordenador(userData) ? userData!.uid : userData!.uid,
+        gabineteId: userData?.gabineteId || userData?.campanhaId || "",
+        coordenadorId: isCoordenador(userData) ? userData!.uid : (userData?.coordenadorId || undefined),
         criadoEm: new Date(), ativo: true, criadoPor: userData?.uid,
       });
       await registrarAtividade({
@@ -98,7 +99,7 @@ export default function ColaboradoresPage() {
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center text-lg`}>{roleInfo.icon}</div>
         <div>
           <h1 className="text-2xl font-bold text-white">Colaboradores</h1>
-          <p className={`text-sm ${roleInfo.text}`}>{isAdmin(userData) ? "Gerencie todos os colaboradores" : "Sua equipe de campo"}</p>
+          <p className={`text-sm ${roleInfo.text}`}>{isAssessor(userData) ? "Gerencie todos os colaboradores" : "Sua equipe de campo"}</p>
         </div>
       </div>
 
@@ -181,7 +182,7 @@ export default function ColaboradoresPage() {
 
       <GlassCard className="p-5">
         <h3 className="text-white font-semibold mb-4">
-          {isAdmin(userData) ? "Todos os Colaboradores" : "Meus Colaboradores"}
+          {isAssessor(userData) ? "Todos os Colaboradores" : "Meus Colaboradores"}
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {colaboradores.map((c) => (

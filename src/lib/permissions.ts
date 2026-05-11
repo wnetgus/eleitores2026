@@ -9,12 +9,24 @@ export function isSuperAdmin(user: AppUser | null): boolean {
   return can(user, "super_admin");
 }
 
-export function isAdmin(user: AppUser | null): boolean {
-  return can(user, "admin");
+export function isAdminMaster(user: AppUser | null): boolean {
+  return can(user, "admin_master");
 }
 
 export function isPolitico(user: AppUser | null): boolean {
   return can(user, "politico");
+}
+
+export function isPrefeito(user: AppUser | null): boolean {
+  return can(user, "prefeito");
+}
+
+export function isVereador(user: AppUser | null): boolean {
+  return can(user, "vereador");
+}
+
+export function isAssessor(user: AppUser | null): boolean {
+  return can(user, "assessor");
 }
 
 export function isCoordenador(user: AppUser | null): boolean {
@@ -25,28 +37,36 @@ export function isColaborador(user: AppUser | null): boolean {
   return can(user, "colaborador");
 }
 
+export function isSuperOrMaster(user: AppUser | null): boolean {
+  return isSuperAdmin(user) || isAdminMaster(user);
+}
+
+export function canManageGabinetes(user: AppUser | null): boolean {
+  return isSuperOrMaster(user);
+}
+
 export function canManageUsers(user: AppUser | null): boolean {
-  return isSuperAdmin(user) || isAdmin(user) || isPolitico(user);
+  return isSuperOrMaster(user) || isAssessor(user);
 }
 
 export function canManageColaboradores(user: AppUser | null): boolean {
-  return isAdmin(user) || isPolitico(user) || isCoordenador(user);
+  return isSuperOrMaster(user) || isAssessor(user) || isCoordenador(user);
 }
 
 export function canExportData(user: AppUser | null): boolean {
-  return isSuperAdmin(user) || isAdmin(user) || isPolitico(user) || isCoordenador(user);
+  return isSuperOrMaster(user) || isAssessor(user) || isPolitico(user) || isCoordenador(user);
 }
 
 export function canDeleteRecords(user: AppUser | null): boolean {
-  return isSuperAdmin(user) || isAdmin(user);
+  return isSuperOrMaster(user) || isAssessor(user);
 }
 
 export function canViewAllRecords(user: AppUser | null): boolean {
-  return isSuperAdmin(user) || isAdmin(user);
+  return isSuperOrMaster(user) || isAssessor(user);
 }
 
 export function canViewLogs(user: AppUser | null): boolean {
-  return isSuperAdmin(user) || isAdmin(user);
+  return isSuperOrMaster(user) || isAssessor(user);
 }
 
 import { ROLE_CONFIG } from "@/types";

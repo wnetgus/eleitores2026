@@ -6,11 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "clean:auth": "node scripts/limpar-testes.mjs --auth",
+    "clean:firestore": "node scripts/limpar-testes.mjs --firestore",
+    "clean:all": "node scripts/limpar-testes.mjs --all"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
+    "exceljs": "^4.4.0",
     "firebase": "^12.13.0",
+    "firebase-admin": "^13.9.0",
     "jspdf": "^4.2.1",
     "lucide-react": "^1.14.0",
     "next": "16.2.6",

@@ -21,21 +21,28 @@ import {
   FileSpreadsheet,
   Globe,
   Building2,
+  Star,
+  Eye,
+  Map,
 } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { isSuperAdmin, isAdmin, isPolitico, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
+import { isSuperAdmin, isAdminMaster, isPolitico, isPrefeito, isVereador, isAssessor, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
 import { ROLE_CONFIG } from "@/types";
 
 const superAdminMenu = [
   { href: "/dashboard", label: "Painel Global", icon: Globe },
-  { href: "/campanhas", label: "Campanhas", icon: Building2 },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/campanhas", label: "Gabinetes", icon: Building2 },
+  { href: "/admins", label: "Admin Masters", icon: Shield },
+  { href: "/assessores", label: "Assessores", icon: Shield },
   { href: "/coordenadores", label: "Coordenadores", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/candidatos", label: "Candidatos", icon: Star },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },
@@ -43,33 +50,56 @@ const superAdminMenu = [
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-const adminMenu = [
-  { href: "/dashboard", label: "Dashboard Global", icon: Crown },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
-  { href: "/coordenadores", label: "Coordenadores", icon: Target },
-  { href: "/colaboradores", label: "Colaboradores", icon: Users },
-  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
-  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
-  { href: "/metas", label: "Metas", icon: TrendingUp },
-  { href: "/logs", label: "Logs", icon: Activity },
-  { href: "/configuracoes", label: "Configurações", icon: Settings },
-];
+const adminMenu: typeof superAdminMenu = [];
 
 const politicoMenu = [
-  { href: "/dashboard", label: "Minha Campanha", icon: Crown },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/dashboard", label: "Meu Mandato", icon: Crown },
+  { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
+  { href: "/metas", label: "Metas", icon: TrendingUp },
+];
+
+const prefeitoMenu = [
+  { href: "/dashboard", label: "Meu Município", icon: Crown },
+  { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/assessores", label: "Assessores", icon: Shield },
   { href: "/coordenadores", label: "Coordenadores", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
+  { href: "/metas", label: "Metas", icon: TrendingUp },
+];
+
+const vereadorMenu = [
+  { href: "/dashboard", label: "Meu Mandato", icon: Crown },
+  { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
+  { href: "/metas", label: "Metas", icon: TrendingUp },
+];
+
+const assessorMenu = [
+  { href: "/dashboard", label: "Dashboard", icon: Crown },
+  { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/assessores", label: "Assessores", icon: Shield },
+  { href: "/coordenadores", label: "Coordenadores", icon: Target },
+  { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/candidatos", label: "Candidatos", icon: Star },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },
 ];
 
 const coordenadorMenu = [
-  { href: "/dashboard", label: "Dashboard Equipe", icon: Target },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/dashboard", label: "Dashboard", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },
 ];
 
@@ -96,9 +126,14 @@ export function Sidebar() {
   const roleInfo = ROLE_CONFIG[userData.role] || ROLE_CONFIG.colaborador;
 
   let menuItems;
-  if (isSuperAdmin(userData)) menuItems = superAdminMenu;
-  else if (isAdmin(userData)) menuItems = adminMenu;
+  const isAdmin = isSuperAdmin(userData) || isAdminMaster(userData);
+  const isPoliticoRole = isPolitico(userData) || isPrefeito(userData) || isVereador(userData);
+
+  if (isAdmin) menuItems = superAdminMenu;
   else if (isPolitico(userData)) menuItems = politicoMenu;
+  else if (isPrefeito(userData)) menuItems = prefeitoMenu;
+  else if (isVereador(userData)) menuItems = vereadorMenu;
+  else if (isAssessor(userData)) menuItems = assessorMenu;
   else if (isCoordenador(userData)) menuItems = coordenadorMenu;
   else menuItems = colaboradorMenu;
 
@@ -158,17 +193,28 @@ export function Sidebar() {
               </Link>
             );
           })}
+          {isAssessor(userData) && userData?.gabineteId && (
+            <Link
+              href={`/gabinete/${userData.gabineteId}`}
+              target="_blank"
+              onClick={() => setMobileOpen(false)}
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-white/50 hover:text-white hover:bg-white/5 ${collapsed ? "justify-center" : ""}`}
+            >
+              <Eye size={20} />
+              {!collapsed && <span className="text-sm font-medium">Painel do Gabinete</span>}
+            </Link>
+          )}
         </nav>
 
         <div className={`p-3 border-t border-white/[0.06] ${collapsed ? "text-center" : ""}`}>
           {!collapsed && (
-            <div className="px-3 py-2 mb-2 flex items-center gap-3">
+            <div className="px-3 py-2 mb-1 flex items-center gap-3">
               <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center text-sm`}>
                 {roleInfo.icon}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white/90 font-medium truncate">{userData.nome}</p>
-                <p className={`text-xs ${roleInfo.text} capitalize`}>{roleInfo.label}</p>
+                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>Operador • {roleInfo.label}</p>
               </div>
             </div>
           )}

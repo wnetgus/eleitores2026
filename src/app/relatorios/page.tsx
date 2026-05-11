@@ -11,8 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { formatDate, parseDate } from "@/lib/utils";
 import { FileSpreadsheet, FileText, Download, Filter, Search } from "lucide-react";
-import * as XLSX from "xlsx";
-import { jsPDF } from "jspdf";
+import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import toast from "react-hot-toast";
 
 const grauOptions = [
@@ -61,32 +60,28 @@ export default function RelatoriosPage() {
     setFiltered(result);
   }, [filtros, eleitores]);
 
-  function exportExcel() {
+  async function exportExcelPremiumAction() {
     try {
-      const data = filtered.map((e) => ({ Nome: e.nomeCompleto, Telefone: e.telefone, "Título Eleitoral": e.tituloEleitoral, Estado: e.estado, Cidade: e.cidade, Bairro: e.bairro, "Grau de Apoio": e.grauApoio, Colaborador: e.colaboradorNome, "Data Cadastro": formatDate(e.criadoEm) }));
-      const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Eleitores"); XLSX.writeFile(wb, `eleitores-${new Date().toISOString().split("T")[0]}.xlsx`);
-      toast.success("Excel exportado com sucesso!");
+      const res = await fetch("/api/exportar-excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eleitores: filtered, titulo: userData?.gabineteNome || "Relatório" }),
+      });
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "relatorio-eleitores.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Excel premium exportado!");
     } catch (e) { toast.error("Erro ao exportar Excel"); }
   }
-  function exportCSV() {
+  function exportPDFPremiumAction() {
     try {
-      const headers = ["Nome,Telefone,Título Eleitoral,Estado,Cidade,Bairro,Grau de Apoio,Colaborador,Data Cadastro"];
-      const rows = filtered.map((e) => `"${e.nomeCompleto}","${e.telefone}","${e.tituloEleitoral}","${e.estado}","${e.cidade}","${e.bairro}","${e.grauApoio}","${e.colaboradorNome}","${formatDate(e.criadoEm)}"`);
-      const csv = [...headers, ...rows].join("\n"); const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const link = document.createElement("a");
-      link.href = URL.createObjectURL(blob); link.download = `eleitores-${new Date().toISOString().split("T")[0]}.csv`; link.click();
-      toast.success("CSV exportado com sucesso!");
-    } catch (e) { toast.error("Erro ao exportar CSV"); }
-  }
-  function exportPDF() {
-    try {
-      const doc = new jsPDF();
-      doc.setFontSize(16); doc.text("Relatório de Eleitores", 14, 20);
-      doc.setFontSize(10); doc.text(`Total: ${filtered.length} registros`, 14, 28); doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 34);
-      let y = 42;
-      filtered.slice(0, 50).forEach((e, i) => { if (y > 270) { doc.addPage(); y = 20; } doc.text(`${i + 1}. ${e.nomeCompleto} - ${e.cidade}/${e.estado} - ${e.grauApoio}`, 14, y); y += 6; });
-      if (filtered.length > 50) doc.text(`... e mais ${filtered.length - 50} registros`, 14, y + 6);
-      doc.save(`eleitores-${new Date().toISOString().split("T")[0]}.pdf`);
-      toast.success("PDF exportado com sucesso!");
+      exportPDFPremium(filtered, userData?.gabineteNome || "Relatório");
+      toast.success("PDF premium exportado!");
     } catch (e) { toast.error("Erro ao exportar PDF"); }
   }
 
@@ -96,7 +91,7 @@ export default function RelatoriosPage() {
     <div className="space-y-6 animate-in">
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold text-white">Relatórios</h1><p className="text-white/50 text-sm mt-1">Filtre e exporte seus dados</p></div>
-        <div className="flex items-center gap-2"><Button variant="secondary" onClick={exportExcel}><FileSpreadsheet size={16} /> Excel</Button><Button variant="secondary" onClick={exportCSV}><Download size={16} /> CSV</Button><Button variant="secondary" onClick={exportPDF}><FileText size={16} /> PDF</Button></div>
+        <div className="flex items-center gap-2"><Button variant="secondary" onClick={exportExcelPremiumAction}><FileSpreadsheet size={16} /> Excel Premium</Button><Button variant="secondary" onClick={exportPDFPremiumAction}><FileText size={16} /> PDF Premium</Button></div>
       </div>
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Filter size={18} className="text-emerald-400" /><h3 className="text-white font-semibold">Filtros</h3></div>
@@ -113,10 +108,10 @@ export default function RelatoriosPage() {
       </GlassCard>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
-          <thead><tr className="text-white/40 border-b border-white/[0.06]"><th className="text-left py-3 px-2 font-medium">Nome</th><th className="text-left py-3 px-2 font-medium">Telefone</th><th className="text-left py-3 px-2 font-medium">Título</th><th className="text-left py-3 px-2 font-medium">Estado</th><th className="text-left py-3 px-2 font-medium">Cidade</th><th className="text-left py-3 px-2 font-medium">Bairro</th><th className="text-left py-3 px-2 font-medium">Grau</th><th className="text-left py-3 px-2 font-medium">Colaborador</th><th className="text-left py-3 px-2 font-medium">Data</th></tr></thead>
+          <thead><tr className="text-white/40 border-b border-white/[0.06]"><th className="text-left py-3 px-2 font-medium">Nome</th><th className="text-left py-3 px-2 font-medium">Telefone</th><th className="text-left py-3 px-2 font-medium">Documento</th><th className="text-left py-3 px-2 font-medium">Estado</th><th className="text-left py-3 px-2 font-medium">Cidade</th><th className="text-left py-3 px-2 font-medium">Bairro</th><th className="text-left py-3 px-2 font-medium">Grau</th><th className="text-left py-3 px-2 font-medium">Colaborador</th><th className="text-left py-3 px-2 font-medium">Data</th></tr></thead>
           <tbody>{filtered.map((e) => (
             <tr key={e.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-              <td className="py-3 px-2 text-white/80">{e.nomeCompleto}</td><td className="py-3 px-2 text-white/60">{e.telefone}</td><td className="py-3 px-2 text-white/60 font-mono text-xs">{e.tituloEleitoral}</td>
+              <td className="py-3 px-2 text-white/80">{e.nomeCompleto}</td><td className="py-3 px-2 text-white/60">{e.telefone || "-"}</td><td className="py-3 px-2 text-white/60 font-mono text-xs">{e.tipoDocumento?.toUpperCase()}: {e.documento}</td>
               <td className="py-3 px-2 text-white/60">{e.estado}</td><td className="py-3 px-2 text-white/60">{e.cidade}</td><td className="py-3 px-2 text-white/60">{e.bairro || "-"}</td>
               <td className="py-3 px-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span></td>
               <td className="py-3 px-2 text-white/60">{e.colaboradorNome}</td><td className="py-3 px-2 text-white/40 text-xs">{formatDate(e.criadoEm)}</td>

@@ -7,11 +7,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, ROLE_CONFIG } from "@/types";
 import { where } from "firebase/firestore";
-import { getRoleConfig, isSuperAdmin, isAdmin, isPolitico } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { formatDate } from "@/lib/utils";
 import { FileSpreadsheet, FileText, Download, Upload } from "lucide-react";
+import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import toast from "react-hot-toast";
@@ -23,11 +24,11 @@ export default function ExportacoesPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userData && !isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     async function load() {
       try {
         const constraints: any[] = [orderBy("criadoEm", "desc")];
-        if (!isSuperAdmin(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+        if (!isSuperOrMaster(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
@@ -36,49 +37,41 @@ export default function ExportacoesPage() {
     if (userData) load();
   }, [userData]);
 
-  if (!userData || (!isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData))) return null;
+  if (!userData || (!isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessor(userData))) return null;
   const config = getRoleConfig(userData);
 
   const data = eleitores.map((e) => ({
-    Nome: e.nomeCompleto, Telefone: e.telefone, "Título Eleitoral": e.tituloEleitoral,
+    Nome: e.nomeCompleto, Telefone: e.telefone || "-",
+    Documento: `${e.tipoDocumento?.toUpperCase()}: ${e.documento}`,
+    CEP: e.cep || "-", Logradouro: e.logradouro || "-",
+    "Nº": e.numero || "-", Complemento: e.complemento || "-",
     Estado: e.estado, Cidade: e.cidade, Bairro: e.bairro, "Grau de Apoio": e.grauApoio,
     Colaborador: e.colaboradorNome, Coordenador: e.coordenadorNome || "-", "Data Cadastro": formatDate(e.criadoEm),
   }));
 
-  function exportExcel() {
+  async function exportExcelPremiumAction() {
     try {
-      const ws = XLSX.utils.json_to_sheet(data); const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, "Eleitores");
-      XLSX.writeFile(wb, `eleitores-${new Date().toISOString().split("T")[0]}.xlsx`);
-      toast.success("Excel exportado!");
-    } catch { toast.error("Erro ao exportar"); }
-  }
-
-  function exportCSV() {
-    try {
-      const headers = ["Nome,Telefone,Título Eleitoral,Estado,Cidade,Bairro,Grau de Apoio,Colaborador,Coordenador,Data Cadastro"];
-      const rows = eleitores.map((e) => `"${e.nomeCompleto}","${e.telefone}","${e.tituloEleitoral}","${e.estado}","${e.cidade}","${e.bairro}","${e.grauApoio}","${e.colaboradorNome}","${e.coordenadorNome || ""}","${formatDate(e.criadoEm)}"`);
-      const csv = [...headers, ...rows].join("\n"); const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-      const link = document.createElement("a"); link.href = URL.createObjectURL(blob);
-      link.download = `eleitores-${new Date().toISOString().split("T")[0]}.csv`; link.click();
-      toast.success("CSV exportado!");
-    } catch { toast.error("Erro ao exportar"); }
-  }
-
-  function exportPDF() {
-    try {
-      const doc = new jsPDF();
-      doc.setFontSize(16); doc.text("Relatório de Eleitores", 14, 20);
-      doc.setFontSize(10); doc.text(`Total: ${eleitores.length} registros`, 14, 28);
-      doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, 14, 34);
-      let y = 42;
-      eleitores.slice(0, 50).forEach((e, i) => {
-        if (y > 270) { doc.addPage(); y = 20; }
-        doc.text(`${i + 1}. ${e.nomeCompleto} - ${e.cidade}/${e.estado}`, 14, y); y += 6;
+      const res = await fetch("/api/exportar-excel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eleitores, titulo: userData?.gabineteNome || "Relatório" }),
       });
-      if (eleitores.length > 50) doc.text(`... e mais ${eleitores.length - 50} registros`, 14, y + 6);
-      doc.save(`eleitores-${new Date().toISOString().split("T")[0]}.pdf`);
-      toast.success("PDF exportado!");
+      if (!res.ok) throw new Error();
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "relatorio-eleitores.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Excel premium exportado!");
+    } catch { toast.error("Erro ao exportar"); }
+  }
+
+  function exportPDFPremiumAction() {
+    try {
+      exportPDFPremium(eleitores, userData?.gabineteNome || "Relatório");
+      toast.success("PDF premium exportado!");
     } catch { toast.error("Erro ao exportar"); }
   }
 
@@ -101,20 +94,15 @@ export default function ExportacoesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportExcel}>
-          <FileSpreadsheet size={40} className="mx-auto mb-3 text-emerald-400" />
-          <h3 className="text-white font-semibold">Excel</h3>
-          <p className="text-xs text-white/40 mt-1">Planilha .xlsx</p>
+        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportExcelPremiumAction}>
+          <FileSpreadsheet size={32} className="mx-auto mb-3 text-emerald-400" />
+          <h3 className="text-white font-semibold">Excel Premium</h3>
+          <p className="text-xs text-white/40 mt-1">Planilha com identidade do partido</p>
         </GlassCard>
-        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportCSV}>
-          <Download size={40} className="mx-auto mb-3 text-blue-400" />
-          <h3 className="text-white font-semibold">CSV</h3>
-          <p className="text-xs text-white/40 mt-1">Arquivo .csv</p>
-        </GlassCard>
-        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportPDF}>
-          <FileText size={40} className="mx-auto mb-3 text-red-400" />
-          <h3 className="text-white font-semibold">PDF</h3>
-          <p className="text-xs text-white/40 mt-1">Documento .pdf</p>
+        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportPDFPremiumAction}>
+          <FileText size={32} className="mx-auto mb-3 text-rose-400" />
+          <h3 className="text-white font-semibold">PDF Premium</h3>
+          <p className="text-xs text-white/40 mt-1">Relatório executivo com capa</p>
         </GlassCard>
         <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportJSON}>
           <Upload size={40} className="mx-auto mb-3 text-purple-400" />

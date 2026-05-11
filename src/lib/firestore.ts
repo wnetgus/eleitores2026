@@ -14,32 +14,33 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Eleitor, Atividade, Campanha } from "@/types";
+import { Eleitor, Atividade, Gabinete, Candidato } from "@/types";
 
 const colecoes = {
   eleitores: "eleitores",
   usuarios: "usuarios",
   atividades: "atividades",
   metas: "metas",
-  campanhas: "campanhas",
+  gabinetes: "campanhas",
+  candidatos: "candidatos",
 };
 
-export async function getCampanhas() {
-  const q = query(collection(db, colecoes.campanhas), orderBy("criadoEm", "desc"));
+export async function getGabinetes() {
+  const q = query(collection(db, colecoes.gabinetes), orderBy("criadoEm", "desc"));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Campanha));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete));
 }
 
-export async function criarCampanha(data: Omit<Campanha, "id" | "criadoEm">) {
-  const ref = await addDoc(collection(db, colecoes.campanhas), { ...data, criadoEm: serverTimestamp() });
+export async function criarGabinete(data: Omit<Gabinete, "id" | "criadoEm">) {
+  const ref = await addDoc(collection(db, colecoes.gabinetes), { ...data, criadoEm: serverTimestamp() });
   return ref.id;
 }
 
-export async function atualizarCampanha(id: string, data: Partial<Campanha>) {
-  await updateDoc(doc(db, colecoes.campanhas, id), data);
+export async function atualizarGabinete(id: string, data: Partial<Gabinete>) {
+  await updateDoc(doc(db, colecoes.gabinetes, id), data);
 }
 
-export async function cadastrarEleitor(data: Omit<Eleitor, "id" | "criadoEm">) {
+export async function cadastrarEleitor(data: Omit<Eleitor, "id" | "criadoEm"> | Record<string, any>) {
   const docRef = await addDoc(collection(db, colecoes.eleitores), {
     ...data,
     criadoEm: serverTimestamp(),
@@ -47,9 +48,9 @@ export async function cadastrarEleitor(data: Omit<Eleitor, "id" | "criadoEm">) {
   return docRef.id;
 }
 
-export async function buscarEleitores(campanhaId?: string, colaboradorId?: string) {
+export async function buscarEleitores(gabineteId?: string, colaboradorId?: string) {
   const constraints: any[] = [];
-  if (campanhaId) constraints.push(where("campanhaId", "==", campanhaId));
+  if (gabineteId) constraints.push(where("campanhaId", "==", gabineteId));
   if (colaboradorId) constraints.push(where("colaboradorId", "==", colaboradorId));
   constraints.push(orderBy("criadoEm", "desc"));
   const q = query(collection(db, colecoes.eleitores), ...constraints);
@@ -59,7 +60,7 @@ export async function buscarEleitores(campanhaId?: string, colaboradorId?: strin
 
 export async function buscarEleitoresComFiltros(filtros: Record<string, any>) {
   let constraints: any[] = [];
-  if (filtros.campanhaId) constraints.push(where("campanhaId", "==", filtros.campanhaId));
+  if (filtros.gabineteId) constraints.push(where("campanhaId", "==", filtros.gabineteId));
   if (filtros.colaboradorId) constraints.push(where("colaboradorId", "==", filtros.colaboradorId));
   if (filtros.estado) constraints.push(where("estado", "==", filtros.estado));
   if (filtros.cidade) constraints.push(where("cidade", "==", filtros.cidade));
@@ -80,12 +81,42 @@ export async function excluirEleitor(id: string) {
   await deleteDoc(doc(db, colecoes.eleitores, id));
 }
 
-export async function verificarTituloDuplicado(titulo: string, campanhaId?: string): Promise<boolean> {
-  const constraints: any[] = [where("tituloEleitoral", "==", titulo)];
-  if (campanhaId) constraints.push(where("campanhaId", "==", campanhaId));
+export async function verificarDocumentoDuplicado(documento: string, gabineteId?: string): Promise<boolean> {
+  const constraints: any[] = [where("documento", "==", documento)];
+  if (gabineteId) constraints.push(where("campanhaId", "==", gabineteId));
   const q = query(collection(db, colecoes.eleitores), ...constraints);
   const snapshot = await getDocs(q);
   return !snapshot.empty;
+}
+
+export async function buscarCandidatos(gabineteId: string): Promise<Candidato[]> {
+  const q = query(
+    collection(db, colecoes.candidatos),
+    where("gabineteId", "==", gabineteId),
+    where("ativo", "==", true),
+    orderBy("nome", "asc")
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidato));
+}
+
+export async function cadastrarCandidato(data: Omit<Candidato, "id" | "criadoEm">) {
+  const ref = await addDoc(collection(db, colecoes.candidatos), {
+    ...data,
+    criadoEm: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function importarCandidatos(gabineteId: string, lista: Omit<Candidato, "id" | "criadoEm" | "gabineteId">[]) {
+  const batch = lista.map((c) =>
+    addDoc(collection(db, colecoes.candidatos), {
+      ...c,
+      gabineteId,
+      criadoEm: serverTimestamp(),
+    })
+  );
+  return Promise.all(batch);
 }
 
 export async function registrarAtividade(data: Omit<Atividade, "id" | "criadoEm">) {
@@ -95,9 +126,22 @@ export async function registrarAtividade(data: Omit<Atividade, "id" | "criadoEm"
   });
 }
 
-export async function buscarAtividades(limite = 50, campanhaId?: string) {
+export async function buscarGabinetesFilhos(parentId: string): Promise<Gabinete[]> {
+  const q = query(collection(db, colecoes.gabinetes), where("parentGabineteId", "==", parentId), orderBy("criadoEm", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete));
+}
+
+export async function buscarEleitoresPorGabinetes(gabineteIds: string[]): Promise<Eleitor[]> {
+  if (gabineteIds.length === 0) return [];
+  const q = query(collection(db, colecoes.eleitores), where("campanhaId", "in", gabineteIds), orderBy("criadoEm", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
+}
+
+export async function buscarAtividades(limite = 50, gabineteId?: string) {
   const constraints: any[] = [];
-  if (campanhaId) constraints.push(where("campanhaId", "==", campanhaId));
+  if (gabineteId) constraints.push(where("gabineteId", "==", gabineteId));
   constraints.push(orderBy("criadoEm", "desc"));
   constraints.push(limit(limite));
   const q = query(collection(db, colecoes.atividades), ...constraints);
@@ -105,9 +149,9 @@ export async function buscarAtividades(limite = 50, campanhaId?: string) {
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Atividade));
 }
 
-export async function contarEleitores(campanhaId?: string, colaboradorId?: string): Promise<number> {
+export async function contarEleitores(gabineteId?: string, colaboradorId?: string): Promise<number> {
   const constraints: any[] = [];
-  if (campanhaId) constraints.push(where("campanhaId", "==", campanhaId));
+  if (gabineteId) constraints.push(where("campanhaId", "==", gabineteId));
   if (colaboradorId) constraints.push(where("colaboradorId", "==", colaboradorId));
   constraints.push(orderBy("criadoEm", "desc"));
   const q = query(collection(db, colecoes.eleitores), ...constraints);
@@ -115,9 +159,9 @@ export async function contarEleitores(campanhaId?: string, colaboradorId?: strin
   return snapshot.size;
 }
 
-export async function buscarEleitoresPorPeriodo(inicio: Date, fim: Date, campanhaId?: string, colaboradorId?: string) {
+export async function buscarEleitoresPorPeriodo(inicio: Date, fim: Date, gabineteId?: string, colaboradorId?: string) {
   const constraints: any[] = [];
-  if (campanhaId) constraints.push(where("campanhaId", "==", campanhaId));
+  if (gabineteId) constraints.push(where("campanhaId", "==", gabineteId));
   if (colaboradorId) constraints.push(where("colaboradorId", "==", colaboradorId));
   constraints.push(where("criadoEm", ">=", Timestamp.fromDate(inicio)));
   constraints.push(where("criadoEm", "<=", Timestamp.fromDate(fim)));

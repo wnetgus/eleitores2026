@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { isSuperAdmin, isAdmin, isPolitico, getRoleConfig } from "@/lib/permissions";
+import { isSuperOrMaster, isAssessor, getRoleConfig } from "@/lib/permissions";
 import { Atividade } from "@/types";
 import { buscarAtividades } from "@/lib/firestore";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -18,7 +18,7 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userData && !isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     async function load() {
       try {
         const data = await buscarAtividades(100, userData?.campanhaId);
@@ -28,7 +28,7 @@ export default function LogsPage() {
     if (userData) load();
   }, [userData]);
 
-  if (!userData || (!isSuperAdmin(userData) && !isAdmin(userData) && !isPolitico(userData))) return null;
+  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData))) return null;
   const config = getRoleConfig(userData);
 
   return (
@@ -50,9 +50,9 @@ export default function LogsPage() {
             {atividades.map((a) => (
               <div key={a.id} className="flex items-start gap-3 p-3 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-                  a.usuarioRole === "admin" ? "bg-purple-500/20 text-purple-400" :
-                  a.usuarioRole === "coordenador" ? "bg-blue-500/20 text-blue-400" :
-                  "bg-emerald-500/20 text-emerald-400"
+                   a.usuarioRole === "admin_master" ? "bg-orange-500/20 text-orange-400" :
+                   a.usuarioRole === "coordenador" ? "bg-blue-500/20 text-blue-400" :
+                   "bg-emerald-500/20 text-emerald-400"
                 }`}>
                   {a.usuarioNome.charAt(0).toUpperCase()}
                 </div>
@@ -62,7 +62,7 @@ export default function LogsPage() {
                   </p>
                   <p className="text-xs text-white/30 mt-0.5">{formatDate(a.criadoEm)}</p>
                 </div>
-                <Badge variant={a.usuarioRole === "admin" ? "danger" : a.usuarioRole === "coordenador" ? "warning" : "info"}>{a.usuarioRole}</Badge>
+                <Badge variant={a.usuarioRole === "admin_master" ? "danger" : a.usuarioRole === "coordenador" ? "warning" : "info"}>{a.usuarioRole === "admin_master" ? "Admin Master" : a.usuarioRole}</Badge>
               </div>
             ))}
             {atividades.length === 0 && <p className="text-center text-white/30 py-12">Nenhuma atividade registrada</p>}
