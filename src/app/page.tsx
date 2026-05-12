@@ -591,10 +591,10 @@ export default function LandingPage() {
               Solicite uma demonstração personalizada para sua equipe ou tire dúvidas sobre a plataforma.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <a href="mailto:contato@eleitores2026.com.br" className="flex items-center gap-2 px-5 py-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all text-sm">
-                <Mail size={16} /> contato@eleitores2026.com.br
+              <a href="mailto:wnetgus@gmail.com" className="flex items-center gap-2 px-5 py-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all text-sm">
+                <Mail size={16} /> wnetgus@gmail.com
               </a>
-              <a href="https://wa.me/5581999999999" target="_blank" className="flex items-center gap-2 px-5 py-3 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 hover:bg-emerald-500/30 transition-all text-sm font-medium">
+              <a href="https://wa.me/5587996666667" target="_blank" className="flex items-center gap-2 px-5 py-3 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 hover:bg-emerald-500/30 transition-all text-sm font-medium">
                 <MessageSquare size={16} /> WhatsApp
               </a>
             </div>
