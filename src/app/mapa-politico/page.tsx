@@ -127,204 +127,103 @@ export default function MapaPoliticoPage() {
             <div className={`w-2 h-2 rounded-full ${status.dot} shrink-0`} title={status.label} />
           </button>
 
-          {/* CONTEÚDO EXPANDIDO - MOSTRA HIERARQUIA */}
+          {/* CONTEÚDO EXPANDIDO - ESTRATÉGICO OU OPERACIONAL CONFORME O NÓ */}
           {isExpanded && (
             <div className="p-3 pt-2 bg-white/[0.01] space-y-3">
-              {/* Indicadores Estratégicos */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-                <div className="p-2 rounded-lg bg-white/[0.03]">
-                  <p className="text-white/40">Eleitores</p>
-                  <p className="text-white font-medium">{totalEleitores}</p>
-                </div>
-                <div className="p-2 rounded-lg bg-white/[0.03]">
-                  <p className="text-white/40">Assessores</p>
-                  <p className="text-white font-medium">{assessores.length}</p>
-                </div>
-                <div className="p-2 rounded-lg bg-white/[0.03]">
-                  <p className="text-white/40">Coordenadores</p>
-                  <p className="text-white font-medium">{coordenadores.length}</p>
-                </div>
-                <div className="p-2 rounded-lg bg-white/[0.03]">
-                  <p className="text-white/40">Militantes</p>
-                  <p className="text-white font-medium">{colabs.length}</p>
-                </div>
-                <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                  <p className="text-emerald-400/70">Crescimento</p>
-                  <p className="text-emerald-400 font-bold">{calcularCrescimento(eleitores, g.id!)}</p>
-                </div>
-              </div>
-              {/* Bairros mais fortes */}
-              {(() => {
-                const bairros = [...new Set(eleitores.filter((e) => e.campanhaId === g.id && e.bairro).map((e) => e.bairro))];
-                if (bairros.length === 0) return null;
-                const topBairros = bairros.slice(0, 3);
-                return (
-                  <div className="flex items-center gap-2 text-xs text-white/40">
-                    <span>📍 Bairros:</span>
-                    {topBairros.map((b, i) => <span key={b} className="text-white/60">{b}{i < topBairros.length - 1 ? "," : ""}</span>)}
-                    {bairros.length > 3 && <span className="text-white/30">+{bairros.length - 3}</span>}
-                  </div>
-                );
-              })()}
-              {/* Conversão (Forte + Médio vs total) */}
-              {totalEleitores > 0 && (
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="text-white/40">📊 Conversão:</span>
-                  <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    {(() => {
-                      const fortes = eleitores.filter((e) => e.campanhaId === g.id && (e.grauApoio === "forte" || e.grauApoio === "medio")).length;
-                      const pct = Math.round((fortes / totalEleitores) * 100);
-                      return (
-                        <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${pct}%` }} />
-                      );
-                    })()}
-                  </div>
-                  <span className="text-emerald-400 font-medium">{Math.round(eleitores.filter((e) => e.campanhaId === g.id && (e.grauApoio === "forte" || e.grauApoio === "medio")).length / totalEleitores * 100)}%</span>
-                </div>
-              )}
-
-              {/* ASSESSORES */}
-              {assessores.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-purple-400 mb-1 flex items-center gap-1">
-                    <Shield size={12} /> Assessores ({assessores.length})
-                  </p>
-                  <div className="space-y-1">
-                    {assessores.map((a) => (
-                      <CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor" contexto={`Assessor(a) • ${g.cargo} ${g.nome}`} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* BASES VINCULADAS (agrupadas por cidade) */}
-              {bases.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-amber-400 mb-1 flex items-center gap-1">
-                    <Building2 size={12} /> Bases Vinculadas ({bases.length})
-                  </p>
-                  <div className="space-y-1">
-                    {(() => {
-                      // Agrupar bases por cidade
-                      const cidades = [...new Set(bases.map((b) => {
-                        const eleitor = eleitores.find((e) => e.campanhaId === b.id && e.cidade);
-                        return eleitor?.cidade || "Sem cidade";
-                      }))];
-
-                      return cidades.map((cidade) => {
-                        const basesDaCidade = bases.filter((b) => {
-                          const eleitor = eleitores.find((e) => e.campanhaId === b.id && e.cidade);
-                          return (eleitor?.cidade || "Sem cidade") === cidade;
-                        });
-
-                        return (
-                          <div key={cidade}>
-                            <button
-                              onClick={() => toggleExpand(`cidade_${cidade}`)}
-                              className="w-full flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-all text-left text-sm mb-0.5"
-                            >
-                              <span className="text-white/30">{expanded[`cidade_${cidade}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
-                              <MapPin size={14} className="text-amber-400 shrink-0" />
-                              <span className="text-white/80 font-medium">{cidade}</span>
-                              <span className="text-white/30 text-xs">({basesDaCidade.length})</span>
-                            </button>
-                            {expanded[`cidade_${cidade}`] && (
-                              <div className="ml-6 space-y-1 mt-1">
-                                {basesDaCidade.map((b) => (
-                                  <div key={b.id}>
-                                    <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm">
-                                      <button onClick={() => toggleExpand(`base_${b.id}`)} className="text-white/30 hover:text-white">
-                                        {expanded[`base_${b.id}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                                      </button>
-                                      <div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                                        {b.nome.charAt(0)}
-                                      </div>
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-white/80 text-sm truncate">{b.nome}</p>
-                                        <p className="text-white/30 text-[10px] truncate">{b.cargo} {g.cargo ? `• Vinculado ao ${g.cargo} ${g.nome}` : ""} • {cidade}</p>
-                                      </div>
-                                      <span className="text-white/40 text-xs shrink-0">{eleitores.filter((e) => e.campanhaId === b.id).length} eleitores</span>
-                                    </div>
-                                    {expanded[`base_${b.id}`] && (
-                                      <div className="ml-6 mt-1 space-y-1">
-                                        {renderPessoasDaBase(b)}
-                                      </div>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      });
-                    })()}
-                  </div>
-                </div>
-              )}
-
-              {/* COORDENADORES */}
-              {coordenadores.length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-blue-400 mb-1 flex items-center gap-1">
-                    <Target size={12} /> Coordenadores ({coordenadores.length})
-                  </p>
-                  <div className="space-y-1">
-                    {coordenadores.map((c) => (
-                      <div key={c.uid}>
-                        <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm">
-                          <button onClick={() => toggleExpand(`coord_${c.uid}`)} className="text-white/30 hover:text-white">
-                            {expanded[`coord_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                          </button>
-                          <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
-                            {c.nome.charAt(0)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-white/80 text-sm truncate">{c.nome}</p>
-                            <p className="text-white/30 text-[10px] truncate">Coordenador(a) • {g.nome}</p>
-                          </div>
-                          {c.email && <span className="text-white/30 text-xs hidden md:block truncate max-w-[120px]">{c.email}</span>}
-                        </div>
-                        {/* Colaboradores do coordenador */}
-                        {expanded[`coord_${c.uid}`] && (
-                          <div className="ml-6 mt-1 space-y-1">
-                            {(() => {
-                              const colsDoCoord = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid);
-                              return colsDoCoord.length > 0 ? (
-                                colsDoCoord.map((col) => (
-                                  <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coordenador ${c.nome} • ${g.nome}`} />
-                                ))
-                              ) : (
-                                <p className="text-xs text-white/30 italic pl-2">Nenhum colaborador vinculado</p>
-                              );
-                            })()}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* COLABORADORES (diretos, sem coordenador) */}
-              {colabs.filter((c) => !c.coordenadorId).length > 0 && (
-                <div>
-                  <p className="text-xs font-medium text-emerald-400 mb-1 flex items-center gap-1">
-                    <Zap size={12} /> Militantes diretos ({colabs.filter((c) => !c.coordenadorId).length})
-                  </p>
-                  <div className="space-y-1">
-                    {colabs.filter((c) => !c.coordenadorId).map((col) => (
-                      <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante direto • ${g.nome}`} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {assessores.length === 0 && coordenadores.length === 0 && colabs.length === 0 && bases.length === 0 && (
-                <p className="text-xs text-white/30 italic">Nenhuma equipe vinculada a este gabinete</p>
-              )}
+              {g.id === (userData?.campanhaId || userData?.gabineteId)
+                ? renderConteudoOperacional(g, totalEleitores, assessores, coordenadores, colabs, bases)
+                : renderConteudoEstrategico(g, totalEleitores)
+              }
             </div>
           )}
         </div>
+      </div>
+    );
+  }
+
+  function renderConteudoEstrategico(g: Gabinete, totalEleitores: number) {
+    const status = getStatus(eleitores.filter((e) => e.campanhaId === g.id).sort((a, b) => parseDate(b.criadoEm).getTime() - parseDate(a.criadoEm).getTime())[0]?.criadoEm || null);
+    const cidades = [...new Set(eleitores.filter((e) => e.campanhaId === g.id).map((e) => e.cidade))];
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Eleitores</p><p className="text-white font-medium">{totalEleitores}</p></div>
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Cidade</p><p className="text-white font-medium">{cidades[0] || "-"}</p></div>
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Partido</p><p className="text-white font-medium">{g.politicoPartido || "-"}</p></div>
+          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><p className="text-emerald-400/70">Crescimento</p><p className="text-emerald-400 font-bold">{calcularCrescimento(eleitores, g.id!)}</p></div>
+        </div>
+        <div className="flex items-center gap-2 text-xs">
+          <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+          <span className={`text-xs ${status.color}`}>{status.label}</span>
+          {cidades.length > 1 && <span className="text-white/30">• {cidades.length} cidades</span>}
+        </div>
+        {totalEleitores > 0 && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-white/40">📊 Conversão:</span>
+            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              {(() => {
+                const fortes = eleitores.filter((e) => e.campanhaId === g.id && (e.grauApoio === "forte" || e.grauApoio === "medio")).length;
+                const pct = Math.round((fortes / totalEleitores) * 100);
+                return <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${pct}%` }} />;
+              })()}
+            </div>
+            <span className="text-emerald-400 font-medium">{Math.round(eleitores.filter((e) => e.campanhaId === g.id && (e.grauApoio === "forte" || e.grauApoio === "medio")).length / totalEleitores * 100)}%</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function renderConteudoOperacional(g: Gabinete, totalEleitores: number, assessores: any[], coordenadores: any[], colabs: any[], bases: any[]) {
+    return (
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Eleitores</p><p className="text-white font-medium">{totalEleitores}</p></div>
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Assessores</p><p className="text-white font-medium">{assessores.length}</p></div>
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Coordenadores</p><p className="text-white font-medium">{coordenadores.length}</p></div>
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Militantes</p><p className="text-white font-medium">{colabs.length}</p></div>
+          <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><p className="text-emerald-400/70">Crescimento</p><p className="text-emerald-400 font-bold">{calcularCrescimento(eleitores, g.id!)}</p></div>
+        </div>
+        {totalEleitores > 0 && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-white/40">📊 Conversão:</span>
+            <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              {(() => {
+                const fortes = eleitores.filter((e) => e.campanhaId === g.id && (e.grauApoio === "forte" || e.grauApoio === "medio")).length;
+                const pct = Math.round((fortes / totalEleitores) * 100);
+                return <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400" style={{ width: `${pct}%` }} />;
+              })()}
+            </div>
+            <span className="text-emerald-400 font-medium">{Math.round(eleitores.filter((e) => e.campanhaId === g.id && (e.grauApoio === "forte" || e.grauApoio === "medio")).length / totalEleitores * 100)}%</span>
+          </div>
+        )}
+        {assessores.length > 0 && (
+          <div><p className="text-xs font-medium text-purple-400 mb-1 flex items-center gap-1"><Shield size={12} /> Assessores ({assessores.length})</p>
+            <div className="space-y-1">{assessores.map((a) => (<CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor" contexto={`Assessor(a) • ${g.cargo} ${g.nome}`} />))}</div></div>
+        )}
+        {bases.length > 0 && (
+          <div><p className="text-xs font-medium text-amber-400 mb-1 flex items-center gap-1"><Building2 size={12} /> Bases Vinculadas ({bases.length})</p>
+            <div className="space-y-1">{(() => {
+              const cidades = [...new Set(bases.map((b) => { const el = eleitores.find((e) => e.campanhaId === b.id && e.cidade); return el?.cidade || "Sem cidade"; }))];
+              return cidades.map((cidade) => {
+                const basesDaCidade = bases.filter((b) => { const el = eleitores.find((e) => e.campanhaId === b.id && e.cidade); return (el?.cidade || "Sem cidade") === cidade; });
+                return (<div key={cidade}><button onClick={() => toggleExpand(`cidade_${cidade}`)} className="w-full flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.03] hover:bg-white/[0.06] transition-all text-left text-sm mb-0.5"><span className="text-white/30">{expanded[`cidade_${cidade}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span><MapPin size={14} className="text-amber-400 shrink-0" /><span className="text-white/80 font-medium">{cidade}</span><span className="text-white/30 text-xs">({basesDaCidade.length})</span></button>
+                  {expanded[`cidade_${cidade}`] && (<div className="ml-6 space-y-1 mt-1">{basesDaCidade.map((b) => (<div key={b.id}><div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm"><button onClick={() => toggleExpand(`base_${b.id}`)} className="text-white/30 hover:text-white">{expanded[`base_${b.id}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button><div className="w-7 h-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{b.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 text-sm truncate">{b.nome}</p><p className="text-white/30 text-[10px] truncate">{b.cargo} • {cidade}</p></div><span className="text-white/40 text-xs shrink-0">{eleitores.filter((e) => e.campanhaId === b.id).length} eleitores</span></div>{expanded[`base_${b.id}`] && <div className="ml-6 mt-1 space-y-1">{renderPessoasDaBase(b)}</div>}</div>))}</div>)}</div>);
+              });
+            })()}</div></div>
+        )}
+        {coordenadores.length > 0 && (
+          <div><p className="text-xs font-medium text-blue-400 mb-1 flex items-center gap-1"><Target size={12} /> Coordenadores ({coordenadores.length})</p>
+            <div className="space-y-1">{coordenadores.map((c) => (<div key={c.uid}><div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm"><button onClick={() => toggleExpand(`coord_${c.uid}`)} className="text-white/30 hover:text-white">{expanded[`coord_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 text-sm truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a) • {g.nome}</p></div>{c.email && <span className="text-white/30 text-xs hidden md:block truncate max-w-[120px]">{c.email}</span>}</div>
+              {expanded[`coord_${c.uid}`] && (<div className="ml-6 mt-1 space-y-1">{(() => { const colsDoCoord = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); return colsDoCoord.length > 0 ? colsDoCoord.map((col) => (<CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)) : (<p className="text-xs text-white/30 italic pl-2">Nenhum colaborador vinculado</p>); })()}</div>)}</div>))}</div></div>
+        )}
+        {colabs.filter((c) => !c.coordenadorId).length > 0 && (
+          <div><p className="text-xs font-medium text-emerald-400 mb-1 flex items-center gap-1"><Zap size={12} /> Militantes diretos ({colabs.filter((c) => !c.coordenadorId).length})</p>
+            <div className="space-y-1">{colabs.filter((c) => !c.coordenadorId).map((col) => (<CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante direto • ${g.nome}`} />))}</div></div>
+        )}
+        {assessores.length === 0 && coordenadores.length === 0 && colabs.length === 0 && bases.length === 0 && (
+          <p className="text-xs text-white/30 italic">Nenhuma equipe vinculada a este gabinete</p>
+        )}
       </div>
     );
   }

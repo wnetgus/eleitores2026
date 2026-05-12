@@ -398,6 +398,115 @@ export default function DashboardPage() {
         )}
       </div>
 
+      {/* SUA COALIZÃO — Inserida aqui, após os cards e antes dos filtros */}
+      {(isPolitico(userData) || isAssessor(userData)) && gabinetesFilhos.length > 0 && (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center text-sm">🌐</div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Sua Coalizão</h2>
+              <p className="text-xs text-amber-400/70">Visão estratégica dos gabinetes aliados</p>
+            </div>
+          </div>
+
+          <GlassCard className="p-4 border-amber-500/20">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                <p className="text-xs text-white/40 mb-1">Seu gabinete</p>
+                <p className="text-2xl font-bold text-white">{eleitores.length}</p>
+                <p className="text-xs text-white/30">eleitores</p>
+              </div>
+              <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                <p className="text-xs text-white/40 mb-1">Aliados</p>
+                <p className="text-2xl font-bold text-amber-400">{eleitoresFilhos.length}</p>
+                <p className="text-xs text-white/30">eleitores</p>
+              </div>
+              <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                <p className="text-xs text-white/40 mb-1">Total da coalizão</p>
+                <p className="text-2xl font-bold text-emerald-400">{eleitores.length + eleitoresFilhos.length}</p>
+                <p className="text-xs text-white/30">eleitores</p>
+              </div>
+            </div>
+          </GlassCard>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-2xl font-bold text-white">{gabinetesFilhos.length}</p>
+              <p className="text-xs text-white/40">Aliados</p>
+            </div>
+            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-2xl font-bold text-emerald-400">{eleitoresFilhos.length}</p>
+              <p className="text-xs text-white/40">Eleitores dos aliados</p>
+            </div>
+            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-2xl font-bold text-blue-400">{gabinetesFilhos.length > 0 ? Math.round(eleitoresFilhos.length / gabinetesFilhos.length) : 0}</p>
+              <p className="text-xs text-white/40">Média por aliado</p>
+            </div>
+            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <p className="text-2xl font-bold text-amber-400">{eleitoresFilhos.filter((e) => parseDate(e.criadoEm).toLocaleDateString("pt-BR") === hoje).length}</p>
+              <p className="text-xs text-white/40">Cadastros hoje (aliados)</p>
+            </div>
+          </div>
+
+          <GlassCard className="p-5">
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp size={16} className="text-amber-400" />
+              <h3 className="text-white font-semibold">Ranking de Aliados</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-white/40 border-b border-white/[0.06]">
+                    <th className="text-left py-3 px-2 font-medium">Gabinete</th>
+                    <th className="text-left py-3 px-2 font-medium">Cargo</th>
+                    <th className="text-left py-3 px-2 font-medium">Partido</th>
+                    <th className="text-left py-3 px-2 font-medium">Eleitores</th>
+                    <th className="text-left py-3 px-2 font-medium">Fortes</th>
+                    <th className="text-left py-3 px-2 font-medium">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gabinetesFilhos
+                    .map((g: any) => {
+                      const eFilhos = eleitoresFilhos.filter((e) => e.campanhaId === g.id);
+                      const fortes = eFilhos.filter((e) => e.grauApoio === "forte").length;
+                      return { ...g, totalEleitores: eFilhos.length, fortes };
+                    })
+                    .sort((a: any, b: any) => b.totalEleitores - a.totalEleitores)
+                    .map((g: any) => (
+                      <tr key={g.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ background: `#${getPartyColors(g.politicoPartido).p}` }}>{g.nome.charAt(0)}</div>
+                            <span className="text-white/80 font-medium">{g.nome}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-2 text-white/60">{g.cargo?.replace(/_/g, " ")}</td>
+                        <td className="py-3 px-2">
+                          {g.politicoPartido && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium" style={{ background: `#${getPartyColors(g.politicoPartido).a}`, color: `#${getPartyColors(g.politicoPartido).d}` }}>
+                              {g.politicoPartido}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-2 text-white/80 font-medium">{g.totalEleitores}</td>
+                        <td className="py-3 px-2 text-emerald-400">{g.fortes}</td>
+                        <td className="py-3 px-2">
+                          <span className={`text-xs px-2 py-0.5 rounded-full ${g.totalEleitores > 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-gray-500/20 text-gray-400"}`}>
+                            {g.totalEleitores > 0 ? "Ativo" : "Sem dados"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </GlassCard>
+
+          <p className="text-center text-[10px] text-white/20 -mt-2">Você acompanha — eles operam. Autonomia operacional dos aliados preservada.</p>
+        </>
+      )}
+
       {/* FILTROS TERRITORIAIS */}
       {(isPolitico(userData) || isPrefeito(userData) || isVereador(userData) || isAssessor(userData)) && cidadesDisponiveis.length > 0 && (
         <div className="flex items-center gap-3 flex-wrap">
@@ -619,92 +728,6 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* PANORAMA DA COALIZÃO — Apenas para político (deputado) e assessor com aliados */}
-      {(isPolitico(userData) || isAssessor(userData)) && gabinetesFilhos.length > 0 && (
-        <>
-          <div className="flex items-center gap-3 pt-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center text-sm">🌐</div>
-            <div>
-              <h2 className="text-lg font-bold text-white">Panorama da Coalizão</h2>
-              <p className="text-xs text-amber-400/70">Visão estratégica dos gabinetes aliados</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-2xl font-bold text-white">{gabinetesFilhos.length}</p>
-              <p className="text-xs text-white/40">Aliados</p>
-            </div>
-            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-2xl font-bold text-emerald-400">{eleitoresFilhos.length}</p>
-              <p className="text-xs text-white/40">Eleitores dos aliados</p>
-            </div>
-            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-2xl font-bold text-blue-400">{gabinetesFilhos.length > 0 ? Math.round(eleitoresFilhos.length / gabinetesFilhos.length) : 0}</p>
-              <p className="text-xs text-white/40">Média por aliado</p>
-            </div>
-            <div className="text-center p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <p className="text-2xl font-bold text-amber-400">{eleitoresFilhos.filter((e) => parseDate(e.criadoEm).toLocaleDateString("pt-BR") === hoje).length}</p>
-              <p className="text-xs text-white/40">Cadastros hoje (aliados)</p>
-            </div>
-          </div>
-
-          <GlassCard className="p-5">
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={16} className="text-amber-400" />
-              <h3 className="text-white font-semibold">Ranking de Aliados</h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-white/40 border-b border-white/[0.06]">
-                    <th className="text-left py-3 px-2 font-medium">Gabinete</th>
-                    <th className="text-left py-3 px-2 font-medium">Cargo</th>
-                    <th className="text-left py-3 px-2 font-medium">Partido</th>
-                    <th className="text-left py-3 px-2 font-medium">Eleitores</th>
-                    <th className="text-left py-3 px-2 font-medium">Fortes</th>
-                    <th className="text-left py-3 px-2 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {gabinetesFilhos
-                    .map((g: any) => {
-                      const eFilhos = eleitoresFilhos.filter((e) => e.campanhaId === g.id);
-                      const fortes = eFilhos.filter((e) => e.grauApoio === "forte").length;
-                      return { ...g, totalEleitores: eFilhos.length, fortes };
-                    })
-                    .sort((a: any, b: any) => b.totalEleitores - a.totalEleitores)
-                    .map((g: any) => (
-                      <tr key={g.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                        <td className="py-3 px-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-7 h-7 rounded-lg flex items-center justify-center text-white text-xs font-bold" style={{ background: `#${getPartyColors(g.politicoPartido).p}` }}>{g.nome.charAt(0)}</div>
-                            <span className="text-white/80 font-medium">{g.nome}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-2 text-white/60">{g.cargo?.replace(/_/g, " ")}</td>
-                        <td className="py-3 px-2">
-                          {g.politicoPartido && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium" style={{ background: `#${getPartyColors(g.politicoPartido).a}`, color: `#${getPartyColors(g.politicoPartido).d}` }}>
-                              {g.politicoPartido}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-2 text-white/80 font-medium">{g.totalEleitores}</td>
-                        <td className="py-3 px-2 text-emerald-400">{g.fortes}</td>
-                        <td className="py-3 px-2">
-                          <span className={`text-xs px-2 py-0.5 rounded-full ${g.totalEleitores > 0 ? "bg-emerald-500/20 text-emerald-400" : "bg-gray-500/20 text-gray-400"}`}>
-                            {g.totalEleitores > 0 ? "Ativo" : "Sem dados"}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </GlassCard>
-        </>
-      )}
     </div>
   );
 }
