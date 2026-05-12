@@ -15,11 +15,12 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Building2, UserPlus, Globe, Plus, Power, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { Building2, UserPlus, Globe, Plus, Power, Pencil, Trash2, ExternalLink, ChevronRight, Circle, Activity } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
 import { Modal } from "@/components/ui/Modal";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const cargosOptions = [
   { value: "governador", label: "Governador" },
@@ -54,6 +55,39 @@ function gerarSlug(texto: string): string {
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function getCargoIcon(cargo: string): string {
+  if (cargo === "governador" || cargo === "senador" || cargo === "deputado_federal" || cargo === "deputado_estadual") return "🏛️";
+  if (cargo === "prefeito" || cargo === "vice_prefeito") return "🏙️";
+  if (cargo === "vereador") return "🎯";
+  return "🏛️";
+}
+
+function getCargoLabel(cargo: string): string {
+  const labels: Record<string, string> = {
+    governador: "Governador",
+    senador: "Senador",
+    deputado_federal: "Dep. Federal",
+    deputado_estadual: "Dep. Estadual",
+    prefeito: "Prefeito",
+    vice_prefeito: "Vice-Prefeito",
+    vereador: "Vereador",
+  };
+  return labels[cargo] || cargo;
+}
+
+function getNivelBadge(nivel: string): { label: string; cor: string } {
+  if (nivel === "federal") return { label: "Federal", cor: "bg-purple-500/20 text-purple-400 border-purple-500/30" };
+  if (nivel === "estadual") return { label: "Estadual", cor: "bg-blue-500/20 text-blue-400 border-blue-500/30" };
+  return { label: "Municipal", cor: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" };
+}
+
+function getUltimaAtividade(eleitorCount: number): { label: string; cor: string; dot: string } {
+  if (eleitorCount > 50) return { label: "Alta atividade", cor: "text-emerald-400", dot: "bg-emerald-400" };
+  if (eleitorCount > 10) return { label: "Ativo", cor: "text-blue-400", dot: "bg-blue-400" };
+  if (eleitorCount > 0) return { label: "Baixa atividade", cor: "text-amber-400", dot: "bg-amber-400" };
+  return { label: "Sem cadastros", cor: "text-gray-500", dot: "bg-gray-500" };
 }
 
 export default function GabinetesPage() {
@@ -181,6 +215,79 @@ export default function GabinetesPage() {
   if (!userData || !isSuperOrMaster(userData)) return null;
   const config = getRoleConfig(userData);
 
+  function renderCard(g: Gabinete, profundidade: number) {
+    const atv = getUltimaAtividade(eleitorCounts[g.id!] || 0);
+    const cargoIcon = getCargoIcon(g.cargo);
+    const cargoLabel = getCargoLabel(g.cargo);
+    const nivelBadge = getNivelBadge(g.nivelPolitico);
+    const marginLeft = profundidade > 0 ? Math.min(profundidade * 24, 48) : 0;
+
+    return (
+      <GlassCard key={g.id} className="p-5 relative overflow-hidden" style={{ marginLeft }}>
+        {/* Faixa lateral do nível político */}
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${
+          g.nivelPolitico === "federal" ? "bg-purple-500" :
+          g.nivelPolitico === "estadual" ? "bg-blue-500" : "bg-emerald-500"
+        }`} />
+
+        {/* Indicador de hierarquia */}
+        {profundidade > 0 && (
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            <div className="flex items-center gap-1 text-white/20">
+              <ChevronRight size={14} />
+              <div className="w-4 h-px bg-white/10" />
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg" style={{ background: `#${getPartyColors(g.politicoPartido).p}` }}>
+              {cargoIcon}
+            </div>
+            <div>
+              <h3 className="text-white font-semibold">{g.nome}</h3>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-xs text-white/40">{cargoLabel}</span>
+                <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium border ${nivelBadge.cor}`}>{nivelBadge.label}</span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => window.location.href = `/gabinete/${g.id}`} className="text-white/30 hover:text-emerald-400 transition-colors" title="Abrir painel do gabinete"><ExternalLink size={14} /></button>
+            <button onClick={() => openEdit(g)} className="text-white/30 hover:text-amber-400 transition-colors" title="Editar"><Pencil size={14} /></button>
+            <button onClick={() => excluirGabinete(g.id!, g.nome)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
+            <Badge variant={g.ativo ? "success" : "default"}>{g.ativo ? "Ativo" : "Inativo"}</Badge>
+          </div>
+        </div>
+
+        <div className="text-sm text-white/60 mb-3 space-y-1">
+          <p className="flex items-center gap-1.5">{cargoIcon} {g.politicoNome}</p>
+          <p className="flex items-center gap-1.5 text-xs text-white/40">📧 {g.politicoEmail}</p>
+          {g.politicoPartido && (
+            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `#${getPartyColors(g.politicoPartido).a}`, color: `#${getPartyColors(g.politicoPartido).d}` }}>
+              🏛️ {g.politicoPartido}
+            </span>
+          )}
+          {g.slogan && <p className="text-white/40 text-xs mt-1 italic">"{g.slogan}"</p>}
+        </div>
+
+        <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-white/50 flex items-center gap-1"><Globe size={14} />{eleitorCounts[g.id!] || 0} eleitores</span>
+            <span className={`flex items-center gap-1 text-xs ${atv.cor}`}>
+              <span className={`w-1.5 h-1.5 rounded-full ${atv.dot}`} />
+              {atv.label}
+            </span>
+          </div>
+          <button onClick={() => toggleGabinete(g.id!, g.ativo)} className={`text-xs ${g.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`} title={g.ativo ? "Desativar gabinete" : "Ativar gabinete"}>
+            <Power size={14} className="inline mr-1" />{g.ativo ? "Desativar" : "Ativar"}
+          </button>
+        </div>
+      </GlassCard>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
@@ -239,44 +346,39 @@ export default function GabinetesPage() {
       {loading ? (
         <div className="flex justify-center py-12"><svg className="animate-spin h-8 w-8 text-rose-500" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {gabinetes.map((g) => (
-            <GlassCard key={g.id} className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold" style={{ background: `#${getPartyColors(g.politicoPartido).p}` }}>{g.nome.charAt(0)}</div>
-                  <div>
-                    <h3 className="text-white font-semibold">{g.nome}</h3>
-                    <p className="text-xs text-white/40">{g.cargo}</p>
+        <>
+          {/* Seção Federal */}
+          {["federal", "estadual", "municipal"].map((nivel) => {
+            const gabsNivel = gabinetes.filter((g) => g.nivelPolitico === nivel);
+            if (gabsNivel.length === 0) return null;
+            const nivelLabel = nivel === "federal" ? "FEDERAL" : nivel === "estadual" ? "ESTADUAL" : "MUNICIPAL";
+            const nivelIcon = nivel === "federal" ? "🌐" : nivel === "estadual" ? "📊" : "📍";
+            const nivelCor = nivel === "federal" ? "from-purple-600 to-purple-800 border-purple-500/30 text-purple-400" : nivel === "estadual" ? "from-blue-600 to-blue-800 border-blue-500/30 text-blue-400" : "from-emerald-600 to-emerald-800 border-emerald-500/30 text-emerald-400";
+            const nivelBgCor = nivel === "federal" ? "bg-purple-500/10" : nivel === "estadual" ? "bg-blue-500/10" : "bg-emerald-500/10";
+            const nivelBadgeCor = nivel === "federal" ? "border-purple-500/30 text-purple-400" : nivel === "estadual" ? "border-blue-500/30 text-blue-400" : "border-emerald-500/30 text-emerald-400";
+
+            // Separar raízes (sem parent) e filhos
+            const raizes = gabsNivel.filter((g) => !g.parentGabineteId);
+            const filhos = gabsNivel.filter((g) => g.parentGabineteId);
+
+            return (
+              <div key={nivel} className="mb-8">
+                <div className={`flex items-center gap-3 mb-4 px-1`}>
+                  <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${nivelCor.split(" ")[0]} ${nivelCor.split(" ")[1]} flex items-center justify-center text-sm`}>
+                    {nivelIcon}
                   </div>
+                  <h2 className="text-lg font-bold text-white tracking-wider">{nivelLabel}</h2>
+                  <span className="text-xs text-white/30">• {gabsNivel.length} gabinete{gabsNivel.length !== 1 ? "s" : ""}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => window.open(`/gabinete/${g.id}`, "_blank")} className="text-white/30 hover:text-emerald-400 transition-colors" title="Abrir painel do gabinete"><ExternalLink size={14} /></button>
-                  <button onClick={() => openEdit(g)} className="text-white/30 hover:text-amber-400 transition-colors" title="Editar"><Pencil size={14} /></button>
-                  <button onClick={() => excluirGabinete(g.id!, g.nome)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
-                  <Badge variant={g.ativo ? "success" : "default"}>{g.ativo ? "Ativo" : "Inativo"}</Badge>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {raizes.map((g) => renderCard(g, 0))}
+                  {filhos.map((g) => renderCard(g, 1))}
                 </div>
               </div>
-              <div className="text-sm text-white/60 mb-3">
-                <p>🎯 {g.politicoNome}</p>
-                <p>📧 {g.politicoEmail}</p>
-                {g.politicoPartido && (
-                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: `#${getPartyColors(g.politicoPartido).a}`, color: `#${getPartyColors(g.politicoPartido).d}` }}>
-                    🏛️ {g.politicoPartido}
-                  </span>
-                )}
-                {g.slogan && <p className="text-white/40 text-xs mt-1 italic">"{g.slogan}"</p>}
-              </div>
-              <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
-                <span className="text-sm text-white/50"><Globe size={14} className="inline mr-1" />{eleitorCounts[g.id!] || 0} eleitores</span>
-                <button onClick={() => toggleGabinete(g.id!, g.ativo)} className={`text-xs ${g.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
-                  <Power size={14} className="inline mr-1" />{g.ativo ? "Desativar" : "Ativar"}
-                </button>
-              </div>
-            </GlassCard>
-          ))}
-          {gabinetes.length === 0 && <p className="col-span-full text-center text-white/30 py-12">Nenhum gabinete cadastrado</p>}
-        </div>
+            );
+          })}
+          {gabinetes.length === 0 && <div className="col-span-full"><EmptyState icon="🏛️" title="Nenhum gabinete cadastrado" description="Crie o primeiro gabinete para começar" action={{ label: "Criar Gabinete", href: "/campanhas" }} /></div>}
+        </>
       )}
       <Modal open={!!editModal} onClose={() => setEditModal(null)} title="Editar Gabinete">
         <div className="space-y-4">

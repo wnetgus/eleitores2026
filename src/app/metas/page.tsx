@@ -28,7 +28,7 @@ export default function MetasPage() {
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
 
-  const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isAssessor(userData) || isCoordenador(userData);
+  const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
 
   useEffect(() => {
     if (!userData) return;

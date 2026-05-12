@@ -18,7 +18,7 @@ export default function LogsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     async function load() {
       try {
         const data = await buscarAtividades(100, userData?.campanhaId);
@@ -28,7 +28,7 @@ export default function LogsPage() {
     if (userData) load();
   }, [userData]);
 
-  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData))) return null;
+  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData))) return null;
   const config = getRoleConfig(userData);
 
   return (

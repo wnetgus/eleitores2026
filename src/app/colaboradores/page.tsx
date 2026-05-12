@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,9 +11,11 @@ import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColab
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
-import { formatDate, parseDate } from "@/lib/utils";
-import { Users, Trophy, TrendingUp, Calendar, UserPlus, Zap, Mail } from "lucide-react";
+import { formatDate, parseDate, mascaraTelefone, mascaraCEP, mascaraDocumento } from "@/lib/utils";
+import { estados, cidades } from "@/lib/estados-cidades";
+import { Users, Trophy, TrendingUp, Calendar, UserPlus, Zap, Mail, MapPin } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import toast from "react-hot-toast";
@@ -26,7 +28,9 @@ export default function ColaboradoresPage() {
   const [colaboradores, setColaboradores] = useState<AppUser[]>([]);
   const [selectedColaborador, setSelectedColaborador] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ email: "", password: "", nome: "" });
+  const [form, setForm] = useState({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "" });
+  const [cidadesDisponiveis, setCidadesDisponiveis] = useState<string[]>([]);
+  const [buscandoCep, setBuscandoCep] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -48,26 +52,83 @@ export default function ColaboradoresPage() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
 
+  function handleEstadoChange(sigla: string) {
+    setForm((f) => ({ ...f, estado: sigla, cidade: "" }));
+    setCidadesDisponiveis(cidades[sigla] || []);
+  }
+
+  async function buscarCep(cep: string) {
+    const cepLimpo = cep.replace(/\D/g, "");
+    if (cepLimpo.length !== 8) return;
+    setBuscandoCep(true);
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
+      const data = await res.json();
+      if (!data.erro) {
+        const siglaEstado = data.uf;
+        setForm((f) => ({
+          ...f, cep: cepLimpo,
+          logradouro: data.logradouro || f.logradouro,
+          bairro: data.bairro || f.bairro,
+          cidade: data.localidade || f.cidade,
+          estado: siglaEstado || f.estado,
+        }));
+        setCidadesDisponiveis(cidades[siglaEstado] || []);
+      }
+    } catch {} finally { setBuscandoCep(false); }
+  }
+
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.email || !form.password || !form.nome) { toast.error("Preencha todos os campos"); return; }
+    if (!userData) return;
+    if (!form.email || !form.nome) { toast.error("Preencha nome e email"); return; }
+    if (!isCoordenador(userData) && (!form.password || form.password.length < 6)) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
     setSaving(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
-      await setDoc(doc(db, "usuarios", cred.user.uid), {
+      const dados: Record<string, any> = {
         email: form.email, nome: form.nome, role: "colaborador",
-        gabineteId: userData?.gabineteId || userData?.campanhaId || "",
-        coordenadorId: isCoordenador(userData) ? userData!.uid : (userData?.coordenadorId || undefined),
-        criadoEm: new Date(), ativo: true, criadoPor: userData?.uid,
-      });
-      await registrarAtividade({
-        acao: "criar_colaborador", usuarioId: userData!.uid, usuarioNome: userData!.nome,
-        usuarioRole: userData!.role, detalhes: `Criou colaborador ${form.nome}`,
-      });
-      toast.success("Colaborador criado!");
-      setForm({ email: "", password: "", nome: "" });
+        gabineteId: userData.gabineteId || userData.campanhaId || "",
+        campanhaId: userData.campanhaId || userData.gabineteId || "",
+        criadoPor: userData.uid,
+      };
+      if (form.telefone) dados.telefone = form.telefone;
+      if (form.cep) dados.cep = form.cep;
+      if (form.logradouro) dados.logradouro = form.logradouro;
+      if (form.numero) dados.numero = form.numero;
+      if (form.bairro) dados.bairro = form.bairro;
+      if (form.estado) dados.estado = form.estado;
+      if (form.cidade) dados.cidade = form.cidade;
+      if (form.observacoes) dados.observacoes = form.observacoes;
+      if (form.tipoDocumento) dados.tipoDocumento = form.tipoDocumento;
+      if (form.documento) dados.documento = form.documento;
+      if (isCoordenador(userData)) {
+        dados.coordenadorId = userData.uid;
+        dados.status = "pendente";
+        dados.ativo = false;
+        dados.solicitadoPor = userData.uid;
+        dados.solicitadoPorNome = userData.nome;
+        await setDoc(doc(db, "usuarios", `pendente_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`), dados);
+        await registrarAtividade({
+          acao: "solicitou_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
+          usuarioRole: userData.role, detalhes: `Solicitou colaborador ${form.nome}`,
+        });
+        toast.success("Colaborador solicitado! Aguardando aprovação do assessor.");
+      } else {
+        dados.coordenadorId = userData.coordenadorId || undefined;
+        dados.status = "ativo";
+        dados.ativo = true;
+        const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+        await setDoc(doc(db, "usuarios", cred.user.uid), dados);
+        await registrarAtividade({
+          acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
+          usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome}`,
+        });
+        toast.success("Colaborador criado!");
+      }
+      setForm({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "" });
+      setCidadesDisponiveis([]);
       loadData();
-    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : "Erro ao criar"); } finally { setSaving(false); }
+    } catch (error: any) { console.error("ERRO AO CRIAR COLABORADOR:", error); toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : `Erro: ${error.message || "Erro ao criar"}`); } finally { setSaving(false); }
   }
 
   if (!userData || !canManageColaboradores(userData)) return null;
@@ -105,11 +166,31 @@ export default function ColaboradoresPage() {
 
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className={roleInfo.text} /><h3 className="text-white font-semibold">Criar Colaborador</h3></div>
-        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <Input label="Nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do colaborador" />
-          <Input label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" />
-          <Input label="Senha" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
-          <div className="md:col-span-3"><Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Criando..." : "Criar Colaborador"}</Button></div>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Input label="Nome Completo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do colaborador" />
+            <Input label="Email *" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" />
+            {!isCoordenador(userData) && (
+              <Input label="Senha *" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
+            )}
+            <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
+            <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value, documento: "" })} options={[{ value: "", label: "Selecione..." }, { value: "titulo", label: "Título de Eleitor" }, { value: "cpf", label: "CPF" }, { value: "rg", label: "RG" }]} />
+            <Input label="Nº do Documento" value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder="Número do documento" maxLength={14} />
+            <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
+            <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
+            <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
+            <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
+            <Select label="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
+            <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
+            <div className="md:col-span-2 lg:col-span-1">
+              <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Salvando..." : "Criar Colaborador"}</Button>
+            {buscandoCep && <span className="text-sm text-white/40 animate-pulse">Buscando CEP...</span>}
+            {isCoordenador(userData) && <span className="text-xs text-amber-400/70">O colaborador ficará pendente até o assessor aprovar</span>}
+          </div>
         </form>
       </GlassCard>
 
@@ -193,8 +274,13 @@ export default function ColaboradoresPage() {
                   <p className="text-white font-medium text-sm truncate">{c.nome}</p>
                   <p className="text-xs text-white/40 truncate">{c.email}</p>
                 </div>
-                <Badge variant="success">Ativo</Badge>
+                <Badge variant={c.status === "pendente" ? "warning" : c.status === "recusado" ? "danger" : "success"}>
+                  {c.status === "pendente" ? "Pendente" : c.status === "recusado" ? "Recusado" : "Ativo"}
+                </Badge>
               </div>
+              {c.status === "recusado" && c.recusaMotivo && (
+                <p className="text-xs text-red-400/70 mt-1">Motivo: {c.recusaMotivo === "incompleto" ? "Cadastro incompleto" : c.recusaMotivo === "inconsistente" ? "Dados inconsistentes" : c.recusaMotivo === "duplicado" ? "Cadastro duplicado" : c.recusaMotivo === "invalido" ? "Informações inválidas" : c.recusaMotivo === "regiao" ? "Região não definida" : c.recusaMotivo === "perfil" ? "Perfil não aprovado" : c.recusaMotivo === "correcao" ? "Necessita correção" : c.recusaMotivo === "alinhamento" ? "Aguardando alinhamento" : c.recusaMotivo === "reprovado" ? "Reprovado pela coordenação" : c.recusaMotivo}</p>
+              )}
               <div className="flex items-center gap-2 text-xs text-white/40"><Mail size={12} />{c.email}</div>
             </div>
           ))}

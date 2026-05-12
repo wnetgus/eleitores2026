@@ -54,7 +54,7 @@ export function canManageColaboradores(user: AppUser | null): boolean {
 }
 
 export function canExportData(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user) || isPolitico(user) || isCoordenador(user);
+  return isSuperOrMaster(user) || isAssessor(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isCoordenador(user);
 }
 
 export function canDeleteRecords(user: AppUser | null): boolean {

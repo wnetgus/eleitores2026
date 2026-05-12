@@ -24,12 +24,15 @@ import {
   Star,
   Eye,
   Map,
+  Clock,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { isSuperAdmin, isAdminMaster, isPolitico, isPrefeito, isVereador, isAssessor, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
 import { ROLE_CONFIG } from "@/types";
 
@@ -38,6 +41,7 @@ const superAdminMenu = [
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
   { href: "/campanhas", label: "Gabinetes", icon: Building2 },
   { href: "/admins", label: "Admin Masters", icon: Shield },
+  { href: "/solicitacoes", label: "Solicitações", icon: Clock },
   { href: "/assessores", label: "Assessores", icon: Shield },
   { href: "/coordenadores", label: "Coordenadores", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
@@ -50,8 +54,6 @@ const superAdminMenu = [
   { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
-const adminMenu: typeof superAdminMenu = [];
-
 const politicoMenu = [
   { href: "/dashboard", label: "Meu Mandato", icon: Crown },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
@@ -63,10 +65,8 @@ const politicoMenu = [
 const prefeitoMenu = [
   { href: "/dashboard", label: "Meu Município", icon: Crown },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
-  { href: "/assessores", label: "Assessores", icon: Shield },
   { href: "/coordenadores", label: "Coordenadores", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },
@@ -75,7 +75,6 @@ const prefeitoMenu = [
 const vereadorMenu = [
   { href: "/dashboard", label: "Meu Mandato", icon: Crown },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },
@@ -84,6 +83,7 @@ const vereadorMenu = [
 const assessorMenu = [
   { href: "/dashboard", label: "Dashboard", icon: Crown },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/solicitacoes", label: "Solicitações", icon: Clock },
   { href: "/assessores", label: "Assessores", icon: Shield },
   { href: "/coordenadores", label: "Coordenadores", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
@@ -112,9 +112,23 @@ const colaboradorMenu = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [pendentesCount, setPendentesCount] = useState(0);
   const pathname = usePathname();
   const { userData } = useAuth();
   const router = useRouter();
+
+  useEffect(() => {
+    async function loadPendentes() {
+      try {
+        const q = query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente"]));
+        const snap = await getDocs(q);
+        setPendentesCount(snap.size);
+      } catch {}
+    }
+    if (userData && (isSuperAdmin(userData) || isAdminMaster(userData) || isAssessor(userData))) {
+      loadPendentes();
+    }
+  }, [userData]);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -189,14 +203,20 @@ export function Sidebar() {
                   ${collapsed ? "justify-center" : ""}`}
               >
                 <Icon size={20} />
-                {!collapsed && <span className="text-sm font-medium">{item.label}</span>}
+                {!collapsed && (
+                  <span className="text-sm font-medium flex-1">{item.label}</span>
+                )}
+                {!collapsed && item.href === "/solicitacoes" && pendentesCount > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
+                    {pendentesCount}
+                  </span>
+                )}
               </Link>
             );
           })}
           {isAssessor(userData) && userData?.gabineteId && (
             <Link
               href={`/gabinete/${userData.gabineteId}`}
-              target="_blank"
               onClick={() => setMobileOpen(false)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 text-white/50 hover:text-white hover:bg-white/5 ${collapsed ? "justify-center" : ""}`}
             >

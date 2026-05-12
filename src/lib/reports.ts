@@ -191,3 +191,166 @@ export function exportPDFPremium(eleitores: Eleitor[], titulo: string, party?: s
 
   doc.save(`relatorio-${c.nome.toLowerCase().replace(/\s/g, "-")}.pdf`);
 }
+
+// ==================== RELATÓRIO EXECUTIVO 1 PÁGINA ====================
+export function exportRelatorioExecutivo(
+  eleitores: Eleitor[],
+  titulo: string,
+  party?: string,
+  gabineteNome?: string,
+  politicoNome?: string,
+  cargo?: string,
+  crescimento?: string,
+  topCidades?: { cidade: string; total: number }[],
+  topColaboradores?: { nome: string; total: number }[],
+  metaProgresso?: string,
+) {
+  const c = getPartyColors(party);
+  const prim = hexToRgb(c.p);
+  const drk = hexToRgb(c.d);
+
+  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+  const pw = doc.internal.pageSize.getWidth();
+  const ph = doc.internal.pageSize.getHeight();
+
+  const fortes = eleitores.filter((e) => e.grauApoio === "forte").length;
+  const medios = eleitores.filter((e) => e.grauApoio === "medio").length;
+  const fracos = eleitores.filter((e) => e.grauApoio === "fraco").length;
+  const indecisos = eleitores.filter((e) => e.grauApoio === "indeciso").length;
+
+  // TOPO — Faixa do partido
+  doc.setFillColor(prim.r, prim.g, prim.b);
+  doc.rect(0, 0, pw, 38, "F");
+  doc.setFillColor(drk.r, drk.g, drk.b);
+  doc.rect(0, 33, pw, 5, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text("RELATÓRIO EXECUTIVO", pw / 2, 18, { align: "center" });
+  doc.setFontSize(10);
+  doc.setFont("helvetica", "normal");
+  doc.text(`${c.nome.toUpperCase()}  •  ${gabineteNome || titulo}`, pw / 2, 28, { align: "center" });
+
+  // SUBTÍTULO — Info do gabinete
+  let y = 48;
+  doc.setFontSize(9);
+  doc.setTextColor(100, 100, 100);
+  if (politicoNome) { doc.text(`Político: ${politicoNome}`, 14, y); y += 5; }
+  if (cargo) { doc.text(`Cargo: ${cargo}`, 14, y); y += 5; }
+  doc.text(`Total de eleitores: ${eleitores.length}`, 14, y); y += 5;
+  if (crescimento) doc.text(`Crescimento recente: ${crescimento}`, 14, y);
+  doc.setFontSize(7.5);
+  doc.setTextColor(150, 150, 150);
+  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pw - 14, 48, { align: "right" });
+  doc.text("Eleitores 2026 — Plataforma de Gestão Política", pw - 14, 53, { align: "right" });
+
+  // LINHA SEPARADORA
+  y = 68;
+  doc.setDrawColor(prim.r, prim.g, prim.b);
+  doc.setLineWidth(0.5);
+  doc.line(14, y, pw - 14, y);
+  y += 8;
+
+  // CARDS DE INDICADORES (grid 2x3)
+  const cards = [
+    { label: "Total", value: eleitores.length.toString(), color: prim },
+    { label: "Fortes", value: fortes.toString(), color: hexToRgb("059669") },
+    { label: "Médios", value: medios.toString(), color: hexToRgb("D97706") },
+    { label: "Fracos", value: fracos.toString(), color: hexToRgb("DC2626") },
+    { label: "Indecisos", value: indecisos.toString(), color: hexToRgb("3B82F6") },
+    { label: "Meta", value: metaProgresso || "-", color: hexToRgb("7C3AED") },
+  ];
+
+  const cardW = (pw - 42) / 3;
+  const cardH = 16;
+  cards.forEach((card, i) => {
+    const col = i % 3;
+    const row = Math.floor(i / 3);
+    const cx = 14 + col * (cardW + 7);
+    const cy = y + row * (cardH + 5);
+    doc.setFillColor(248, 250, 252);
+    doc.setDrawColor(220, 220, 220);
+    doc.roundedRect(cx, cy, cardW, cardH, 2, 2, "FD");
+    doc.setFillColor(card.color.r, card.color.g, card.color.b);
+    doc.rect(cx, cy, 3, cardH, "F");
+    doc.setTextColor(80, 80, 80);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text(card.label, cx + 7, cy + 6);
+    doc.setTextColor(40, 40, 40);
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text(card.value, cx + 7, cy + 14);
+  });
+
+  y += 2 * (cardH + 5) + 5;
+
+  // TOP CIDADES (se houver)
+  if (topCidades && topCidades.length > 0) {
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, y, pw - 14, y);
+    y += 6;
+    doc.setTextColor(prim.r, prim.g, prim.b);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("CIDADES COM MAIOR PENETRAÇÃO", 14, y);
+    y += 6;
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Cidade", 14, y);
+    doc.text("Eleitores", cardW + 14, y, { align: "center" });
+    doc.text("%", cardW * 2 + 14, y, { align: "center" });
+    y += 3;
+    topCidades.slice(0, 4).forEach((cidade, i) => {
+      const pct = Math.round((cidade.total / eleitores.length) * 100);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      doc.text(cidade.cidade, 14, y + i * 5);
+      doc.text(cidade.total.toString(), cardW + 14, y + i * 5, { align: "center" });
+      doc.text(`${pct}%`, cardW * 2 + 14, y + i * 5, { align: "center" });
+    });
+    y += 5 * Math.min(topCidades.length, 4) + 5;
+  }
+
+  // TOP COLABORADORES (se houver)
+  if (topColaboradores && topColaboradores.length > 0) {
+    doc.setDrawColor(200, 200, 200);
+    doc.line(14, y, pw - 14, y);
+    y += 6;
+    doc.setTextColor(prim.r, prim.g, prim.b);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text("COLABORADORES DESTAQUE", 14, y);
+    y += 6;
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(100, 100, 100);
+    doc.text("Nome", 14, y);
+    doc.text("Cadastros", cardW + 14, y, { align: "center" });
+    doc.text("Desempenho", cardW * 2 + 14, y, { align: "center" });
+    y += 3;
+    const maxTotal = Math.max(...topColaboradores.map((c) => c.total), 1);
+    topColaboradores.slice(0, 4).forEach((col, i) => {
+      const pct = Math.round((col.total / (maxTotal > 0 ? maxTotal : 1)) * 100);
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(60, 60, 60);
+      doc.text(col.nome, 14, y + i * 5);
+      doc.text(col.total.toString(), cardW + 14, y + i * 5, { align: "center" });
+      doc.text(`${pct}%`, cardW * 2 + 14, y + i * 5, { align: "center" });
+    });
+    y += 5 * Math.min(topColaboradores.length, 4) + 5;
+  }
+
+  // RODAPÉ
+  const rodapeY = ph - 15;
+  doc.setDrawColor(prim.r, prim.g, prim.b);
+  doc.line(14, rodapeY - 2, pw - 14, rodapeY - 2);
+  doc.setFontSize(7);
+  doc.setTextColor(160, 160, 160);
+  doc.setFont("helvetica", "normal");
+  doc.text("Eleitores 2026 — Plataforma de Gestão Política", 14, rodapeY + 3);
+  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pw - 14, rodapeY + 3, { align: "right" });
+
+  doc.save(`executivo-${c.nome.toLowerCase().replace(/\s/g, "-")}.pdf`);
+}

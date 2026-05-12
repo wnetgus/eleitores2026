@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { UserPlus, Search, Trash2, Loader2, Pencil } from "lucide-react";
 import { EditarEleitorModal } from "@/components/forms/EditarEleitorModal";
+import { EmptyState } from "@/components/ui/EmptyState";
 import toast from "react-hot-toast";
 import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
 
@@ -138,7 +139,7 @@ export default function EleitoresPage() {
         grauApoio: form.grauApoio,
         observacoes: form.observacoes,
         colaboradorId: userData.uid, colaboradorNome: userData.nome,
-        coordenadorId: userData.coordenadorId || userData.uid,
+        coordenadorId: userData.coordenadorId || "",
       };
       if (form.telefone) eleitorData.telefone = form.telefone;
       if (form.cep) eleitorData.cep = form.cep;
@@ -152,7 +153,6 @@ export default function EleitoresPage() {
       await registrarAtividade({ acao: "cadastro_eleitor", usuarioId: userData.uid, usuarioNome: userData.nome, usuarioRole: userData.role, detalhes: `Cadastrou o eleitor ${form.nomeCompleto}` });
       toast.success("Eleitor cadastrado com sucesso!");
       setForm({ ...formInitial });
-      limparRascunho();
       limparRascunho();
       setCidadesDisponiveis([]);
       loadEleitores();
@@ -235,7 +235,7 @@ export default function EleitoresPage() {
                 <th className="text-left py-3 px-2 font-medium">Grau</th>
                 <th className="text-left py-3 px-2 font-medium">Colaborador</th>
                 <th className="text-left py-3 px-2 font-medium">Data</th>
-                {(isAssessor(userData) || isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData)) && <th className="text-left py-3 px-2 font-medium">Ações</th>}
+                {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData)) && <th className="text-left py-3 px-2 font-medium">Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -248,7 +248,7 @@ export default function EleitoresPage() {
                   <td className="py-3 px-2"><Badge variant={eleitor.grauApoio === "forte" ? "success" : eleitor.grauApoio === "medio" ? "warning" : eleitor.grauApoio === "fraco" ? "danger" : "info"}>{eleitor.grauApoio}</Badge></td>
                   <td className="py-3 px-2 text-white/60">{eleitor.colaboradorNome}</td>
                   <td className="py-3 px-2 text-white/40 text-xs">{formatDate(eleitor.criadoEm)}</td>
-                  {(isAssessor(userData) || isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData)) && (
+                  {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData)) && (
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-2">
                         <button onClick={() => setEditingEleitor(eleitor)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar">
@@ -264,7 +264,7 @@ export default function EleitoresPage() {
                   )}
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-white/30">{search ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado ainda"}</td></tr>}
+              {filtered.length === 0 && <tr><td colSpan={8} className="py-4"><EmptyState icon={search ? "🔍" : "📋"} title={search ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado"} description={search ? "Tente buscar por nome ou cidade diferente" : "Colaboradores ainda não cadastraram eleitores"} /></td></tr>}
             </tbody>
           </table>
         </div>

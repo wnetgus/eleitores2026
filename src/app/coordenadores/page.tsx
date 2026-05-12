@@ -33,7 +33,7 @@ export default function CoordenadoresPage() {
   const [editForm, setEditForm] = useState({ nome: "", estado: "", cidadePrincipal: "", regiao: "" });
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     loadCoordenadores();
   }, [userData]);
 
@@ -85,7 +85,7 @@ export default function CoordenadoresPage() {
     } catch (e) { toast.error("Erro ao atualizar"); }
   }
 
-  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData))) return null;
+  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData))) return null;
   const config = getRoleConfig(userData);
 
   return (

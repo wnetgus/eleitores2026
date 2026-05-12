@@ -1,0 +1,86 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "eleitores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eleitores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "colaboradorId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eleitores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "coordenadorId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "coordenadorId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "campanhas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "parentGabineteId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "atividades",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "candidatos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "gabineteId", "order": "ASCENDING" },
+        { "fieldPath": "ativo", "order": "ASCENDING" },
+        { "fieldPath": "nome", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "metas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "colaboradorId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    }
+  ]
+}

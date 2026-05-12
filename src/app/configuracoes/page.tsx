@@ -38,7 +38,7 @@ export default function ConfiguracoesPage() {
   const [resetStep, setResetStep] = useState(0);
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     loadData();
   }, [userData]);
 
@@ -46,7 +46,6 @@ export default function ConfiguracoesPage() {
     try {
       const constraints: any[] = [orderBy("criadoEm", "desc")];
       if (isAssessor(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
-      else if (isAssessor(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
       const q = query(collection(db, "usuarios"), ...constraints);
       const snap = await getDocs(q);
       setUsuarios(snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));

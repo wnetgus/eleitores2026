@@ -29,7 +29,7 @@ export default function CandidatosPage() {
   const [showAjuda, setShowAjuda] = useState(false);
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData) && !isAssessor(userData)) {
+    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) {
       router.push("/dashboard");
       return;
     }
@@ -109,7 +109,7 @@ export default function CandidatosPage() {
     } catch (e) { toast.error("Erro ao importar"); } finally { setImporting(false); }
   }
 
-  const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData) || isAssessor(userData);
+  const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
 
   return (
     <div className="space-y-6 animate-in">
