@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Select } from "@/components/ui/Select";
 import { formatDate, parseDate } from "@/lib/utils";
-import { Building2, Users, Target, Zap, Globe, Activity, FileSpreadsheet, Download, FileText, BarChart3, TrendingUp, ArrowLeft, ExternalLink, Loader2, Plus, Link2, Unlink, ChevronDown, ChevronRight, Mail } from "lucide-react";
+import { Building2, Users, Target, Zap, Globe, Activity, FileSpreadsheet, Download, FileText, BarChart3, TrendingUp, ArrowLeft, ExternalLink, Loader2, Plus, Link2, Unlink, ChevronDown, ChevronRight, Mail, UserPlus } from "lucide-react";
 import toast from "react-hot-toast";
 import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import { buscarGabinetesFilhos, buscarEleitoresPorGabinetes, getGabinetes, registrarAtividade } from "@/lib/firestore";
@@ -303,7 +303,27 @@ export default function PainelGabinetePage() {
 
           {/* EQUIPE DO GABINETE */}
           <GlassCard className="p-5">
-            <h3 className="text-white font-semibold mb-3">Equipe do Gabinete</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-white font-semibold">Equipe do Gabinete</h3>
+              {isSuperOrMaster(userData) && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.open(`/coordenadores?gabineteId=${id}`, "_blank")}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
+                    title="Criar coordenador neste gabinete"
+                  >
+                    <UserPlus size={12} /> Coord.
+                  </button>
+                  <button
+                    onClick={() => window.open(`/colaboradores?gabineteId=${id}`, "_blank")}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                    title="Criar colaborador neste gabinete"
+                  >
+                    <UserPlus size={12} /> Colab.
+                  </button>
+                </div>
+              )}
+            </div>
             <div className="space-y-1 text-sm">
               {/* ASSESSORES */}
               <div>
@@ -458,8 +478,8 @@ export default function PainelGabinetePage() {
             <h3 className="text-white font-semibold mb-3">Navegação Rápida</h3>
             <div className="space-y-2">
               <Button onClick={() => window.open(`/eleitores?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Users size={14} /> Eleitores</Button>
-              <Button onClick={() => window.open(`/coordenadores?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Target size={14} /> Coordenadores</Button>
-              <Button onClick={() => window.open(`/colaboradores?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Zap size={14} /> Colaboradores</Button>
+              <Button onClick={() => window.open(`/coordenadores?gabineteId=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Target size={14} /> Coordenadores</Button>
+              <Button onClick={() => window.open(`/colaboradores?gabineteId=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Zap size={14} /> Colaboradores</Button>
               <Button onClick={() => window.open(`/metas?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><BarChart3 size={14} /> Metas</Button>
               <Button onClick={() => window.open(`/relatorios?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Activity size={14} /> Relatórios</Button>
               <Button onClick={() => window.open(`/candidatos?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Building2 size={14} /> Candidatos</Button>

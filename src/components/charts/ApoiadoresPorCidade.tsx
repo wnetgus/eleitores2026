@@ -11,7 +11,7 @@ export function ApoiadoresPorCidade({ data }: Props) {
   return (
     <GlassCard className="p-5">
       <h3 className="text-white font-semibold mb-4">Apoiadores por Cidade</h3>
-      <div className="h-64">
+      <div className="h-64 min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data} layout="vertical">
             <XAxis type="number" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} />

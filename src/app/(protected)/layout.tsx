@@ -4,9 +4,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Sidebar } from "@/components/layout/Sidebar";
-
 export default function ProtectedLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, userData, loading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -33,7 +32,8 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
     <div className="min-h-screen bg-[#0a0a0f]">
       <Sidebar />
       <main className="lg:pl-[260px] transition-all duration-300 min-h-screen">
-        <div className="p-4 md:p-6 lg:p-8 pt-20 lg:pt-8 max-w-7xl mx-auto">
+
+        <div className="p-4 md:p-6 lg:p-8 pt-4 lg:pt-6 max-w-7xl mx-auto">
           {children}
         </div>
       </main>

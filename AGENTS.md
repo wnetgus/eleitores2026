@@ -56,7 +56,7 @@ src/
     metas/            # Metas e produtividade
     relatorios/       # Relatórios
   components/
-    ui/               # Input, Select, Button, Badge, GlassCard, Modal
+    ui/               # Input, Select, Button, Badge, GlassCard, Modal, BuscaGlobal, BuscaOperacional
     layout/           # Sidebar (menus dinâmicos por role)
     dashboard/        # StatCard
     charts/           # Gráficos Recharts
@@ -83,3 +83,50 @@ src/
 6. Evitar `undefined` no Firestore — usar `if (valor) dados.chave = valor`
 7. Mapa Político: árvore sempre desce, nunca sobe, sem loops
 8. Dashboard: filtros por cidade (deputado) e bairro (prefeito)
+
+## Sistema de Busca (Fase 1 — Implementado)
+
+### 1. Busca Global (`BuscaGlobal.tsx`)
+- **Atalho:** Ctrl+K
+- **Função:** Navegação rápida entre páginas (overlay modal)
+- **Placeholder dinâmico** por role via `getSearchPlaceholder(role)`
+- **Escopo hierárquico** via `filtrarPorRole()`
+  - super/admin: busca total
+  - assessor/politico/pref/vereador: própria coalizão
+  - coordenador: seus colaboradores
+  - colaborador: não vê (componente retorna null)
+- **Onde aparece:** No cabeçalho de cada página (eleitores, colaboradores, coordenadores, assessores)
+
+### 2. Busca Operacional (`BuscaOperacional.tsx`)
+- **Função:** Filtrar/manipular a lista da página atual
+- **Navegação hierárquica contextual** — selects dependentes em cadeia
+- **Cadeia completa:** Gabinete → Assessor → Coordenador → Colaborador → input textual
+- **Regras por role:**
+  | Role | Níveis visíveis |
+  |---|---|
+  | super_admin / admin_master | Gabinete → Assessor → Coordenador → Colaborador |
+  | politico / prefeito / vereador | Assessor → Coordenador → Colaborador |
+  | assessor | Coordenador → Colaborador |
+  | coordenador | Colaborador |
+  | colaborador | nada |
+- **Comportamento:** cada select depende do anterior; mudar um nível superior reseta os inferiores
+- **Onde aparece:** Abaixo do título, antes da lista de cada página
+
+### 3. Interface `FiltrosOperacionais`
+```ts
+interface FiltrosOperacionais {
+  texto: string;
+  gabineteId?: string;
+  assessorId?: string;
+  coordenadorId?: string;
+  colaboradorId?: string;
+}
+```
+- Cada página aplica `useMemo` para filtrar sua lista local com base nos filtros recebidos via `onFilter`
+- Props do BuscaOperacional: `pagina`, `userData`, `gabinetes`, `assessores`, `coordenadores`, `colaboradores`, `onFilter`
+
+## Próximos Passos (Fase 2 — Central Operacional)
+- Visão Estratégica: hierarquia, contexto, expansão/recolhimento, coalizão
+- Visão Operacional: tabela unificada, exportação, ações rápidas, manutenção
+- Mapa Político escopado por role
+- Dashboard com filtros territoriais

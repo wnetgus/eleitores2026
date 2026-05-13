@@ -46,3 +46,24 @@ export function mascaraDocumento(tipo: string, valor: string): string {
   if (tipo === "cpf") return mascaraCPF(valor);
   return valor.replace(/\D/g, "");
 }
+
+const dominioPorRole: Record<string, string> = {
+  assessor: "assessora.com",
+  coordenador: "coordenador.com",
+  colaborador: "colaborador.com",
+  politico: "deputado.com",
+  prefeito: "prefeito.com",
+  vereador: "vereador.com",
+};
+
+export function sugerirEmail(nome: string, role: string): string {
+  const dominio = dominioPorRole[role] || "email.com";
+  const slug = nome
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9\s]/g, "")
+    .trim()
+    .replace(/\s+/g, ".");
+  return slug ? `${slug}@${dominio}` : "";
+}

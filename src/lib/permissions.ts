@@ -37,6 +37,10 @@ export function isColaborador(user: AppUser | null): boolean {
   return can(user, "colaborador");
 }
 
+export function isPoliticoOuAssessor(user: AppUser | null): boolean {
+  return can(user, "politico") || can(user, "prefeito") || can(user, "vereador") || can(user, "assessor");
+}
+
 export function isSuperOrMaster(user: AppUser | null): boolean {
   return isSuperAdmin(user) || isAdminMaster(user);
 }

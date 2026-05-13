@@ -13,7 +13,7 @@ export function ApoiadoresPorEstado({ data }: Props) {
   return (
     <GlassCard className="p-5">
       <h3 className="text-white font-semibold mb-4">Apoiadores por Estado</h3>
-      <div className="h-64">
+      <div className="h-64 min-w-0">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie data={data} dataKey="total" nameKey="estado" cx="50%" cy="50%" outerRadius={80} label>

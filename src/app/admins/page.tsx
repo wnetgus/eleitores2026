@@ -12,11 +12,12 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Shield, UserPlus, Mail, Pencil, Power } from "lucide-react";
+import { Shield, UserPlus, Mail, Pencil, Power, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
 import { Modal } from "@/components/ui/Modal";
+import { deleteUser } from "firebase/auth";
 
 export default function AdminsPage() {
   const { userData } = useAuth();
@@ -26,7 +27,9 @@ export default function AdminsPage() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [editModal, setEditModal] = useState<AppUser | null>(null);
-  const [editForm, setEditForm] = useState({ nome: "" });
+  const [editForm, setEditForm] = useState({ nome: "", email: "" });
+  const [excluirModal, setExcluirModal] = useState<AppUser | null>(null);
+  const [excluirSaving, setExcluirSaving] = useState(false);
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData)) { router.push("/dashboard"); return; }
@@ -65,17 +68,30 @@ export default function AdminsPage() {
   }
 
   function openEdit(c: AppUser) {
-    setEditForm({ nome: c.nome });
+    setEditForm({ nome: c.nome, email: c.email });
     setEditModal(c);
   }
 
   async function handleEdit() {
     if (!editModal) return;
     try {
-      await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome });
+      await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, email: editForm.email });
       await registrarAtividade({ acao: "editou_admin_master", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Editou admin master ${editModal.nome}` });
       toast.success("Admin Master atualizado!"); setEditModal(null); loadAdmins();
     } catch (e) { toast.error("Erro ao atualizar"); }
+  }
+
+  async function handleExcluir() {
+    if (!excluirModal) return;
+    setExcluirSaving(true);
+    try {
+      const uid = excluirModal.uid;
+      await fetch(`/api/auth/delete?uid=${uid}`, { method: "DELETE" });
+      await registrarAtividade({ acao: "excluiu_admin_master", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu admin master ${excluirModal.nome}` });
+      toast.success("Admin Master excluído!");
+      setExcluirModal(null);
+      loadAdmins();
+    } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
   }
 
   if (!userData || !isSuperOrMaster(userData)) return null;
@@ -119,6 +135,9 @@ export default function AdminsPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => openEdit(c)} className="text-white/30 hover:text-purple-400 transition-colors" title="Editar"><Pencil size={14} /></button>
+                    {userData?.uid !== c.uid && (
+                      <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
+                    )}
                     <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>
                   </div>
                 </div>
@@ -139,9 +158,24 @@ export default function AdminsPage() {
       <Modal open={!!editModal} onClose={() => setEditModal(null)} title="Editar Administrador">
         <div className="space-y-4">
           <Input label="Nome" value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
+          <Input label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
           <div className="flex gap-3 pt-2">
             <Button onClick={handleEdit} className="flex-1">Salvar</Button>
             <Button variant="ghost" onClick={() => setEditModal(null)} className="flex-1">Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL EXCLUIR */}
+      <Modal open={!!excluirModal} onClose={() => setExcluirModal(null)} title="Excluir Administrador">
+        <div className="space-y-4">
+          <p className="text-white/60 text-sm">
+            Tem certeza que deseja excluir <strong className="text-white">{excluirModal?.nome}</strong>?
+          </p>
+          <p className="text-red-400/70 text-xs">Esta ação remove o usuário do Firebase Auth e do Firestore. Não é reversível.</p>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleExcluir} loading={excluirSaving} className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30">Excluir</Button>
+            <Button variant="ghost" onClick={() => setExcluirModal(null)} className="flex-1">Cancelar</Button>
           </div>
         </div>
       </Modal>

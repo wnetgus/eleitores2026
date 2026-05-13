@@ -54,6 +54,15 @@ export default function MapaPoliticoPage() {
     load();
   }, [userData]);
 
+  // Auto expandir gabinetes para Super Admin
+  useEffect(() => {
+    if (!loading && isSuperOrMaster(userData)) {
+      const allIds: Record<string, boolean> = {};
+      gabinetes.forEach((g) => { if (g.id) allIds[g.id] = true; });
+      setExpanded((prev) => ({ ...prev, ...allIds }));
+    }
+  }, [loading, gabinetes.length]);
+
   async function load() {
     try {
       const gSnap = await getDocs(query(collection(db, "campanhas"), orderBy("criadoEm", "desc")));
@@ -130,7 +139,7 @@ export default function MapaPoliticoPage() {
           {/* CONTEÚDO EXPANDIDO - ESTRATÉGICO OU OPERACIONAL CONFORME O NÓ */}
           {isExpanded && (
             <div className="p-3 pt-2 bg-white/[0.01] space-y-3">
-              {g.id === (userData?.campanhaId || userData?.gabineteId)
+              {isSuperOrMaster(userData) || g.id === (userData?.campanhaId || userData?.gabineteId)
                 ? renderConteudoOperacional(g, totalEleitores, assessores, coordenadores, colabs, bases)
                 : renderConteudoEstrategico(g, totalEleitores)
               }
@@ -178,10 +187,10 @@ export default function MapaPoliticoPage() {
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-2 md:grid-cols-5 gap-2 text-xs">
-          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Eleitores</p><p className="text-white font-medium">{totalEleitores}</p></div>
           <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Assessores</p><p className="text-white font-medium">{assessores.length}</p></div>
           <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Coordenadores</p><p className="text-white font-medium">{coordenadores.length}</p></div>
           <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Militantes</p><p className="text-white font-medium">{colabs.length}</p></div>
+          <div className="p-2 rounded-lg bg-white/[0.03]"><p className="text-white/40">Eleitores</p><p className="text-white font-medium">{totalEleitores}</p></div>
           <div className="p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20"><p className="text-emerald-400/70">Crescimento</p><p className="text-emerald-400 font-bold">{calcularCrescimento(eleitores, g.id!)}</p></div>
         </div>
         {totalEleitores > 0 && (
@@ -400,24 +409,28 @@ export default function MapaPoliticoPage() {
         </div>
       </div>
 
-      {/* MEU GABINETE + HIERARQUIA COMPLETA */}
-      {gAtual && renderConteudoMapa(gAtual, parentes, usuarios, eleitores, expanded, toggleExpand)}
-
-      {/* SUPER ADMIN: Ver todos os gabinetes independentes */}
-      {isSuperOrMaster(userData) && ativos.filter((g) => g.id !== gAtual?.id && !g.parentGabineteId).length > 0 && (
+      {/* SUPER ADMIN: ÁRVORE COMPLETA — GABINETES RAIZ COM TODA HIERARQUIA */}
+      {isSuperOrMaster(userData) ? (
         <div>
-          <button onClick={() => toggleExpand("outros")} className="flex items-center gap-2 mb-2 mt-6">
-            {expanded["outros"] ? <ChevronDown size={18} className="text-white/40" /> : <ChevronRight size={18} className="text-white/40" />}
-            <Globe size={16} className="text-white/40" />
-            <h2 className="text-white/60 font-semibold text-sm">Outros Gabinetes</h2>
-            <span className="text-xs text-white/20">({ativos.filter((g) => g.id !== gAtual?.id && !g.parentGabineteId).length})</span>
-          </button>
-          {expanded["outros"] && (
-            <div className="space-y-2">
-              {ativos.filter((g) => g.id !== gAtual?.id && !g.parentGabineteId).map((g) => renderArvore(g, 0))}
-            </div>
-          )}
+          <div className="flex items-center gap-2 mb-4">
+            <Globe size={18} className="text-white/40" />
+            <h2 className="text-sm font-semibold text-white/60">Todos os Gabinetes</h2>
+            <span className="text-xs text-white/20">({ativos.length} ativos)</span>
+          </div>
+          <div className="space-y-3">
+            {ativos.filter((g) => !g.parentGabineteId).map((g) => (
+              <div key={g.id}>
+                {renderArvore(g, 0)}
+              </div>
+            ))}
+            {ativos.filter((g) => !g.parentGabineteId).length === 0 && (
+              <p className="text-white/30 text-sm italic">Nenhum gabinete ativo</p>
+            )}
+          </div>
         </div>
+      ) : (
+        /* USUÁRIO COMUM: mostra apenas seu gabinete + hierarquia */
+        gAtual && renderConteudoMapa(gAtual, parentes, usuarios, eleitores, expanded, toggleExpand)
       )}
     </div>
   );

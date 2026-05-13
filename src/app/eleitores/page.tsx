@@ -1,19 +1,24 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { cadastrarEleitor, buscarEleitores, verificarDocumentoDuplicado, registrarAtividade, excluirEleitor, buscarCandidatos } from "@/lib/firestore";
 import { estados, cidades } from "@/lib/estados-cidades";
-import { Eleitor, Candidato } from "@/types";
+import { Eleitor, Candidato, AppUser } from "@/types";
 import { formatDate, mascaraCPF, mascaraTelefone, mascaraCEP, mascaraDocumento } from "@/lib/utils";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
-import { UserPlus, Search, Trash2, Loader2, Pencil } from "lucide-react";
+import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
+import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
+import { UserPlus, Trash2, Loader2, Pencil } from "lucide-react";
 import { EditarEleitorModal } from "@/components/forms/EditarEleitorModal";
 import { EmptyState } from "@/components/ui/EmptyState";
+
 import toast from "react-hot-toast";
 import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
 
@@ -68,10 +73,26 @@ export default function EleitoresPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
-  const [search, setSearch] = useState("");
   const [editingEleitor, setEditingEleitor] = useState<Eleitor | null>(null);
+  const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
+  const [todosAssessores, setTodosAssessores] = useState<AppUser[]>([]);
+  const [todosCoordenadores, setTodosCoordenadores] = useState<AppUser[]>([]);
+  const [todosColaboradores, setTodosColaboradores] = useState<AppUser[]>([]);
 
-  useEffect(() => { loadEleitores(); }, [userData]);
+  useEffect(() => { loadEleitores(); loadUsuarios(); }, [userData]);
+
+  async function loadUsuarios() {
+    try {
+      const [aSnap, cSnap, colSnap] = await Promise.all([
+        getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"))),
+        getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"))),
+        getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"))),
+      ]);
+      setTodosAssessores(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      setTodosCoordenadores(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      setTodosColaboradores(colSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+    } catch (e) { console.error(e); }
+  }
 
   useEffect(() => {
     const id = userData?.gabineteId || userData?.campanhaId;
@@ -164,18 +185,41 @@ export default function EleitoresPage() {
     try { await excluirEleitor(id); toast.success("Eleitor excluído"); loadEleitores(); } catch (e) { toast.error("Erro ao excluir"); }
   }
 
-  const filtered = eleitores.filter((e) =>
-    e.nomeCompleto.toLowerCase().includes(search.toLowerCase()) ||
-    e.cidade?.toLowerCase().includes(search.toLowerCase())
-  );
-
   const docLabel = form.tipoDocumento === "titulo" ? "Título Eleitoral" : form.tipoDocumento === "cpf" ? "CPF" : "RG";
+
+  const eleitoresFiltrados = useMemo(() => {
+    let lista = eleitores;
+    if (filtros.texto) {
+      const q = filtros.texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      lista = lista.filter((e) =>
+        e.nomeCompleto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q) ||
+        e.cidade?.toLowerCase().includes(q)
+      );
+    }
+    if (filtros.coordenadorId) {
+      lista = lista.filter((e) => e.coordenadorId === filtros.coordenadorId);
+    }
+    if (filtros.colaboradorId) {
+      lista = lista.filter((e) => e.colaboradorId === filtros.colaboradorId);
+    }
+    if (filtros.gabineteId) {
+      lista = lista.filter((e) => e.campanhaId === filtros.gabineteId);
+    }
+    if (filtros.assessorId) {
+      const gabId = todosAssessores.find((a) => a.uid === filtros.assessorId)?.gabineteId;
+      if (gabId) lista = lista.filter((e) => e.campanhaId === gabId);
+    }
+    return lista;
+  }, [eleitores, filtros, todosAssessores]);
 
   return (
     <div className="space-y-6 animate-in">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Cadastro de Eleitores</h1>
-        <p className="text-white/50 text-sm mt-1">Cadastro rápido e simplificado para equipes de rua</p>
+      <div className="flex items-center gap-3">
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-white">Cadastro de Eleitores</h1>
+          <p className="text-white/50 text-sm mt-1">Cadastro rápido e simplificado para equipes de rua</p>
+        </div>
+        <BuscaGlobal userData={userData} />
       </div>
       <GlassCard className="p-4 md:p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -214,12 +258,16 @@ export default function EleitoresPage() {
           </div>
         </form>
       </GlassCard>
+      <BuscaOperacional
+        pagina="eleitores"
+        userData={userData}
+        assessores={todosAssessores}
+        coordenadores={todosCoordenadores}
+        colaboradores={todosColaboradores}
+        onFilter={setFiltros}
+      />
       <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" />
-          <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Pesquisar por nome ou cidade..." className="w-full pl-9 pr-4 py-2 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" />
-        </div>
-        <span className="text-sm text-white/40">{eleitores.length} registros</span>
+        <span className="text-sm text-white/40">{eleitoresFiltrados.length} registros</span>
       </div>
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-emerald-500" /></div>
@@ -239,7 +287,7 @@ export default function EleitoresPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((eleitor) => (
+              {eleitoresFiltrados.map((eleitor) => (
                 <tr key={eleitor.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                   <td className="py-3 px-2 text-white/80">{eleitor.nomeCompleto}</td>
                   <td className="py-3 px-2 text-white/60 text-xs">{eleitor.tipoDocumento?.toUpperCase()}: {eleitor.documento}</td>
@@ -264,7 +312,7 @@ export default function EleitoresPage() {
                   )}
                 </tr>
               ))}
-              {filtered.length === 0 && <tr><td colSpan={8} className="py-4"><EmptyState icon={search ? "🔍" : "📋"} title={search ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado"} description={search ? "Tente buscar por nome ou cidade diferente" : "Colaboradores ainda não cadastraram eleitores"} /></td></tr>}
+              {eleitoresFiltrados.length === 0 && <tr><td colSpan={8} className="py-4"><EmptyState icon={filtros.texto ? "🔍" : "📋"} title={filtros.texto ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado"} description={filtros.texto ? "Tente buscar por nome ou cidade diferente" : "Colaboradores ainda não cadastraram eleitores"} /></td></tr>}
             </tbody>
           </table>
         </div>

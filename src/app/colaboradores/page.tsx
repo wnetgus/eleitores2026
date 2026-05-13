@@ -1,45 +1,94 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc } from "firebase/firestore";
+import { useEffect, useState, useMemo } from "react";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "next/navigation";
-import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColaboradores } from "@/lib/permissions";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Eleitor, AppUser, Gabinete, UserRole, ROLE_CONFIG } from "@/types";
+import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColaboradores, isSuperOrMaster } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
-import { formatDate, parseDate, mascaraTelefone, mascaraCEP, mascaraDocumento } from "@/lib/utils";
+import { Modal } from "@/components/ui/Modal";
+import { formatDate, parseDate, mascaraTelefone, mascaraCEP, mascaraDocumento, sugerirEmail } from "@/lib/utils";
 import { estados, cidades } from "@/lib/estados-cidades";
-import { Users, Trophy, TrendingUp, Calendar, UserPlus, Zap, Mail, MapPin } from "lucide-react";
+import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
+import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
+import { Users, Trophy, TrendingUp, Calendar, UserPlus, Zap, Mail, MapPin, Building2, ChevronRight, Trash2, Pencil, Search } from "lucide-react";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import toast from "react-hot-toast";
 import { registrarAtividade } from "@/lib/firestore";
 
+
 export default function ColaboradoresPage() {
   const { userData } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const gabineteIdParam = searchParams.get("gabineteId");
+  const assessorIdParam = searchParams.get("assessorId");
+  const [gabineteContexto, setGabineteContexto] = useState<{ id: string; nome: string; cargo: string } | null>(null);
+  const [assessorContexto, setAssessorContexto] = useState<{ id: string; nome: string } | null>(null);
+  const [coordenadoresDisponiveis, setCoordenadoresDisponiveis] = useState<AppUser[]>([]);
+  const [todosGabinetes, setTodosGabinetes] = useState<Gabinete[]>([]);
+  const [todosAssessores, setTodosAssessores] = useState<AppUser[]>([]);
   const [eleitores, setEleitores] = useState<Eleitor[]>([]);
   const [colaboradores, setColaboradores] = useState<AppUser[]>([]);
   const [selectedColaborador, setSelectedColaborador] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "" });
+  const [form, setForm] = useState({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "", coordenadorId: "", gabineteVinculoId: "" });
   const [cidadesDisponiveis, setCidadesDisponiveis] = useState<string[]>([]);
   const [buscandoCep, setBuscandoCep] = useState(false);
+  const [emailManual, setEmailManual] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editModal, setEditModal] = useState<AppUser | null>(null);
+  const [editForm, setEditForm] = useState({ nome: "", email: "" });
+  const [excluirModal, setExcluirModal] = useState<AppUser | null>(null);
+  const [excluirSaving, setExcluirSaving] = useState(false);
+  const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
 
   useEffect(() => {
     if (userData && !canManageColaboradores(userData)) { router.push(isColaborador(userData) ? "/eleitores" : "/dashboard"); return; }
     loadData();
   }, [userData]);
 
+  useEffect(() => {
+    if (form.nome && !emailManual) {
+      const sugestao = sugerirEmail(form.nome, "colaborador");
+      if (sugestao) setForm((f) => ({ ...f, email: sugestao }));
+    }
+  }, [form.nome]);
+
   async function loadData() {
     try {
+      if (isSuperOrMaster(userData)) {
+        const [gSnap, aSnap] = await Promise.all([
+          getDocs(collection(db, "campanhas")),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"))),
+        ]);
+        setTodosGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
+        setTodosAssessores(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        if (gabineteIdParam) {
+          const gDoc = await getDoc(doc(db, "campanhas", gabineteIdParam));
+          if (gDoc.exists()) {
+            const g = gDoc.data() as Gabinete;
+            setGabineteContexto({ id: gabineteIdParam, nome: g.nome, cargo: g.cargo?.replace(/_/g, " ") });
+          }
+          if (assessorIdParam) {
+            const aSnap = await getDoc(doc(db, "usuarios", assessorIdParam));
+            if (aSnap.exists()) {
+              const a = aSnap.data() as AppUser;
+              setAssessorContexto({ id: assessorIdParam, nome: a.nome });
+            }
+            const cSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", gabineteIdParam)));
+            setCoordenadoresDisponiveis(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+          }
+        }
+      }
       const q = query(collection(db, "eleitores"), orderBy("criadoEm", "desc"));
       const snap = await getDocs(q);
       setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
@@ -81,14 +130,16 @@ export default function ColaboradoresPage() {
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!userData) return;
-    if (!form.email || !form.nome) { toast.error("Preencha nome e email"); return; }
-    if (!isCoordenador(userData) && (!form.password || form.password.length < 6)) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
+    if (!form.email || !form.nome) { toast.error("Preencha nome e email", { duration: 4000 }); return; }
+    if (!isCoordenador(userData) && (!form.password || form.password.length < 6)) { toast.error("Senha deve ter no mínimo 6 caracteres", { duration: 4000 }); return; }
+    if (isSuperOrMaster(userData) && !gabineteIdParam && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o colaborador", { duration: 4000 }); return; }
     setSaving(true);
     try {
+      const campanhaVinculo = gabineteIdParam || form.gabineteVinculoId || userData.gabineteId || userData.campanhaId || "";
       const dados: Record<string, any> = {
         email: form.email, nome: form.nome, role: "colaborador",
-        gabineteId: userData.gabineteId || userData.campanhaId || "",
-        campanhaId: userData.campanhaId || userData.gabineteId || "",
+        gabineteId: campanhaVinculo,
+        campanhaId: campanhaVinculo,
         criadoPor: userData.uid,
       };
       if (form.telefone) dados.telefone = form.telefone;
@@ -112,9 +163,21 @@ export default function ColaboradoresPage() {
           acao: "solicitou_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Solicitou colaborador ${form.nome}`,
         });
-        toast.success("Colaborador solicitado! Aguardando aprovação do assessor.");
+        toast.success("Colaborador solicitado! Aguardando aprovação do assessor.", { duration: 4000 });
+      } else if (gabineteIdParam && isSuperOrMaster(userData)) {
+        if (form.coordenadorId) dados.coordenadorId = form.coordenadorId;
+        dados.gabineteId = gabineteIdParam;
+        dados.campanhaId = gabineteIdParam;
+        dados.status = "ativo";
+        dados.ativo = true;
+        const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
+        await setDoc(doc(db, "usuarios", cred.user.uid), dados);
+        await registrarAtividade({
+          acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
+          usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome} via contexto`,
+        });
+        toast.success("Colaborador criado!", { duration: 4000 });
       } else {
-        dados.coordenadorId = userData.coordenadorId || undefined;
         dados.status = "ativo";
         dados.ativo = true;
         const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
@@ -123,13 +186,59 @@ export default function ColaboradoresPage() {
           acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome}`,
         });
-        toast.success("Colaborador criado!");
+        toast.success("Colaborador criado!", { duration: 4000 });
       }
-      setForm({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "" });
+      setForm({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "", coordenadorId: "", gabineteVinculoId: "" });
       setCidadesDisponiveis([]);
       loadData();
-    } catch (error: any) { console.error("ERRO AO CRIAR COLABORADOR:", error); toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : `Erro: ${error.message || "Erro ao criar"}`); } finally { setSaving(false); }
+    } catch (error: any) { console.error("ERRO AO CRIAR COLABORADOR:", error); toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : `Erro: ${error.message || "Erro ao criar"}`, { duration: 5000 }); } finally { setSaving(false); }
   }
+
+  function openEditColab(c: AppUser) {
+    setEditForm({ nome: c.nome, email: c.email });
+    setEditModal(c);
+  }
+
+  async function handleEditColab() {
+    if (!editModal) return;
+    try {
+      await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, email: editForm.email });
+      toast.success("Colaborador atualizado!"); setEditModal(null); loadData();
+    } catch (e) { toast.error("Erro ao atualizar"); }
+  }
+
+  async function handleToggleColabStatus(uid: string, ativo: boolean) {
+    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Colaborador ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro"); }
+  }
+
+  async function handleExcluirColab() {
+    if (!excluirModal) return;
+    setExcluirSaving(true);
+    try {
+      await fetch(`/api/auth/delete?uid=${excluirModal.uid}`, { method: "DELETE" });
+      toast.success("Colaborador excluído!");
+      setExcluirModal(null);
+      loadData();
+    } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
+  }
+
+  const colaboradoresFiltrados = useMemo(() => {
+    let lista = colaboradores;
+    if (filtros.texto) {
+      const q = filtros.texto.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      lista = lista.filter((c) =>
+        c.nome.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").includes(q) ||
+        c.email.toLowerCase().includes(q)
+      );
+    }
+    if (filtros.coordenadorId) {
+      lista = lista.filter((c) => c.coordenadorId === filtros.coordenadorId);
+    }
+    if (filtros.gabineteId) {
+      lista = lista.filter((c) => (c.gabineteId || c.campanhaId) === filtros.gabineteId);
+    }
+    return lista;
+  }, [colaboradores, filtros]);
 
   if (!userData || !canManageColaboradores(userData)) return null;
   const config = getRoleConfig(userData);
@@ -156,20 +265,53 @@ export default function ColaboradoresPage() {
 
   return (
     <div className="space-y-6 animate-in">
+      {/* BREADCRUMB CONTEXTUAL */}
+      {gabineteContexto && (
+        <div className="flex items-center gap-2 text-sm text-white/50 flex-wrap">
+          <Building2 size={14} className="text-white/30" />
+          <span className="text-white/70">{gabineteContexto.nome}</span>
+          {assessorContexto && (
+            <>
+              <ChevronRight size={12} className="text-white/20" />
+              <span className="text-white/70">{assessorContexto.nome}</span>
+            </>
+          )}
+          <ChevronRight size={12} className="text-white/20" />
+          <span className="text-emerald-400">Criar Colaborador</span>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center text-lg`}>{roleInfo.icon}</div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Colaboradores</h1>
-          <p className={`text-sm ${roleInfo.text}`}>{isAssessor(userData) ? "Gerencie todos os colaboradores" : "Sua equipe de campo"}</p>
+        <div className="flex-1">
+          <h1 className="text-2xl font-bold text-white">{gabineteContexto ? `Colaboradores — ${gabineteContexto.nome}` : "Colaboradores"}</h1>
+          <p className={`text-sm ${roleInfo.text}`}>{gabineteContexto ? "Criação contextual rápida" : isAssessor(userData) ? "Gerencie todos os colaboradores" : "Sua equipe de campo"}</p>
         </div>
+        <BuscaGlobal userData={userData} />
       </div>
 
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className={roleInfo.text} /><h3 className="text-white font-semibold">Criar Colaborador</h3></div>
         <form onSubmit={handleCreate} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isSuperOrMaster(userData) && !gabineteIdParam && (
+              <Select
+                label="Vincular ao gabinete"
+                value={form.gabineteVinculoId}
+                onChange={(e) => setForm({ ...form, gabineteVinculoId: e.target.value })}
+                options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
+              />
+            )}
+            {gabineteContexto && coordenadoresDisponiveis.length > 0 && (
+              <Select
+                label="Coordenador responsável"
+                value={form.coordenadorId}
+                onChange={(e) => setForm({ ...form, coordenadorId: e.target.value })}
+                options={[{ value: "", label: "Selecione o coordenador..." }, ...coordenadoresDisponiveis.map((c) => ({ value: c.uid, label: c.nome }))]}
+              />
+            )}
             <Input label="Nome Completo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do colaborador" />
-            <Input label="Email *" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@exemplo.com" />
+            <Input label="Email *" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailManual(true); }} onFocus={() => setEmailManual(true)} placeholder="email@exemplo.com" />
             {!isCoordenador(userData) && (
               <Input label="Senha *" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
             )}
@@ -202,7 +344,7 @@ export default function ColaboradoresPage() {
 
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Trophy size={20} className="text-amber-400" /><h3 className="text-white font-semibold">Ranking de Colaboradores</h3></div>
-        <div className="h-72">
+        <div className="h-72 min-w-0">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rankingArray} layout="vertical">
               <XAxis type="number" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} />
@@ -238,7 +380,7 @@ export default function ColaboradoresPage() {
             <GlassCard className="p-4 text-center"><p className="text-2xl font-bold text-blue-400">{selectedEleitores.length > 0 ? (selectedEleitores.length / Math.max(crescimentoData.length, 1)).toFixed(1) : 0}</p><p className="text-xs text-white/40">Média/dia</p></GlassCard>
           </div>
           {crescimentoData.length > 0 && (
-            <div className="h-48 mb-6">
+            <div className="h-48 mb-6 min-w-0">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={crescimentoData}>
                   <defs><linearGradient id="colabGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
@@ -261,18 +403,34 @@ export default function ColaboradoresPage() {
         </GlassCard>
       )}
 
+      <BuscaOperacional
+        pagina="colaboradores"
+        userData={userData}
+        assessores={todosAssessores}
+        coordenadores={coordenadoresDisponiveis}
+        colaboradores={colaboradores}
+        gabinetes={todosGabinetes}
+        onFilter={setFiltros}
+      />
       <GlassCard className="p-5">
         <h3 className="text-white font-semibold mb-4">
           {isAssessor(userData) ? "Todos os Colaboradores" : "Meus Colaboradores"}
+          <span className="ml-2 text-sm font-normal text-white/40">({colaboradoresFiltrados.length})</span>
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {colaboradores.map((c) => (
+          {colaboradoresFiltrados.map((c) => (
             <div key={c.uid} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.06]">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-white font-bold text-sm">{c.nome.charAt(0)}</div>
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm truncate">{c.nome}</p>
                   <p className="text-xs text-white/40 truncate">{c.email}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => openEditColab(c)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar"><Pencil size={12} /></button>
+                  {(isSuperOrMaster(userData) || isAssessor(userData) || (isCoordenador(userData) && c.coordenadorId === userData.uid)) && (
+                    <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={12} /></button>
+                  )}
                 </div>
                 <Badge variant={c.status === "pendente" ? "warning" : c.status === "recusado" ? "danger" : "success"}>
                   {c.status === "pendente" ? "Pendente" : c.status === "recusado" ? "Recusado" : "Ativo"}
@@ -281,12 +439,46 @@ export default function ColaboradoresPage() {
               {c.status === "recusado" && c.recusaMotivo && (
                 <p className="text-xs text-red-400/70 mt-1">Motivo: {c.recusaMotivo === "incompleto" ? "Cadastro incompleto" : c.recusaMotivo === "inconsistente" ? "Dados inconsistentes" : c.recusaMotivo === "duplicado" ? "Cadastro duplicado" : c.recusaMotivo === "invalido" ? "Informações inválidas" : c.recusaMotivo === "regiao" ? "Região não definida" : c.recusaMotivo === "perfil" ? "Perfil não aprovado" : c.recusaMotivo === "correcao" ? "Necessita correção" : c.recusaMotivo === "alinhamento" ? "Aguardando alinhamento" : c.recusaMotivo === "reprovado" ? "Reprovado pela coordenação" : c.recusaMotivo}</p>
               )}
-              <div className="flex items-center gap-2 text-xs text-white/40"><Mail size={12} />{c.email}</div>
+              <div className="flex items-center justify-between pt-1">
+                <div className="flex items-center gap-2 text-xs text-white/40"><Mail size={12} />{c.email}</div>
+                {(isSuperOrMaster(userData) || isAssessor(userData) || (isCoordenador(userData) && c.coordenadorId === userData.uid)) && (
+                  <button onClick={() => handleToggleColabStatus(c.uid, c.ativo)} className={`text-xs ${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
+                    {c.ativo ? "Desativar" : "Ativar"}
+                  </button>
+                )}
+              </div>
             </div>
           ))}
-          {colaboradores.length === 0 && <p className="col-span-full text-center text-white/30 py-8">Nenhum colaborador</p>}
+          {colaboradoresFiltrados.length === 0 && <p className="col-span-full text-center text-white/30 py-8">{filtros.texto ? "Nenhum colaborador encontrado" : "Nenhum colaborador"}</p>}
         </div>
       </GlassCard>
+
+      {/* EDITAR COLABORADOR */}
+      <Modal open={!!editModal} onClose={() => setEditModal(null)} title="Editar Colaborador">
+        <div className="space-y-4">
+          <Input label="Nome" value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
+          <Input label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleEditColab} className="flex-1">Salvar</Button>
+            <Button variant="ghost" onClick={() => setEditModal(null)} className="flex-1">Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* EXCLUIR COLABORADOR */}
+      <Modal open={!!excluirModal} onClose={() => setExcluirModal(null)} title="Excluir Colaborador">
+        <div className="space-y-4">
+          <p className="text-white/60 text-sm">
+            Tem certeza que deseja excluir <strong className="text-white">{excluirModal?.nome}</strong>?
+          </p>
+          <p className="text-red-400/70 text-xs">Esta ação remove o usuário do Firestore. Não é reversível.</p>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleExcluirColab} loading={excluirSaving} className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30">Excluir</Button>
+            <Button variant="ghost" onClick={() => setExcluirModal(null)} className="flex-1">Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
+
