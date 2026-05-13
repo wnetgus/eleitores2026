@@ -7,7 +7,7 @@ import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { AppUser, Gabinete, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isPrefeito, isAssessor } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isPrefeito, isAssessor, isPolitico, canViewAssessores, canManageUsers } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -38,7 +38,8 @@ export default function AssessoresPage() {
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
 
   const [gabinetesMap, setGabinetesMap] = useState<Record<string, { nome: string; politicoNome: string; cargo: string }>>({});
-  const podeAcessar = isSuperOrMaster(userData) || isPrefeito(userData) || isAssessor(userData);
+  const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessor(userData);
+  const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
 
   useEffect(() => {
     if (userData && !podeAcessar) { router.push("/dashboard"); return; }
@@ -164,23 +165,25 @@ export default function AssessoresPage() {
         <BuscaGlobal userData={userData} />
       </div>
 
-      <GlassCard className="p-5">
-        <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className="text-purple-400" /><h3 className="text-white font-semibold">Criar Assessor</h3></div>
-        <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {isSuperOrMaster(userData) && (
-            <Select
-              label="Vincular ao gabinete"
-              value={form.gabineteVinculoId}
-              onChange={(e) => setForm({ ...form, gabineteVinculoId: e.target.value })}
-              options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
-            />
-          )}
-          <Input label="Nome" value={form.nome} onChange={(e) => { setForm({ ...form, nome: e.target.value }); }} placeholder="Nome do assessor" />
-          <Input label="Email" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailManual(true); }} onFocus={() => setEmailManual(true)} placeholder="email@exemplo.com" />
-          <Input label="Senha" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
-          <div className="flex items-end"><Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Criando..." : "Criar Assessor"}</Button></div>
-        </form>
-      </GlassCard>
+      {podeGerenciar && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className="text-purple-400" /><h3 className="text-white font-semibold">Criar Assessor</h3></div>
+          <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isSuperOrMaster(userData) && (
+              <Select
+                label="Vincular ao gabinete"
+                value={form.gabineteVinculoId}
+                onChange={(e) => setForm({ ...form, gabineteVinculoId: e.target.value })}
+                options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
+              />
+            )}
+            <Input label="Nome" value={form.nome} onChange={(e) => { setForm({ ...form, nome: e.target.value }); }} placeholder="Nome do assessor" />
+            <Input label="Email" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailManual(true); }} onFocus={() => setEmailManual(true)} placeholder="email@exemplo.com" />
+            <Input label="Senha" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
+            <div className="flex items-end"><Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Criando..." : "Criar Assessor"}</Button></div>
+          </form>
+        </GlassCard>
+      )}
 
       <BuscaOperacional
         pagina="assessores"
@@ -206,8 +209,8 @@ export default function AssessoresPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => openEdit(c)} className="text-white/30 hover:text-purple-400 transition-colors" title="Editar"><Pencil size={14} /></button>
-                    {isSuperOrMaster(userData) && userData?.uid !== c.uid && (
+                    {podeGerenciar && <button onClick={() => openEdit(c)} className="text-white/30 hover:text-purple-400 transition-colors" title="Editar"><Pencil size={14} /></button>}
+                    {podeGerenciar && isSuperOrMaster(userData) && userData?.uid !== c.uid && (
                       <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
                     )}
                     <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>

@@ -57,6 +57,10 @@ const superAdminMenu = [
 const politicoMenu = [
   { href: "/dashboard", label: "Meu Mandato", icon: Crown },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/assessores", label: "Assessores", icon: Shield },
+  { href: "/coordenadores", label: "Coordenadores", icon: Target },
+  { href: "/colaboradores", label: "Colaboradores", icon: Users },
+  { href: "/eleitores", label: "Eleitores", icon: Users },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },

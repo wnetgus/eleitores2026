@@ -49,8 +49,9 @@ export default function DashboardPage() {
           constraints.unshift(where("colaboradorId", "==", userData!.uid));
         } else if (isCoordenador(userData)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
-        } else if (isAssessor(userData)) {
-          if (userData!.campanhaId) constraints.unshift(where("campanhaId", "==", userData!.campanhaId));
+        } else if (!isSuperOrMaster(userData)) {
+          const campanhaId = userData?.campanhaId || userData?.gabineteId;
+          if (campanhaId) constraints.unshift(where("campanhaId", "==", campanhaId));
         }
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);

@@ -7,7 +7,7 @@ import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppUser, UserRole, ROLE_CONFIG, Gabinete } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isAssessor } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isAssessor, isPolitico, canViewCoordenadores, canManageUsers } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -47,7 +47,7 @@ export default function CoordenadoresPage() {
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
+    if (userData && !canViewCoordenadores(userData)) { router.push("/dashboard"); return; }
     loadCoordenadores();
   }, [userData]);
 
@@ -158,7 +158,8 @@ export default function CoordenadoresPage() {
     return lista;
   }, [coordenadores, filtros]);
 
-  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData))) return null;
+  if (!userData || !canViewCoordenadores(userData)) return null;
+  const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
   const config = getRoleConfig(userData);
 
   return (
@@ -182,6 +183,7 @@ export default function CoordenadoresPage() {
         <BuscaGlobal userData={userData} />
       </div>
 
+      {podeGerenciar && (
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className="text-purple-400" /><h3 className="text-white font-semibold">Criar Coordenador</h3></div>
         <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -210,6 +212,7 @@ export default function CoordenadoresPage() {
           <div className="flex items-end"><Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Criando..." : "Criar Coordenador"}</Button></div>
         </form>
       </GlassCard>
+      )}
 
       <BuscaOperacional
         pagina="coordenadores"
@@ -252,8 +255,8 @@ export default function CoordenadoresPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => openEdit(c)} className="text-white/30 hover:text-blue-400 transition-colors" title="Editar"><Pencil size={14} /></button>
-                    {(isSuperOrMaster(userData) || isAssessor(userData)) && userData?.uid !== c.uid && (
+                    {podeGerenciar && <button onClick={() => openEdit(c)} className="text-white/30 hover:text-blue-400 transition-colors" title="Editar"><Pencil size={14} /></button>}
+                    {podeGerenciar && userData?.uid !== c.uid && (
                       <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
                     )}
                     <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>

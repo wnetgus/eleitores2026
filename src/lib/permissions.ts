@@ -73,6 +73,18 @@ export function canViewLogs(user: AppUser | null): boolean {
   return isSuperOrMaster(user) || isAssessor(user);
 }
 
+export function canViewAssessores(user: AppUser | null): boolean {
+  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessor(user);
+}
+
+export function canViewCoordenadores(user: AppUser | null): boolean {
+  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessor(user);
+}
+
+export function canViewColaboradores(user: AppUser | null): boolean {
+  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessor(user) || isCoordenador(user);
+}
+
 import { ROLE_CONFIG } from "@/types";
 
 export function getRoleConfig(user: AppUser | null) {

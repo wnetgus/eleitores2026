@@ -7,7 +7,7 @@ import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eleitor, AppUser, Gabinete, UserRole, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColaboradores, isSuperOrMaster } from "@/lib/permissions";
+import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColaboradores, canViewColaboradores, isSuperOrMaster } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
@@ -52,7 +52,7 @@ export default function ColaboradoresPage() {
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
 
   useEffect(() => {
-    if (userData && !canManageColaboradores(userData)) { router.push(isColaborador(userData) ? "/eleitores" : "/dashboard"); return; }
+    if (userData && !canViewColaboradores(userData)) { router.push(isColaborador(userData) ? "/eleitores" : "/dashboard"); return; }
     loadData();
   }, [userData]);
 
@@ -89,12 +89,21 @@ export default function ColaboradoresPage() {
           }
         }
       }
-      const q = query(collection(db, "eleitores"), orderBy("criadoEm", "desc"));
-      const snap = await getDocs(q);
+      const eConstraints: any[] = [orderBy("criadoEm", "desc")];
+      if (!isSuperOrMaster(userData)) {
+        const campanhaId = userData?.campanhaId || userData?.gabineteId;
+        if (campanhaId) eConstraints.unshift(where("campanhaId", "==", campanhaId));
+      }
+      const eq = query(collection(db, "eleitores"), ...eConstraints);
+      const snap = await getDocs(eq);
       setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
 
       const uConstraints: any[] = [where("role", "==", "colaborador")];
       if (isCoordenador(userData)) uConstraints.push(where("coordenadorId", "==", userData!.uid));
+      else if (!isSuperOrMaster(userData)) {
+        const campanhaId = userData?.campanhaId || userData?.gabineteId;
+        if (campanhaId) uConstraints.push(where("campanhaId", "==", campanhaId));
+      }
       const uq = query(collection(db, "usuarios"), ...uConstraints);
       const usnap = await getDocs(uq);
       setColaboradores(usnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
@@ -240,7 +249,8 @@ export default function ColaboradoresPage() {
     return lista;
   }, [colaboradores, filtros]);
 
-  if (!userData || !canManageColaboradores(userData)) return null;
+  if (!userData || !canViewColaboradores(userData)) return null;
+  const podeGerenciar = canManageColaboradores(userData);
   const config = getRoleConfig(userData);
   const roleInfo = ROLE_CONFIG[userData.role];
 
@@ -290,6 +300,7 @@ export default function ColaboradoresPage() {
         <BuscaGlobal userData={userData} />
       </div>
 
+      {podeGerenciar && (
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className={roleInfo.text} /><h3 className="text-white font-semibold">Criar Colaborador</h3></div>
         <form onSubmit={handleCreate} className="space-y-4">
@@ -335,6 +346,7 @@ export default function ColaboradoresPage() {
           </div>
         </form>
       </GlassCard>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <StatCard title="Total Colaboradores" value={colaboradores.length} icon={<Users size={20} />} delay={0} />
@@ -427,8 +439,8 @@ export default function ColaboradoresPage() {
                   <p className="text-xs text-white/40 truncate">{c.email}</p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => openEditColab(c)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar"><Pencil size={12} /></button>
-                  {(isSuperOrMaster(userData) || isAssessor(userData) || (isCoordenador(userData) && c.coordenadorId === userData.uid)) && (
+                  {podeGerenciar && <button onClick={() => openEditColab(c)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar"><Pencil size={12} /></button>}
+                  {podeGerenciar && (
                     <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={12} /></button>
                   )}
                 </div>
@@ -441,7 +453,7 @@ export default function ColaboradoresPage() {
               )}
               <div className="flex items-center justify-between pt-1">
                 <div className="flex items-center gap-2 text-xs text-white/40"><Mail size={12} />{c.email}</div>
-                {(isSuperOrMaster(userData) || isAssessor(userData) || (isCoordenador(userData) && c.coordenadorId === userData.uid)) && (
+                {podeGerenciar && (
                   <button onClick={() => handleToggleColabStatus(c.uid, c.ativo)} className={`text-xs ${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
                     {c.ativo ? "Desativar" : "Ativar"}
                   </button>
