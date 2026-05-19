@@ -15,10 +15,13 @@ export interface AppUser {
   gabineteNome?: string;
   equipe?: string;
   coordenadorId?: string;
+  assessorId?: string;
   estado?: string;
   cidadePrincipal?: string;
   regiao?: string;
   criadoEm: Date;
+  ultimaAtividade?: Date;
+  metaPadraoEquipe?: number;
   ativo: boolean;
   criadoPor?: string;
   status?: ColaboradorStatus;
@@ -53,6 +56,10 @@ export interface Gabinete {
   ativo: boolean;
   criadoEm: Date;
   criadoPor?: string;
+  estado?: string;
+  cidade?: string;
+  municipios?: string[];
+  metaEleitoral?: number;
 }
 
 export interface Eleitor {

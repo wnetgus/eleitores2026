@@ -82,15 +82,32 @@ export default function EleitoresPage() {
   useEffect(() => { loadEleitores(); loadUsuarios(); }, [userData]);
 
   async function loadUsuarios() {
+    if (!userData) return;
     try {
-      const [aSnap, cSnap, colSnap] = await Promise.all([
-        getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"))),
-        getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"))),
-        getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"))),
-      ]);
-      setTodosAssessores(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
-      setTodosCoordenadores(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
-      setTodosColaboradores(colSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      if (isSuperOrMaster(userData)) {
+        const [aSnap, cSnap, colSnap] = await Promise.all([
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"))),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"))),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"))),
+        ]);
+        setTodosAssessores(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setTodosCoordenadores(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setTodosColaboradores(colSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      } else if (isCoordenador(userData)) {
+        const colSnap = await getDocs(query(collection(db, "usuarios"), where("coordenadorId", "==", userData.uid)));
+        setTodosColaboradores(colSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      } else if (!isColaborador(userData)) {
+        const gabId = userData?.gabineteId || userData?.campanhaId;
+        if (!gabId) return;
+        const [aSnap, cSnap, colSnap] = await Promise.all([
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", gabId))),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", gabId))),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", gabId))),
+        ]);
+        setTodosAssessores(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setTodosCoordenadores(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setTodosColaboradores(colSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      }
     } catch (e) { console.error(e); }
   }
 

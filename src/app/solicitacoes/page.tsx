@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -37,6 +37,7 @@ export default function SolicitacoesPage() {
   const { userData } = useAuth();
   const router = useRouter();
   const [solicitacoes, setSolicitacoes] = useState<AppUser[]>([]);
+  const [cadeiaMap, setCadeiaMap] = useState<Record<string, { coordenadorNome?: string; assessorNome?: string; campanhaNome?: string }>>({});
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [recusaModal, setRecusaModal] = useState<AppUser | null>(null);
@@ -49,17 +50,79 @@ export default function SolicitacoesPage() {
   }, [userData]);
 
   async function load() {
+    if (!userData) return;
     try {
-      const q = query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente", "recusado"]));
-      const snap = await getDocs(q);
-      const data = snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+      let data: AppUser[] = [];
+      if (isAssessor(userData)) {
+        const coordSnap = await getDocs(
+          query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("assessorId", "==", userData.uid))
+        );
+        const coordIds = coordSnap.docs.map((d) => d.id);
+        if (coordIds.length > 0) {
+          const campanhaId = userData?.campanhaId || userData?.gabineteId;
+          const solSnap = campanhaId
+            ? query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", campanhaId))
+            : query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds));
+          const snap = await getDocs(solSnap);
+          data = snap.docs
+            .map((d) => ({ uid: d.id, ...d.data() } as AppUser))
+            .filter((u) => u.status === "pendente" || u.status === "recusado");
+        }
+      } else {
+        const snap = await getDocs(
+          query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente", "recusado"]))
+        );
+        data = snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+      }
       data.sort((a, b) => new Date(b.criadoEm || 0).getTime() - new Date(a.criadoEm || 0).getTime());
       setSolicitacoes(data);
+
+      // Resolver cadeia hierárquica para exibição nos cards
+      const uniqueCoordIds = [...new Set(data.map((d) => d.coordenadorId).filter(Boolean))] as string[];
+      if (uniqueCoordIds.length > 0) {
+        const coordDocs = await Promise.all(uniqueCoordIds.map((id) => getDoc(doc(db, "usuarios", id))));
+        const novasCadeias: Record<string, { coordenadorNome?: string; assessorNome?: string; campanhaNome?: string }> = {};
+        const uniqueAssessorIds = new Set<string>();
+        const uniqueCampanhaIds = new Set<string>();
+
+        coordDocs.forEach((d) => {
+          if (d.exists()) {
+            const cData = d.data();
+            novasCadeias[d.id] = { coordenadorNome: cData.nome || "" };
+            if (cData.assessorId) uniqueAssessorIds.add(cData.assessorId);
+            const cId = cData.campanhaId || cData.gabineteId;
+            if (cId) uniqueCampanhaIds.add(cId);
+          }
+        });
+
+        const [assessorDocs, campanhaDocs] = await Promise.all([
+          Promise.all([...uniqueAssessorIds].map((id) => getDoc(doc(db, "usuarios", id)))),
+          Promise.all([...uniqueCampanhaIds].map((id) => getDoc(doc(db, "campanhas", id)))),
+        ]);
+
+        const assessorNomes: Record<string, string> = {};
+        assessorDocs.forEach((d) => { if (d.exists()) assessorNomes[d.id] = d.data().nome || ""; });
+
+        const campanhaNomes: Record<string, string> = {};
+        campanhaDocs.forEach((d) => { if (d.exists()) campanhaNomes[d.id] = d.data().nome || ""; });
+
+        coordDocs.forEach((d) => {
+          if (d.exists() && novasCadeias[d.id]) {
+            const cData = d.data();
+            if (cData.assessorId) novasCadeias[d.id].assessorNome = assessorNomes[cData.assessorId] || undefined;
+            const cId = cData.campanhaId || cData.gabineteId;
+            if (cId) novasCadeias[d.id].campanhaNome = campanhaNomes[cId] || undefined;
+          }
+        });
+
+        setCadeiaMap(novasCadeias);
+      }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
 
   async function handleAprovar(s: AppUser) {
     setProcessingId(s.uid);
+    setSolicitacoes((prev) => prev.filter((x) => x.uid !== s.uid));
     try {
       const cred = await createUserWithEmailAndPassword(auth, s.email, "111111");
       await updateDoc(doc(db, "usuarios", s.uid), {
@@ -72,36 +135,46 @@ export default function SolicitacoesPage() {
         usuarioRole: userData!.role, detalhes: `Aprovou colaborador ${s.nome} (solicitado por ${s.solicitadoPorNome || "N/I"})`,
       });
       toast.success(`${s.nome} aprovado! Conta criada com senha 111111`);
-      load();
     } catch (e: any) {
+      setSolicitacoes((prev) => [s, ...prev]);
       toast.error(e.code === "auth/email-already-in-use" ? "Email já está em uso por outra conta" : "Erro ao aprovar");
     } finally { setProcessingId(null); }
   }
 
   async function handleRecusar() {
     if (!recusaModal || !recusaMotivo) { toast.error("Selecione um motivo"); return; }
-    setProcessingId(recusaModal.uid);
+    const original = recusaModal;
+    const motivo = recusaMotivo;
+    const justificativa = recusaJustificativa;
+    setProcessingId(original.uid);
+    setSolicitacoes((prev) => prev.map((x) => x.uid === original.uid
+      ? { ...x, status: "recusado" as const, recusaMotivo: motivo, recusaJustificativa: justificativa || undefined }
+      : x
+    ));
+    setRecusaModal(null);
+    setRecusaMotivo("");
+    setRecusaJustificativa("");
     try {
-      const updateData: Record<string, any> = {
-        status: "recusado",
-        recusaMotivo: recusaMotivo,
-        ativo: false,
-      };
-      if (recusaJustificativa) updateData.recusaJustificativa = recusaJustificativa;
-      await updateDoc(doc(db, "usuarios", recusaModal.uid), updateData);
+      const updateData: Record<string, any> = { status: "recusado", recusaMotivo: motivo, ativo: false };
+      if (justificativa) updateData.recusaJustificativa = justificativa;
+      await updateDoc(doc(db, "usuarios", original.uid), updateData);
       await registrarAtividade({
         acao: "recusou_colaborador", usuarioId: userData!.uid, usuarioNome: userData!.nome,
-        usuarioRole: userData!.role, detalhes: `Recusou colaborador ${recusaModal.nome}: ${motivosRecusa.find(m => m.value === recusaMotivo)?.label}${recusaJustificativa ? ` - ${recusaJustificativa}` : ""}`,
+        usuarioRole: userData!.role, detalhes: `Recusou colaborador ${original.nome}: ${motivosRecusa.find(m => m.value === motivo)?.label}${justificativa ? ` - ${justificativa}` : ""}`,
       });
       toast.success("Colaborador recusado");
-      setRecusaModal(null);
-      setRecusaMotivo("");
-      setRecusaJustificativa("");
-      load();
-    } catch (e) { toast.error("Erro ao recusar"); } finally { setProcessingId(null); }
+    } catch (e) {
+      setSolicitacoes((prev) => prev.map((x) => x.uid === original.uid ? original : x));
+      toast.error("Erro ao recusar");
+    } finally { setProcessingId(null); }
   }
 
-  if (!userData || (!isSuperOrMaster(userData) && !isAssessor(userData))) return null;
+  if (!userData) return (
+    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
+      <div className="animate-spin h-8 w-8 rounded-full border-2 border-emerald-500 border-t-transparent" />
+    </div>
+  );
+  if (!isSuperOrMaster(userData) && !isAssessor(userData)) return null;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f]">
@@ -147,6 +220,19 @@ export default function SolicitacoesPage() {
                       <p className="text-xs text-white/40 mt-1">
                         Solicitado por: <span className="text-white/60">{s.solicitadoPorNome}</span>
                       </p>
+                    )}
+                    {s.coordenadorId && cadeiaMap[s.coordenadorId] && (
+                      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                        {cadeiaMap[s.coordenadorId].coordenadorNome && (
+                          <span className="text-white/35">Coord: <span className="text-white/55">{cadeiaMap[s.coordenadorId].coordenadorNome}</span></span>
+                        )}
+                        {cadeiaMap[s.coordenadorId].assessorNome && (
+                          <span className="text-white/35">Assessoria: <span className="text-white/55">{cadeiaMap[s.coordenadorId].assessorNome}</span></span>
+                        )}
+                        {cadeiaMap[s.coordenadorId].campanhaNome && (
+                          <span className="text-white/35">Campanha: <span className="text-emerald-400/60">{cadeiaMap[s.coordenadorId].campanhaNome}</span></span>
+                        )}
+                      </div>
                     )}
                     <p className="text-xs text-white/30 mt-0.5">Criado em: {formatDate(s.criadoEm)}</p>
                     <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-white/50">

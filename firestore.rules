@@ -1,8 +1,126 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    function me() {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data
+        : {};
+    }
+
+    function isAdmin() {
+      return me().get("role", "") in ["super_admin", "admin_master"];
+    }
+
+    function myCampanha() {
+      let d = me();
+      return d.get("campanhaId", d.get("gabineteId", ""));
+    }
+
+    // ─── campanhas ────────────────────────────────────────────────────────────
+    match /campanhas/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.id == myCampanha() ||
+        resource.data.get("parentGabineteId", "") == myCampanha()
+      );
+      allow write: if isAuth() && isAdmin();
+    }
+
+    // ─── usuarios ─────────────────────────────────────────────────────────────
+    match /usuarios/{uid} {
+      // get individual sempre permitido (necessário para lookups internos)
+      allow get: if isAuth();
+      allow list: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha() ||
+        resource.data.get("gabineteId", "") == myCampanha() ||
+        resource.data.get("assessorId", "") == request.auth.uid ||
+        resource.data.get("coordenadorId", "") == request.auth.uid
+      );
+      allow create: if isAuth() && (isAdmin() || request.auth.uid == uid);
+      allow update: if isAuth() && (
+        request.auth.uid == uid ||
+        isAdmin() ||
+        (me().get("role", "") == "assessor" && (
+          resource.data.get("campanhaId", "") == myCampanha() ||
+          resource.data.get("gabineteId", "") == myCampanha()
+        ))
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── eleitores (joia da coroa) ─────────────────────────────────────────────
+    match /eleitores/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha() ||
+        resource.data.get("colaboradorId", "") == request.auth.uid ||
+        resource.data.get("coordenadorId", "") == request.auth.uid
+      );
+      allow create: if isAuth() && (
+        isAdmin() ||
+        (request.resource.data.get("campanhaId", "") == myCampanha() &&
+         request.resource.data.get("colaboradorId", "") == request.auth.uid)
+      );
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (resource.data.get("campanhaId", "") == myCampanha() && (
+          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] ||
+          resource.data.get("colaboradorId", "") == request.auth.uid ||
+          resource.data.get("coordenadorId", "") == request.auth.uid
+        ))
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── metas ────────────────────────────────────────────────────────────────
+    match /metas/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("gabineteId", "") == myCampanha() ||
+        resource.data.get("campanhaId", "") == myCampanha() ||
+        resource.data.get("colaboradorId", "") == request.auth.uid ||
+        resource.data.get("coordenadorId", "") == request.auth.uid
+      );
+      allow create, update: if isAuth() && (
+        isAdmin() ||
+        (me().get("role", "") in ["assessor", "coordenador"] && (
+          request.resource.data.get("gabineteId", "") == myCampanha() ||
+          request.resource.data.get("campanhaId", "") == myCampanha()
+        ))
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── candidatos ───────────────────────────────────────────────────────────
+    match /candidatos/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("gabineteId", "") == myCampanha() ||
+        resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow create, update: if isAuth() && (
+        isAdmin() ||
+        (me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+         request.resource.data.get("gabineteId", "") == myCampanha())
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── atividades (log de auditoria) ────────────────────────────────────────
+    match /atividades/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("gabineteId", "") == myCampanha() ||
+        resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow create: if isAuth();
+      allow update, delete: if isAuth() && isAdmin();
     }
   }
 }

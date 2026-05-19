@@ -52,38 +52,54 @@ export default function PainelGabinetePage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [gSnap, eSnap, uSnap, aSnap, cSnap] = await Promise.all([
+      const isAdmin = isSuperOrMaster(userData);
+      const aQuery = isAdmin
+        ? query(collection(db, "atividades"), orderBy("criadoEm", "desc"), limit(50))
+        : query(collection(db, "atividades"), where("gabineteId", "==", id), orderBy("criadoEm", "desc"), limit(50));
+
+      const [gSnap, eSnap, aSnap, cSnap] = await Promise.all([
         getDoc(doc(db, "campanhas", id)),
         getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", id), orderBy("criadoEm", "desc"))),
-        getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc"))),
-        getDocs(query(collection(db, "atividades"), orderBy("criadoEm", "desc"), limit(50))),
+        getDocs(aQuery),
         getDocs(query(collection(db, "candidatos"), where("gabineteId", "==", id))),
       ]);
 
+      let allUsuarios: AppUser[];
+      if (isAdmin) {
+        const uSnap = await getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc")));
+        allUsuarios = uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+      } else {
+        const [uSnap1, uSnap2] = await Promise.all([
+          getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", id), orderBy("criadoEm", "desc"))),
+          getDocs(query(collection(db, "usuarios"), where("gabineteId", "==", id), orderBy("criadoEm", "desc"))),
+        ]);
+        const uMap = new Map<string, AppUser>();
+        [...uSnap1.docs, ...uSnap2.docs].forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
+        allUsuarios = [...uMap.values()];
+      }
+
       setGabinete({ id: gSnap.id, ...gSnap.data() } as Gabinete);
       setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-      setUsuarios(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      setUsuarios(allUsuarios);
       setAtividades(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Atividade)));
       setCandidatos(cSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidato)));
 
       const gData = gSnap.data() as Gabinete;
-      if (gData?.parentGabineteId) {
+      if (isAdmin && gData?.parentGabineteId) {
         const parentSnap = await getDoc(doc(db, "campanhas", gData.parentGabineteId));
         if (parentSnap.exists()) {
           gData.parentGabineteNome = parentSnap.data().nome;
         }
       }
 
-      // Buscar gabinetes filhos e eleitores deles
       const filhos = await buscarGabinetesFilhos(id);
       setGabinetesFilhos(filhos);
-      if (filhos.length > 0) {
-        const ids = filhos.map((f) => f.id!).filter(Boolean);
-        const eleitoresFilhosData = await buscarEleitoresPorGabinetes(ids);
+      if (isAdmin && filhos.length > 0) {
+        const filhoIds = filhos.map((f) => f.id!).filter(Boolean);
+        const eleitoresFilhosData = await buscarEleitoresPorGabinetes(filhoIds);
         setEleitoresFilhos(eleitoresFilhosData);
       }
-      const todos = await getGabinetes();
-      console.log("Gabinetes carregados:", todos.length, todos.map((g) => ({ id: g.id, nome: g.nome, parentId: g.parentGabineteId, ativo: g.ativo })));
+      const todos = isAdmin ? await getGabinetes() : [];
       setTodosGabinetes(todos);
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }

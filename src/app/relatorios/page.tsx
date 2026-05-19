@@ -37,7 +37,8 @@ export default function RelatoriosPage() {
     async function load() {
       try {
         const constraints: any[] = [orderBy("criadoEm", "desc")];
-        if (userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+        const gabId = userData?.campanhaId || userData?.gabineteId;
+        if (gabId) constraints.unshift(where("campanhaId", "==", gabId));
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));

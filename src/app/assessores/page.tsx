@@ -68,10 +68,10 @@ export default function AssessoresPage() {
   async function loadAssessores() {
     try {
       const constraints: any[] = [where("role", "==", "assessor")];
-      if (!isSuperOrMaster(userData) && userData?.gabineteId) {
-        constraints.push(where("gabineteId", "==", userData.gabineteId));
-      } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
-        constraints.push(where("campanhaId", "==", userData.campanhaId));
+      if (!isSuperOrMaster(userData)) {
+        const scopeId = userData?.gabineteId || userData?.campanhaId;
+        if (!scopeId) { setAssessores([]); setLoading(false); return; }
+        constraints.push(where(userData?.gabineteId ? "gabineteId" : "campanhaId", "==", scopeId));
       }
       constraints.push(orderBy("criadoEm", "desc"));
       const q = query(collection(db, "usuarios"), ...constraints);

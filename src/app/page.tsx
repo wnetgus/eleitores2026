@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth } from "@/contexts/AuthContext";
 import { Shield, ChevronRight, Menu, X, TrendingUp, Users, Target, FileSpreadsheet, Smartphone, Map, BarChart3, Crown, Zap, Eye, MessageSquare, Mail, ExternalLink, Check } from "lucide-react";
 
@@ -56,11 +57,6 @@ export default function LandingPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  function scrollTo(id: string) {
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
-    setMenuOpen(false);
-  }
-
   const navLinks = [
     { label: "Funcionalidades", id: "diferenciais" },
     { label: "Como Funciona", id: "como-funciona" },
@@ -85,19 +81,19 @@ export default function LandingPage() {
             {/* Desktop nav */}
             <div className="hidden md:flex items-center gap-8">
               {navLinks.map((link) => (
-                <button key={link.id} onClick={() => scrollTo(link.id)} className="text-sm text-white/50 hover:text-white transition-colors">
+                <a key={link.id} href={`#${link.id}`} className="text-sm text-white/50 hover:text-white transition-colors">
                   {link.label}
-                </button>
+                </a>
               ))}
             </div>
 
             <div className="hidden md:flex items-center gap-3">
-              <button onClick={() => router.push("/login")} className="px-4 py-2 text-sm text-white/70 hover:text-white transition-colors">
+              <Link href="/login" className="px-4 py-2 text-sm text-white/70 hover:text-white transition-colors">
                 Entrar
-              </button>
-              <button onClick={() => scrollTo("suporte")} className="px-4 py-2 text-sm bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all font-medium">
+              </Link>
+              <a href="#suporte" className="px-4 py-2 text-sm bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all font-medium">
                 Solicitar Demonstração
-              </button>
+              </a>
             </div>
 
             {/* Mobile hamburger */}
@@ -110,17 +106,17 @@ export default function LandingPage() {
           {menuOpen && (
             <div className="md:hidden pb-4 space-y-2">
               {navLinks.map((link) => (
-                <button key={link.id} onClick={() => scrollTo(link.id)} className="block w-full text-left px-3 py-2 text-sm text-white/50 hover:text-white hover:bg-white/5 rounded-xl transition-all">
+                <a key={link.id} href={`#${link.id}`} onClick={() => setMenuOpen(false)} className="block w-full text-left px-3 py-2 text-sm text-white/50 hover:text-white hover:bg-white/5 rounded-xl transition-all">
                   {link.label}
-                </button>
+                </a>
               ))}
               <div className="pt-2 space-y-2">
-                <button onClick={() => router.push("/login")} className="w-full px-4 py-2.5 text-sm bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all">
+                <Link href="/login" onClick={() => setMenuOpen(false)} className="block w-full px-4 py-2.5 text-sm bg-white/5 text-white rounded-xl hover:bg-white/10 transition-all text-center">
                   Entrar
-                </button>
-                <button onClick={() => scrollTo("suporte")} className="w-full px-4 py-2.5 text-sm bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 transition-all font-medium">
+                </Link>
+                <a href="#suporte" onClick={() => setMenuOpen(false)} className="block w-full px-4 py-2.5 text-sm bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 transition-all font-medium text-center">
                   Solicitar Demonstração
-                </button>
+                </a>
               </div>
             </div>
           )}
@@ -143,12 +139,12 @@ export default function LandingPage() {
               Coalizão política, dashboards estratégicos, gestão de equipes e relatórios executivos em uma plataforma centralizada e premium.
             </p>
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 animate-in" style={{ animationDelay: "200ms" }}>
-              <button onClick={() => scrollTo("suporte")} className="px-6 py-3 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all font-medium flex items-center gap-2">
+              <a href="#suporte" className="px-6 py-3 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all font-medium flex items-center gap-2">
                 Solicitar Demonstração <ChevronRight size={16} />
-              </button>
-              <button onClick={() => router.push("/login")} className="px-6 py-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
+              </a>
+              <Link href="/login" className="px-6 py-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
                 Entrar na Plataforma <ExternalLink size={16} />
-              </button>
+              </Link>
             </div>
           </div>
         </div>
@@ -613,12 +609,12 @@ export default function LandingPage() {
             Coalizão, métricas, equipe e relatórios em um só lugar.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <button onClick={() => scrollTo("suporte")} className="px-6 py-3 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all font-medium flex items-center gap-2">
+            <a href="#suporte" className="px-6 py-3 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30 hover:bg-rose-500/30 transition-all font-medium flex items-center gap-2">
               Solicitar Demonstração <ChevronRight size={16} />
-            </button>
-            <button onClick={() => router.push("/login")} className="px-6 py-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
+            </a>
+            <Link href="/login" className="px-6 py-3 bg-white/5 text-white rounded-xl border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
               Entrar na Plataforma
-            </button>
+            </Link>
           </div>
         </div>
       </section>
@@ -634,8 +630,8 @@ export default function LandingPage() {
               <span className="text-white font-bold">Eleitores 2026</span>
             </div>
             <div className="flex items-center gap-6 text-sm text-white/30">
-              <button onClick={() => router.push("/login")} className="hover:text-white/60 transition-colors">Entrar</button>
-              <button onClick={() => scrollTo("suporte")} className="hover:text-white/60 transition-colors">Suporte</button>
+              <Link href="/login" className="hover:text-white/60 transition-colors">Entrar</Link>
+              <a href="#suporte" className="hover:text-white/60 transition-colors">Suporte</a>
               <span>Termos</span>
               <span>Privacidade</span>
             </div>

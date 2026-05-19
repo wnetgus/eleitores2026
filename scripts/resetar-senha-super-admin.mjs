@@ -1,0 +1,47 @@
+#!/usr/bin/env node
+
+import { readFileSync } from "fs";
+import { resolve, dirname } from "path";
+import { fileURLToPath } from "url";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getAuth } from "firebase-admin/auth";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const envPath = resolve(__dirname, "..", ".env.local");
+const envContent = readFileSync(envPath, "utf-8");
+for (const line of envContent.split("\n")) {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) continue;
+  const eqIndex = trimmed.indexOf("=");
+  if (eqIndex === -1) continue;
+  const key = trimmed.slice(0, eqIndex).trim();
+  let value = trimmed.slice(eqIndex + 1).trim();
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+  if (!process.env[key]) process.env[key] = value;
+}
+
+const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
+const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+if (getApps().length === 0) {
+  initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
+}
+
+const auth = getAuth();
+
+async function main() {
+  const email = "wnetgus@gmail.com";
+  const novaSenha = "111111";
+
+  try {
+    const user = await auth.getUserByEmail(email);
+    await auth.updateUser(user.uid, { password: novaSenha, disabled: false });
+    console.log(`✅ Senha do Super Admin (${email}) resetada para: ${novaSenha}`);
+    console.log(`✅ Conta reativada (se estava desabilitada)`);
+  } catch (e) {
+    console.error(`❌ Erro: ${e.message}`);
+  }
+}
+
+main().catch(console.error);

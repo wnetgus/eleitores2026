@@ -5,11 +5,18 @@
 }
 
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
   * {
     @apply border-white/[0.06];
   }
   body {
     @apply bg-[#0a0a0f] text-white;
+  }
+  button {
+    touch-action: manipulation;
+    cursor: pointer;
   }
 }
 

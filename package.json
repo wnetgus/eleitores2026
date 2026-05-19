@@ -4,12 +4,16 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:https": "next dev --experimental-https",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "clean:auth": "node scripts/limpar-testes.mjs --auth",
     "clean:firestore": "node scripts/limpar-testes.mjs --firestore",
-    "clean:all": "node scripts/limpar-testes.mjs --all"
+    "clean:all": "node scripts/limpar-testes.mjs --all",
+    "seed:fake": "node scripts/seed-cenario-fake.mjs",
+    "seed:fake:reset": "node scripts/seed-cenario-fake.mjs --reset",
+    "clean:fake": "node scripts/limpar-cenario-fake.mjs --confirm"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

@@ -27,8 +27,9 @@ export default function ExportacoesPage() {
     if (userData && !isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     async function load() {
       try {
+        const gabId = userData?.campanhaId || userData?.gabineteId;
         const constraints: any[] = [orderBy("criadoEm", "desc")];
-        if (!isSuperOrMaster(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+        if (!isSuperOrMaster(userData) && gabId) constraints.unshift(where("campanhaId", "==", gabId));
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));

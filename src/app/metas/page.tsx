@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, addDoc, serverTimestamp, doc, updateDoc, getDocs as getDocs2 } from "firebase/firestore";
+import { collection, getDocs, getDoc, query, orderBy, where, addDoc, serverTimestamp, doc, updateDoc, getDocs as getDocs2 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
-import { TrendingUp, Target, Zap, Flag, Save } from "lucide-react";
+import { TrendingUp, Target, Zap, Flag, Save, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -27,6 +27,11 @@ export default function MetasPage() {
   const [formMeta, setFormMeta] = useState({ colaboradorId: "", valor: "" });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [metaPadraoEquipe, setMetaPadraoEquipe] = useState(0);
+  const [valorPadrao, setValorPadrao] = useState("");
+  const [salvandoPadrao, setSalvandoPadrao] = useState(false);
+  // mapa de coordenadores do assessor: { coordId → { nome, metaPadrao } }
+  const [coordInfoMap, setCoordInfoMap] = useState<Record<string, { nome: string; metaPadrao: number }>>({});
 
   const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
 
@@ -37,29 +42,61 @@ export default function MetasPage() {
 
   async function load() {
     try {
-      const constraints: any[] = [orderBy("criadoEm", "desc")];
-      if (isColaborador(userData!)) {
-        constraints.unshift(where("colaboradorId", "==", userData!.uid));
-      } else if (isCoordenador(userData!)) {
-        constraints.unshift(where("coordenadorId", "==", userData!.uid));
-      }
-      if (!isSuperOrMaster(userData!) && userData?.campanhaId) {
-        constraints.unshift(where("campanhaId", "==", userData.campanhaId));
-      }
-      const q = query(collection(db, "eleitores"), ...constraints);
-      const snap = await getDocs(q);
-      setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+      // Assessor: dois passos — coordenadores próprios → eleitores/colaboradores desses coords
+      if (isAssessor(userData!)) {
+        const coordSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("assessorId", "==", userData!.uid)));
+        const coordIds = coordSnap.docs.map((d) => d.id);
+        const infoMap: Record<string, { nome: string; metaPadrao: number }> = {};
+        coordSnap.docs.forEach((d) => {
+          infoMap[d.id] = { nome: d.data().nome || "", metaPadrao: (d.data().metaPadraoEquipe as number) || 0 };
+        });
+        setCoordInfoMap(infoMap);
+        if (coordIds.length > 0) {
+          const gabIdMetas = userData!.gabineteId || userData!.campanhaId;
+          const eQuery = gabIdMetas
+            ? query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas))
+            : query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds));
+          const uQuery = gabIdMetas
+            ? query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas))
+            : query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds));
+          const [esnap, uSnap] = await Promise.all([getDocs(eQuery), getDocs(uQuery)]);
+          setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+          setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        } else {
+          setEleitores([]); setColaboradores([]);
+        }
+      } else {
+        const constraints: any[] = [orderBy("criadoEm", "desc")];
+        if (isColaborador(userData!)) {
+          constraints.unshift(where("colaboradorId", "==", userData!.uid));
+        } else if (isCoordenador(userData!)) {
+          constraints.unshift(where("coordenadorId", "==", userData!.uid));
+        }
+        if (!isSuperOrMaster(userData!) && userData?.campanhaId) {
+          constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+        }
+        const q = query(collection(db, "eleitores"), ...constraints);
+        const snap = await getDocs(q);
+        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
 
-      const uConstraints: any[] = [where("role", "==", "colaborador")];
-      if (isCoordenador(userData)) {
-        uConstraints.push(where("coordenadorId", "==", userData!.uid));
-      } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
-        uConstraints.push(where("campanhaId", "==", userData.campanhaId));
+        const uConstraints: any[] = [where("role", "==", "colaborador")];
+        if (isCoordenador(userData)) {
+          uConstraints.push(where("coordenadorId", "==", userData!.uid));
+        } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
+          uConstraints.push(where("campanhaId", "==", userData.campanhaId));
+        }
+        const uSnap = await getDocs(query(collection(db, "usuarios"), ...uConstraints));
+        setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
       }
-      const uSnap = await getDocs(query(collection(db, "usuarios"), ...uConstraints));
-      setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
 
-      const mSnap = await getDocs(query(collection(db, "metas"), orderBy("criadoEm", "desc")));
+      const gabIdForMetas = userData!.gabineteId || userData!.campanhaId;
+      const mSnap = isSuperOrMaster(userData!)
+        ? await getDocs(query(collection(db, "metas"), orderBy("criadoEm", "desc")))
+        : isColaborador(userData!)
+          ? await getDocs(query(collection(db, "metas"), where("colaboradorId", "==", userData!.uid)))
+          : gabIdForMetas
+            ? await getDocs(query(collection(db, "metas"), where("gabineteId", "==", gabIdForMetas)))
+            : { docs: [] };
       const metasMap: Record<string, number> = {};
       const metasGabMap: Record<string, number> = {};
       const metasInfo: Record<string, { nome: string; meta: number; gabineteId?: string }> = {};
@@ -76,27 +113,98 @@ export default function MetasPage() {
       });
       setMetas(metasMap);
       setMetasDocs(mSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+
+      // Assessor: lê metaPadraoEquipe do próprio documento (meta padrão da assessoria)
+      if (isAssessor(userData!)) {
+        const padrao = userData!.metaPadraoEquipe || 0;
+        setMetaPadraoEquipe(padrao);
+        if (padrao > 0) setValorPadrao(String(padrao));
+      }
+      // Coordenador: lê metaPadraoEquipe do próprio documento
+      if (isCoordenador(userData!)) {
+        const padrao = userData!.metaPadraoEquipe || 0;
+        setMetaPadraoEquipe(padrao);
+        if (padrao > 0) setValorPadrao(String(padrao));
+      }
+      // Colaborador: cadeia coord → assessor como fallback
+      if (isColaborador(userData!) && userData!.coordenadorId) {
+        const coordDocSnap = await getDoc(doc(db, "usuarios", userData!.coordenadorId));
+        if (coordDocSnap.exists()) {
+          const coordData = coordDocSnap.data();
+          const coordPadrao = (coordData.metaPadraoEquipe as number) || 0;
+          if (coordPadrao > 0) {
+            setMetaPadraoEquipe(coordPadrao);
+          } else if (coordData.assessorId) {
+            const assessorSnap = await getDoc(doc(db, "usuarios", coordData.assessorId));
+            setMetaPadraoEquipe((assessorSnap?.data()?.metaPadraoEquipe as number) || 0);
+          }
+        }
+      }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
 
   async function definirMeta() {
     if (!formMeta.colaboradorId || !formMeta.valor) { toast.error("Selecione colaborador e valor"); return; }
+    const gabIdMeta = userData?.gabineteId || userData?.campanhaId;
+    if (!gabIdMeta && !isSuperOrMaster(userData)) {
+      toast.error("Gabinete não identificado — não é possível definir meta");
+      return;
+    }
     setSavingMeta(true);
     try {
-      const existing = query(collection(db, "metas"), where("colaboradorId", "==", formMeta.colaboradorId));
-      const existingSnap = await getDocs(existing);
+      // query escopada por gabineteId para evitar conflito cross-campaign
+      const existingQuery = gabIdMeta
+        ? query(collection(db, "metas"), where("colaboradorId", "==", formMeta.colaboradorId), where("gabineteId", "==", gabIdMeta))
+        : query(collection(db, "metas"), where("colaboradorId", "==", formMeta.colaboradorId));
+      const existingSnap = await getDocs(existingQuery);
       if (!existingSnap.empty) {
-        await updateDoc(doc(db, "metas", existingSnap.docs[0].id), { meta: Number(formMeta.valor) });
+        await updateDoc(doc(db, "metas", existingSnap.docs[0].id), {
+          meta: Number(formMeta.valor),
+          ...(gabIdMeta ? { gabineteId: gabIdMeta } : {}),
+        });
       } else {
         await addDoc(collection(db, "metas"), {
-          colaboradorId: formMeta.colaboradorId, meta: Number(formMeta.valor),
+          colaboradorId: formMeta.colaboradorId,
+          meta: Number(formMeta.valor),
           criadoEm: serverTimestamp(),
+          ...(gabIdMeta ? { gabineteId: gabIdMeta } : {}),
         });
       }
       toast.success("Meta definida!");
       setFormMeta({ colaboradorId: "", valor: "" });
       load();
     } catch (e) { toast.error("Erro ao salvar meta"); } finally { setSavingMeta(false); }
+  }
+
+  function resolverMeta(colabId: string): { valor: number; tipo: "individual" | "padrao" | "sem_meta"; origem?: "coord" | "assessor" } {
+    if (metas[colabId] > 0) return { valor: metas[colabId], tipo: "individual" };
+    if (isAssessor(userData)) {
+      const colab = colaboradores.find((c) => c.uid === colabId);
+      const coordPadrao = colab?.coordenadorId ? (coordInfoMap[colab.coordenadorId]?.metaPadrao || 0) : 0;
+      if (coordPadrao > 0) return { valor: coordPadrao, tipo: "padrao", origem: "coord" };
+      if (metaPadraoEquipe > 0) return { valor: metaPadraoEquipe, tipo: "padrao", origem: "assessor" };
+      return { valor: 0, tipo: "sem_meta" };
+    }
+    if (metaPadraoEquipe > 0) return { valor: metaPadraoEquipe, tipo: "padrao" };
+    return { valor: 0, tipo: "sem_meta" };
+  }
+
+  async function salvarMetaPadrao() {
+    const val = Number(valorPadrao);
+    if (!val || val < 1) { toast.error("Informe um valor válido"); return; }
+    setSalvandoPadrao(true);
+    try {
+      await updateDoc(doc(db, "usuarios", userData!.uid), { metaPadraoEquipe: val });
+      setMetaPadraoEquipe(val);
+      toast.success(`Meta padrão: ${val} cadastros aplicada a toda a equipe`);
+    } catch { toast.error("Erro ao salvar meta padrão"); } finally { setSalvandoPadrao(false); }
+  }
+
+  async function limparMetaPadrao() {
+    await updateDoc(doc(db, "usuarios", userData!.uid), { metaPadraoEquipe: 0 });
+    setMetaPadraoEquipe(0);
+    setValorPadrao("");
+    toast.success("Meta padrão removida");
   }
 
   if (!userData) return null;
@@ -120,7 +228,9 @@ export default function MetasPage() {
   const hoje = new Date().toLocaleDateString("pt-BR");
   const cadastrosHoje = eleitores.filter((e) => parseDate(e.criadoEm).toLocaleDateString("pt-BR") === hoje).length;
   const mediaDia = eleitores.length > 0 ? (eleitores.length / Math.max(crescimentoData.length, 1)).toFixed(1) : 0;
-  const minhaMeta = metas[userData.uid] || 0;
+  const { valor: minhaMeta, tipo: tipoMinhaMeta } = isColaborador(userData)
+    ? resolverMeta(userData.uid)
+    : { valor: 0, tipo: "sem_meta" as const };
   const progressoMeta = minhaMeta > 0 ? Math.min(100, Math.round((eleitores.length / minhaMeta) * 100)) : 0;
 
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8" style={{ color: roleInfo.text.replace("text-", "") } as React.CSSProperties} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
@@ -163,6 +273,9 @@ export default function MetasPage() {
           <div className="flex items-center gap-3 mb-3">
             <Flag size={20} className="text-emerald-400" />
             <h3 className="text-white font-semibold">Minha Meta</h3>
+            {tipoMinhaMeta === "padrao" && (
+              <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão da equipe</span>
+            )}
           </div>
           <div className="flex items-center justify-between mb-2">
             <span className="text-sm text-white/60">{eleitores.length} de {minhaMeta} cadastros</span>
@@ -174,9 +287,203 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
+      {/* BULK PANEL — somente coordenador */}
+      {isCoordenador(userData) && colaboradores.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Users size={18} className="text-blue-400" />
+            <h3 className="text-white font-semibold">Meta padrão da equipe</h3>
+          </div>
+
+          {/* Input + botão aplicar */}
+          <div className="flex items-end gap-3 mb-4 flex-wrap">
+            <div className="w-36">
+              <Input
+                label="Cadastros / meta"
+                type="number"
+                value={valorPadrao}
+                onChange={(e) => setValorPadrao(e.target.value)}
+                placeholder="Ex: 30"
+                min={1}
+              />
+            </div>
+            <Button onClick={salvarMetaPadrao} loading={salvandoPadrao}>
+              <Users size={14} />
+              {salvandoPadrao ? "Aplicando..." : "Aplicar a todos"}
+            </Button>
+            {metaPadraoEquipe > 0 && (
+              <button
+                onClick={limparMetaPadrao}
+                className="text-xs text-white/30 hover:text-white/60 transition-colors pb-2"
+              >
+                Limpar padrão
+              </button>
+            )}
+          </div>
+
+          {/* Resumo ativo */}
+          {metaPadraoEquipe > 0 && (
+            <p className="text-xs text-white/40 mb-4">
+              Meta padrão ativa: <span className="text-blue-400 font-medium">{metaPadraoEquipe} cadastros</span>
+              {" · "}
+              {colaboradores.filter((c) => metas[c.uid] > 0).length > 0
+                ? `${colaboradores.filter((c) => metas[c.uid] > 0).length} com override individual`
+                : "todos herdando o padrão"}
+            </p>
+          )}
+
+          {/* Lista de colaboradores com meta resolvida */}
+          <div className="space-y-2">
+            {colaboradores.map((c) => {
+              const { valor, tipo } = resolverMeta(c.uid);
+              const total = eleitores.filter((e) => e.colaboradorId === c.uid).length;
+              const prog = valor > 0 ? Math.min(100, Math.round((total / valor) * 100)) : 0;
+              return (
+                <div key={c.uid} className="flex items-center gap-3 p-2.5 bg-white/[0.03] rounded-xl">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm text-white/80 truncate">{c.nome}</span>
+                      {tipo === "padrao" && (
+                        <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão</span>
+                      )}
+                      {tipo === "individual" && (
+                        <span className="text-[10px] text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full">Override</span>
+                      )}
+                      {tipo === "individual" && (
+                        <button
+                          onClick={async () => {
+                            const gabIdReset = userData?.gabineteId || userData?.campanhaId;
+                            const resetQuery = gabIdReset
+                              ? query(collection(db, "metas"), where("colaboradorId", "==", c.uid), where("gabineteId", "==", gabIdReset))
+                              : query(collection(db, "metas"), where("colaboradorId", "==", c.uid));
+                            const snap = await getDocs2(resetQuery);
+                            if (!snap.empty) {
+                              const { deleteDoc, doc: fsDoc } = await import("firebase/firestore");
+                              await deleteDoc(fsDoc(db, "metas", snap.docs[0].id));
+                              setMetas((prev) => { const n = { ...prev }; delete n[c.uid]; return n; });
+                              toast.success(`Override de ${c.nome.split(" ")[0]} removido → voltou ao padrão`);
+                            }
+                          }}
+                          className="text-[10px] text-white/20 hover:text-red-400 transition-colors ml-1"
+                          title="Remover override e voltar ao padrão"
+                        >
+                          ↩ resetar
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {valor > 0 ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-white/40">{total}/{valor}</span>
+                      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden hidden sm:block">
+                        <div className={`h-full rounded-full ${prog >= 100 ? "bg-emerald-500" : "bg-amber-400"}`} style={{ width: `${prog}%` }} />
+                      </div>
+                      <span className={`text-xs font-bold w-8 text-right ${prog >= 100 ? "text-emerald-400" : "text-amber-400"}`}>{prog}%</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-white/20 shrink-0">sem meta</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* BULK PANEL — assessor */}
+      {isAssessor(userData) && colaboradores.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-2">
+            <Users size={18} className="text-purple-400" />
+            <h3 className="text-white font-semibold">Meta padrão da assessoria</h3>
+          </div>
+          <p className="text-xs text-white/30 mb-4">
+            Define o valor base para toda a equipe. Coordenadores podem sobrescrever para suas equipes e colaboradores têm override individual.
+          </p>
+
+          <div className="flex items-end gap-3 mb-4 flex-wrap">
+            <div className="w-36">
+              <Input
+                label="Cadastros / meta"
+                type="number"
+                value={valorPadrao}
+                onChange={(e) => setValorPadrao(e.target.value)}
+                placeholder="Ex: 40"
+                min={1}
+              />
+            </div>
+            <Button onClick={salvarMetaPadrao} loading={salvandoPadrao}>
+              <Users size={14} />
+              {salvandoPadrao ? "Aplicando..." : "Aplicar a toda equipe"}
+            </Button>
+            {metaPadraoEquipe > 0 && (
+              <button onClick={limparMetaPadrao} className="text-xs text-white/30 hover:text-white/60 transition-colors pb-2">
+                Limpar padrão
+              </button>
+            )}
+          </div>
+
+          {metaPadraoEquipe > 0 && (
+            <p className="text-xs text-white/40 mb-4">
+              Meta padrão ativa: <span className="text-purple-400 font-medium">{metaPadraoEquipe} cadastros</span>
+              {" · "}
+              {colaboradores.filter((c) => metas[c.uid] > 0).length > 0
+                ? `${colaboradores.filter((c) => metas[c.uid] > 0).length} com override individual`
+                : "todos herdando o padrão"}
+              {Object.values(coordInfoMap).filter((ci) => ci.metaPadrao > 0).length > 0 && (
+                <> · <span className="text-purple-300/60">{Object.values(coordInfoMap).filter((ci) => ci.metaPadrao > 0).length} coord. com padrão próprio</span></>
+              )}
+            </p>
+          )}
+
+          <div className="space-y-2">
+            {colaboradores.map((c) => {
+              const { valor, tipo, origem } = resolverMeta(c.uid);
+              const total = eleitores.filter((e) => e.colaboradorId === c.uid).length;
+              const prog = valor > 0 ? Math.min(100, Math.round((total / valor) * 100)) : 0;
+              return (
+                <div key={c.uid} className="flex items-center gap-3 p-2.5 bg-white/[0.03] rounded-xl">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm text-white/80 truncate">{c.nome}</span>
+                      {tipo === "individual" && (
+                        <span className="text-[10px] text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full">Override</span>
+                      )}
+                      {tipo === "padrao" && origem === "coord" && (
+                        <span className="text-[10px] text-purple-400/80 bg-purple-500/10 px-1.5 py-0.5 rounded-full">
+                          {coordInfoMap[c.coordenadorId || ""]?.nome?.split(" ")[0] || "Coord."}
+                        </span>
+                      )}
+                      {tipo === "padrao" && origem === "assessor" && (
+                        <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão</span>
+                      )}
+                    </div>
+                  </div>
+                  {valor > 0 ? (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-xs text-white/40">{total}/{valor}</span>
+                      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden hidden sm:block">
+                        <div className={`h-full rounded-full ${prog >= 100 ? "bg-emerald-500" : "bg-amber-400"}`} style={{ width: `${prog}%` }} />
+                      </div>
+                      <span className={`text-xs font-bold w-8 text-right ${prog >= 100 ? "text-emerald-400" : "text-amber-400"}`}>{prog}%</span>
+                    </div>
+                  ) : (
+                    <span className="text-xs text-white/20 shrink-0">sem meta</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* OVERRIDE INDIVIDUAL — assessor, super admin e coordenador (secundário) */}
       {podeGerenciarMetas && colaboradores.length > 0 && (
         <GlassCard className="p-5">
-          <div className="flex items-center gap-2 mb-4"><Target size={18} className="text-emerald-400" /><h3 className="text-white font-semibold">Definir Metas</h3></div>
+          <div className="flex items-center gap-2 mb-4">
+            <Target size={18} className="text-emerald-400" />
+            <h3 className="text-white font-semibold">{isCoordenador(userData) ? "Override individual" : "Definir Metas"}</h3>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
             <Select
               label="Colaborador"

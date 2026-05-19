@@ -23,6 +23,7 @@ import { StatCard } from "@/components/dashboard/StatCard";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import toast from "react-hot-toast";
 import { registrarAtividade } from "@/lib/firestore";
+import { calcularSaudeColaborador, SaudeStatus } from "@/lib/inteligencia";
 
 
 export default function ColaboradoresPage() {
@@ -66,12 +67,14 @@ export default function ColaboradoresPage() {
   async function loadData() {
     try {
       if (isSuperOrMaster(userData)) {
-        const [gSnap, aSnap] = await Promise.all([
+        const [gSnap, aSnap, cSnap] = await Promise.all([
           getDocs(collection(db, "campanhas")),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"))),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"))),
         ]);
         setTodosGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
         setTodosAssessores(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setCoordenadoresDisponiveis(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
         if (gabineteIdParam) {
           const gDoc = await getDoc(doc(db, "campanhas", gabineteIdParam));
           if (gDoc.exists()) {
@@ -79,16 +82,28 @@ export default function ColaboradoresPage() {
             setGabineteContexto({ id: gabineteIdParam, nome: g.nome, cargo: g.cargo?.replace(/_/g, " ") });
           }
           if (assessorIdParam) {
-            const aSnap = await getDoc(doc(db, "usuarios", assessorIdParam));
-            if (aSnap.exists()) {
-              const a = aSnap.data() as AppUser;
+            const assessorDoc = await getDoc(doc(db, "usuarios", assessorIdParam));
+            if (assessorDoc.exists()) {
+              const a = assessorDoc.data() as AppUser;
               setAssessorContexto({ id: assessorIdParam, nome: a.nome });
             }
-            const cSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", gabineteIdParam)));
-            setCoordenadoresDisponiveis(cSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
           }
         }
       }
+      // Assessor: coordenadores próprios + todos colaboradores/eleitores do gabinete
+      if (isAssessor(userData)) {
+        const gabId = userData!.campanhaId || userData!.gabineteId || "";
+        const [coordSnap, usnap, esnap] = await Promise.all([
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("assessorId", "==", userData!.uid))),
+          gabId ? getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", gabId))) : Promise.resolve({ docs: [] as any[] }),
+          gabId ? getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", gabId), orderBy("criadoEm", "desc"))) : Promise.resolve({ docs: [] as any[] }),
+        ]);
+        setCoordenadoresDisponiveis(coordSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setColaboradores(usnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        return;
+      }
+
       const eConstraints: any[] = [orderBy("criadoEm", "desc")];
       if (!isSuperOrMaster(userData)) {
         const campanhaId = userData?.campanhaId || userData?.gabineteId;
@@ -231,6 +246,19 @@ export default function ColaboradoresPage() {
     } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
   }
 
+  const coordMapFull = useMemo(() => {
+    const map: Record<string, AppUser> = {};
+    coordenadoresDisponiveis.forEach((c) => { map[c.uid] = c; });
+    return map;
+  }, [coordenadoresDisponiveis]);
+
+  const assessorNomeMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    todosAssessores.forEach((a) => { map[a.uid] = a.nome; });
+    if (isAssessor(userData) && userData) map[userData.uid] = userData.nome;
+    return map;
+  }, [todosAssessores, userData]);
+
   const colaboradoresFiltrados = useMemo(() => {
     let lista = colaboradores;
     if (filtros.texto) {
@@ -246,8 +274,24 @@ export default function ColaboradoresPage() {
     if (filtros.gabineteId) {
       lista = lista.filter((c) => (c.gabineteId || c.campanhaId) === filtros.gabineteId);
     }
+    if (filtros.assessorId) {
+      const coordsDoAssessor = coordenadoresDisponiveis
+        .filter((c) => c.assessorId === filtros.assessorId)
+        .map((c) => c.uid);
+      lista = lista.filter((c) => coordsDoAssessor.includes(c.coordenadorId || ""));
+    }
     return lista;
-  }, [colaboradores, filtros]);
+  }, [colaboradores, filtros, coordenadoresDisponiveis]);
+
+  const saudeMap = useMemo(() => {
+    const map: Record<string, SaudeStatus> = {};
+    for (const c of colaboradoresFiltrados) {
+      if (c.status !== "pendente" && c.status !== "recusado") {
+        map[c.uid] = calcularSaudeColaborador(c.ultimaAtividade, c.criadoEm);
+      }
+    }
+    return map;
+  }, [colaboradoresFiltrados]);
 
   if (!userData || !canViewColaboradores(userData)) return null;
   const podeGerenciar = canManageColaboradores(userData);
@@ -425,10 +469,18 @@ export default function ColaboradoresPage() {
         onFilter={setFiltros}
       />
       <GlassCard className="p-5">
-        <h3 className="text-white font-semibold mb-4">
-          {isAssessor(userData) ? "Todos os Colaboradores" : "Meus Colaboradores"}
-          <span className="ml-2 text-sm font-normal text-white/40">({colaboradoresFiltrados.length})</span>
-        </h3>
+        <div className="mb-4">
+          <h3 className="text-white font-semibold">
+            {isAssessor(userData) ? "Todos os Colaboradores" : "Meus Colaboradores"}
+            <span className="ml-2 text-sm font-normal text-white/40">({colaboradoresFiltrados.length})</span>
+          </h3>
+          {filtros.assessorId && assessorNomeMap[filtros.assessorId] && (
+            <p className="text-xs text-emerald-400/60 mt-0.5">Equipe de <span className="text-emerald-400">{assessorNomeMap[filtros.assessorId]}</span></p>
+          )}
+          {filtros.coordenadorId && coordMapFull[filtros.coordenadorId] && (
+            <p className="text-xs text-emerald-400/60 mt-0.5">Coord. <span className="text-emerald-400">{coordMapFull[filtros.coordenadorId].nome}</span></p>
+          )}
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {colaboradoresFiltrados.map((c) => (
             <div key={c.uid} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.06]">
@@ -444,15 +496,33 @@ export default function ColaboradoresPage() {
                     <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={12} /></button>
                   )}
                 </div>
-                <Badge variant={c.status === "pendente" ? "warning" : c.status === "recusado" ? "danger" : "success"}>
-                  {c.status === "pendente" ? "Pendente" : c.status === "recusado" ? "Recusado" : "Ativo"}
-                </Badge>
+                {saudeMap[c.uid] ? (
+                  <div className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-lg shrink-0 ${saudeMap[c.uid].bg} ${saudeMap[c.uid].cor}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${saudeMap[c.uid].dot}`} />
+                    <span className="font-medium whitespace-nowrap">{saudeMap[c.uid].label}</span>
+                  </div>
+                ) : (
+                  <Badge variant={c.status === "pendente" ? "warning" : "danger"}>
+                    {c.status === "pendente" ? "Pendente" : "Recusado"}
+                  </Badge>
+                )}
               </div>
               {c.status === "recusado" && c.recusaMotivo && (
                 <p className="text-xs text-red-400/70 mt-1">Motivo: {c.recusaMotivo === "incompleto" ? "Cadastro incompleto" : c.recusaMotivo === "inconsistente" ? "Dados inconsistentes" : c.recusaMotivo === "duplicado" ? "Cadastro duplicado" : c.recusaMotivo === "invalido" ? "Informações inválidas" : c.recusaMotivo === "regiao" ? "Região não definida" : c.recusaMotivo === "perfil" ? "Perfil não aprovado" : c.recusaMotivo === "correcao" ? "Necessita correção" : c.recusaMotivo === "alinhamento" ? "Aguardando alinhamento" : c.recusaMotivo === "reprovado" ? "Reprovado pela coordenação" : c.recusaMotivo}</p>
               )}
-              <div className="flex items-center justify-between pt-1">
-                <div className="flex items-center gap-2 text-xs text-white/40"><Mail size={12} />{c.email}</div>
+              {c.coordenadorId && coordMapFull[c.coordenadorId] && (
+                <p className="text-[10px] text-white/35 mt-1.5 truncate">
+                  <span className="text-white/25">Coord:</span> <span className="text-white/50">{coordMapFull[c.coordenadorId].nome}</span>
+                  {coordMapFull[c.coordenadorId].assessorId && assessorNomeMap[coordMapFull[c.coordenadorId].assessorId!] && (
+                    <> &nbsp;·&nbsp; <span className="text-white/25">Assessoria:</span> <span className="text-white/50">{assessorNomeMap[coordMapFull[c.coordenadorId].assessorId!]}</span></>
+                  )}
+                </p>
+              )}
+              <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] mt-1">
+                <div className="flex items-center gap-1.5 text-xs text-white/40">
+                  <Users size={11} />
+                  <span>{ranking[c.uid]?.total ?? 0} eleitores</span>
+                </div>
                 {podeGerenciar && (
                   <button onClick={() => handleToggleColabStatus(c.uid, c.ativo)} className={`text-xs ${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
                     {c.ativo ? "Desativar" : "Ativar"}

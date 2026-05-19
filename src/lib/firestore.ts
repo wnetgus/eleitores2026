@@ -12,6 +12,7 @@ import {
   limit,
   Timestamp,
   serverTimestamp,
+  getCountFromServer,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { Eleitor, Atividade, Gabinete, Candidato } from "@/types";
@@ -45,6 +46,15 @@ export async function cadastrarEleitor(data: Omit<Eleitor, "id" | "criadoEm"> | 
     ...data,
     criadoEm: serverTimestamp(),
   });
+  if (data.colaboradorId) {
+    try {
+      await updateDoc(doc(db, colecoes.usuarios, data.colaboradorId), {
+        ultimaAtividade: serverTimestamp(),
+      });
+    } catch {
+      // non-critical: eleitor foi salvo, apenas o timestamp de atividade falhou
+    }
+  }
   return docRef.id;
 }
 
@@ -134,17 +144,30 @@ export async function buscarGabinetesFilhos(parentId: string): Promise<Gabinete[
 
 export async function buscarEleitoresPorGabinetes(gabineteIds: string[]): Promise<Eleitor[]> {
   if (gabineteIds.length === 0) return [];
-  const q = query(collection(db, colecoes.eleitores), where("campanhaId", "in", gabineteIds), orderBy("criadoEm", "desc"));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
+  // Firestore limita `in` a 30 itens — processar em chunks paralelos
+  const chunks: string[][] = [];
+  for (let i = 0; i < gabineteIds.length; i += 30) chunks.push(gabineteIds.slice(i, i + 30));
+  const snaps = await Promise.all(
+    chunks.map((chunk) =>
+      getDocs(query(collection(db, colecoes.eleitores), where("campanhaId", "in", chunk), orderBy("criadoEm", "desc")))
+    )
+  );
+  return snaps.flatMap((snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+}
+
+export async function atualizarMetaPadraoEquipe(coordenadorId: string, meta: number) {
+  await updateDoc(doc(db, colecoes.usuarios, coordenadorId), { metaPadraoEquipe: meta });
 }
 
 export async function buscarAtividades(limite = 50, gabineteId?: string) {
-  const constraints: any[] = [];
-  if (gabineteId) constraints.push(where("gabineteId", "==", gabineteId));
-  constraints.push(orderBy("criadoEm", "desc"));
-  constraints.push(limit(limite));
-  const q = query(collection(db, colecoes.atividades), ...constraints);
+  // sem escopo explícito = incompatível com rules (retornaria PERMISSION_DENIED)
+  if (!gabineteId) return [];
+  const q = query(
+    collection(db, colecoes.atividades),
+    where("gabineteId", "==", gabineteId),
+    orderBy("criadoEm", "desc"),
+    limit(limite)
+  );
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Atividade));
 }
@@ -153,10 +176,9 @@ export async function contarEleitores(gabineteId?: string, colaboradorId?: strin
   const constraints: any[] = [];
   if (gabineteId) constraints.push(where("campanhaId", "==", gabineteId));
   if (colaboradorId) constraints.push(where("colaboradorId", "==", colaboradorId));
-  constraints.push(orderBy("criadoEm", "desc"));
   const q = query(collection(db, colecoes.eleitores), ...constraints);
-  const snapshot = await getDocs(q);
-  return snapshot.size;
+  const snapshot = await getCountFromServer(q);
+  return snapshot.data().count;
 }
 
 export async function buscarEleitoresPorPeriodo(inicio: Date, fim: Date, gabineteId?: string, colaboradorId?: string) {

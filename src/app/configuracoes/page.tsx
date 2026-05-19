@@ -44,14 +44,17 @@ export default function ConfiguracoesPage() {
 
   async function loadData() {
     try {
+      const gabId = userData?.campanhaId || userData?.gabineteId;
       const constraints: any[] = [orderBy("criadoEm", "desc")];
-      if (isAssessor(userData) && userData?.campanhaId) constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+      if (isAssessor(userData) && gabId) constraints.unshift(where("campanhaId", "==", gabId));
       const q = query(collection(db, "usuarios"), ...constraints);
       const snap = await getDocs(q);
       setUsuarios(snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
-      const atvs = await buscarAtividades(30);
+      const atvs = isAssessor(userData)
+        ? gabId ? await buscarAtividades(30, gabId) : []
+        : await buscarAtividades(30);
       setAtividades(atvs);
-      const gabs = await getGabinetes();
+      const gabs = isSuperOrMaster(userData) ? await getGabinetes() : [];
       setGabinetes(gabs.filter((g) => g.ativo));
     } catch (e) { console.error(e); }
   }

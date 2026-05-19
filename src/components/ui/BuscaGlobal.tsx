@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import { collection, getDocs, query as fbQuery, orderBy } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, query as fbQuery, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { AppUser, Gabinete } from "@/types";
 import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
@@ -89,13 +89,37 @@ export function BuscaGlobal({ placeholder, userData }: BuscaProps) {
 
   useEffect(() => {
     async function load() {
+      if (!userData) return;
       try {
-        const [uSnap, gSnap] = await Promise.all([
-          getDocs(fbQuery(collection(db, "usuarios"), orderBy("criadoEm", "desc"))),
-          getDocs(collection(db, "campanhas")),
-        ]);
-        const us = uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
-        const gs = gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete));
+        let us: AppUser[] = [];
+        let gs: Gabinete[] = [];
+
+        if (isSuperOrMaster(userData)) {
+          const [uSnap, gSnap] = await Promise.all([
+            getDocs(fbQuery(collection(db, "usuarios"), orderBy("criadoEm", "desc"))),
+            getDocs(collection(db, "campanhas")),
+          ]);
+          us = uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+          gs = gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete));
+        } else if (isCoordenador(userData)) {
+          const uSnap = await getDocs(fbQuery(collection(db, "usuarios"), where("coordenadorId", "==", userData.uid)));
+          us = uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+        } else {
+          const campanhaId = userData?.campanhaId || userData?.gabineteId;
+          if (!campanhaId) return;
+          const [uSnap1, uSnap2, gabOwn, gabFilhos] = await Promise.all([
+            getDocs(fbQuery(collection(db, "usuarios"), where("campanhaId", "==", campanhaId))),
+            getDocs(fbQuery(collection(db, "usuarios"), where("gabineteId", "==", campanhaId))),
+            getDoc(doc(db, "campanhas", campanhaId)),
+            getDocs(fbQuery(collection(db, "campanhas"), where("parentGabineteId", "==", campanhaId))),
+          ]);
+          const uMap = new Map<string, AppUser>();
+          [...uSnap1.docs, ...uSnap2.docs].forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
+          us = [...uMap.values()];
+          if (gabOwn.exists()) gs.push({ id: gabOwn.id, ...gabOwn.data() } as Gabinete);
+          gabFilhos.docs.forEach((d) => gs.push({ id: d.id, ...d.data() } as Gabinete));
+        }
+
         setUsuarios(us);
         setGabinetes(gs);
         const map: Record<string, { nome: string; cargo: string }> = {};

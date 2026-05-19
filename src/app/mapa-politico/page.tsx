@@ -9,7 +9,7 @@ import { isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, getRol
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
-import { ChevronDown, ChevronRight, Users, Target, Zap, Map, Building2, Globe, MapPin, TrendingUp, Mail, Shield } from "lucide-react";
+import { ChevronDown, ChevronRight, Users, Target, Zap, Map as MapIcon, Building2, Globe, MapPin, TrendingUp, Mail, Shield } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 function getStatus(ultimaData: any): { label: string; color: string; dot: string } {
@@ -65,18 +65,38 @@ export default function MapaPoliticoPage() {
 
   async function load() {
     try {
-      const gSnap = await getDocs(query(collection(db, "campanhas"), orderBy("criadoEm", "desc")));
-      const gabs = gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete));
-      setGabinetes(gabs);
-
-      const eSnap = await getDocs(query(collection(db, "eleitores"), orderBy("criadoEm", "desc")));
-      setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-
-      const uSnap = await getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc")));
-      setUsuarios(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
-
       const gabId = userData?.gabineteId || userData?.campanhaId;
-      if (gabId) {
+      if (isSuperOrMaster(userData)) {
+        const [gSnap, eSnap, uSnap] = await Promise.all([
+          getDocs(query(collection(db, "campanhas"), orderBy("criadoEm", "desc"))),
+          getDocs(query(collection(db, "eleitores"), orderBy("criadoEm", "desc"))),
+          getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc"))),
+        ]);
+        setGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
+        setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        setUsuarios(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      } else if (gabId) {
+        const [gabOwn, filhosSnap] = await Promise.all([
+          getDoc(doc(db, "campanhas", gabId)),
+          getDocs(query(collection(db, "campanhas"), where("parentGabineteId", "==", gabId))),
+        ]);
+        const gabs: Gabinete[] = [];
+        if (gabOwn.exists()) gabs.push({ id: gabOwn.id, ...gabOwn.data() } as Gabinete);
+        filhosSnap.docs.forEach((d) => gabs.push({ id: d.id, ...d.data() } as Gabinete));
+        setGabinetes(gabs);
+
+        const allIds = gabs.map((g) => g.id!).filter(Boolean);
+        if (allIds.length > 0) {
+          const [eSnap, uSnap1, uSnap2] = await Promise.all([
+            getDocs(query(collection(db, "eleitores"), where("campanhaId", "in", allIds))),
+            getDocs(query(collection(db, "usuarios"), where("campanhaId", "in", allIds))),
+            getDocs(query(collection(db, "usuarios"), where("gabineteId", "in", allIds))),
+          ]);
+          setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+          const uMap = new Map<string, AppUser>();
+          [...uSnap1.docs, ...uSnap2.docs].forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
+          setUsuarios([...uMap.values()]);
+        }
         const gAtual = gabs.find((g) => g.id === gabId);
         if (gAtual) setGabineteAtual(gAtual);
       }
@@ -222,9 +242,51 @@ export default function MapaPoliticoPage() {
             })()}</div></div>
         )}
         {coordenadores.length > 0 && (
-          <div><p className="text-xs font-medium text-blue-400 mb-1 flex items-center gap-1"><Target size={12} /> Coordenadores ({coordenadores.length})</p>
-            <div className="space-y-1">{coordenadores.map((c) => (<div key={c.uid}><div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm"><button onClick={() => toggleExpand(`coord_${c.uid}`)} className="text-white/30 hover:text-white">{expanded[`coord_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 text-sm truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a) • {g.nome}</p></div>{c.email && <span className="text-white/30 text-xs hidden md:block truncate max-w-[120px]">{c.email}</span>}</div>
-              {expanded[`coord_${c.uid}`] && (<div className="ml-6 mt-1 space-y-1">{(() => { const colsDoCoord = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); return colsDoCoord.length > 0 ? colsDoCoord.map((col) => (<CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)) : (<p className="text-xs text-white/30 italic pl-2">Nenhum colaborador vinculado</p>); })()}</div>)}</div>))}</div></div>
+          <div>
+            <p className="text-xs font-medium text-blue-400 mb-2 flex items-center gap-1"><Target size={12} /> Coordenadores ({coordenadores.length})</p>
+            <div className="space-y-3">
+              {assessores.map((a) => {
+                const coordsDoAssessor = coordenadores.filter((c) => c.assessorId === a.uid);
+                if (coordsDoAssessor.length === 0) return null;
+                return (
+                  <div key={a.uid}>
+                    <div className="flex items-center gap-1.5 mb-1 pl-1">
+                      <div className="w-4 h-4 rounded bg-purple-600/50 flex items-center justify-center text-white text-[9px] font-bold shrink-0">{a.nome.charAt(0)}</div>
+                      <span className="text-xs text-purple-400/80">{a.nome}</span>
+                    </div>
+                    <div className="ml-3 space-y-1">
+                      {coordsDoAssessor.map((c) => (
+                        <div key={c.uid}>
+                          <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm"><button onClick={() => toggleExpand(`coord_${c.uid}`)} className="text-white/30 hover:text-white">{expanded[`coord_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 text-sm truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a) • {a.nome} • {g.nome}</p></div>{c.email && <span className="text-white/30 text-xs hidden md:block truncate max-w-[120px]">{c.email}</span>}</div>
+                          {expanded[`coord_${c.uid}`] && (<div className="ml-6 mt-1 space-y-1">{(() => { const colsDoCoord = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); return colsDoCoord.length > 0 ? colsDoCoord.map((col) => (<CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)) : (<p className="text-xs text-white/30 italic pl-2">Nenhum colaborador vinculado</p>); })()}</div>)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+              {(() => {
+                const coordsSemAssessor = coordenadores.filter((c) => !c.assessorId || !assessores.find((a) => a.uid === c.assessorId));
+                if (coordsSemAssessor.length === 0) return null;
+                return (
+                  <div key="sem-assessor">
+                    <div className="flex items-center gap-1.5 mb-1 pl-1"><span className="text-xs text-white/30">Sem assessor vinculado</span></div>
+                    <div className="ml-3 space-y-1">
+                      {coordsSemAssessor.map((c) => {
+                        const assessorNome = c.assessorId ? (usuarios.find((u) => u.uid === c.assessorId)?.nome || "") : "";
+                        return (
+                        <div key={c.uid}>
+                          <div className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm"><button onClick={() => toggleExpand(`coord_${c.uid}`)} className="text-white/30 hover:text-white">{expanded[`coord_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</button><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 text-sm truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a){assessorNome ? ` • ${assessorNome}` : ""} • {g.nome}</p></div>{c.email && <span className="text-white/30 text-xs hidden md:block truncate max-w-[120px]">{c.email}</span>}</div>
+                          {expanded[`coord_${c.uid}`] && (<div className="ml-6 mt-1 space-y-1">{(() => { const colsDoCoord = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); return colsDoCoord.length > 0 ? colsDoCoord.map((col) => (<CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)) : (<p className="text-xs text-white/30 italic pl-2">Nenhum colaborador vinculado</p>); })()}</div>)}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
         )}
         {colabs.filter((c) => !c.coordenadorId).length > 0 && (
           <div><p className="text-xs font-medium text-emerald-400 mb-1 flex items-center gap-1"><Zap size={12} /> Militantes diretos ({colabs.filter((c) => !c.coordenadorId).length})</p>
@@ -354,7 +416,7 @@ export default function MapaPoliticoPage() {
                 <>
                   {assessores.length > 0 && <div><p className="text-xs font-medium text-purple-400 mb-1">Assessores ({assessores.length})</p>{assessores.map((a) => <CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor" contexto={`Assessor(a) • ${g.cargo} ${g.nome}`} />)}</div>}
                   {vereadoresDaCidade.length > 0 && <div><p className="text-xs font-medium text-amber-400 mb-1">Vereadores Vinculados ({vereadoresDaCidade.length})</p>{vereadoresDaCidade.map((v) => <div key={v.id} className="flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm"><div className="w-7 h-7 rounded-lg bg-amber-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{v.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 truncate">{v.nome}</p><p className="text-white/30 text-[10px] truncate">{v.cargo}</p></div></div>)}</div>}
-                  {coordenadores.length > 0 && <div><p className="text-xs font-medium text-blue-400 mb-1">Coordenadores ({coordenadores.length})</p>{coordenadores.map((c) => { const cols = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); return <div key={c.uid}><button onClick={() => toggleExpand(`coord_direct_${c.uid}`)} className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm hover:bg-white/[0.04] text-left"><span className="text-white/30">{expanded[`coord_direct_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a) • {g.nome}</p></div><span className="text-white/40 text-xs shrink-0">{cols.length} militantes</span></button>{expanded[`coord_direct_${c.uid}`] && <div className="ml-8 mt-1 space-y-1">{cols.map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)}{cols.length === 0 && <p className="text-xs text-white/30 italic">Nenhum militante</p>}</div>}</div>; })}</div>}
+                  {coordenadores.length > 0 && <div><p className="text-xs font-medium text-blue-400 mb-1">Coordenadores ({coordenadores.length})</p>{coordenadores.map((c) => { const cols = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); const assessorNome = c.assessorId ? (usuarios.find((u) => u.uid === c.assessorId)?.nome || "") : ""; return <div key={c.uid}><button onClick={() => toggleExpand(`coord_direct_${c.uid}`)} className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm hover:bg-white/[0.04] text-left"><span className="text-white/30">{expanded[`coord_direct_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a){assessorNome ? ` • ${assessorNome}` : ""} • {g.nome}</p></div><span className="text-white/40 text-xs shrink-0">{cols.length} militantes</span></button>{expanded[`coord_direct_${c.uid}`] && <div className="ml-8 mt-1 space-y-1">{cols.map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)}{cols.length === 0 && <p className="text-xs text-white/30 italic">Nenhum militante</p>}</div>}</div>; })}</div>}
                   {colabs.filter((c) => !c.coordenadorId).length > 0 && <div><p className="text-xs font-medium text-emerald-400 mb-1">Militantes diretos</p>{colabs.filter((c) => !c.coordenadorId).map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • ${g.nome}`} />)}</div>}
                 </>
               );
@@ -385,7 +447,7 @@ export default function MapaPoliticoPage() {
             return (
               <>
                 {assessores.length > 0 && <div><p className="text-xs font-medium text-purple-400 mb-1">Assessores ({assessores.length})</p>{assessores.map((a) => <CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor" contexto={`Assessor(a) • ${g.cargo} ${g.nome}`} />)}</div>}
-                {coordenadores.length > 0 && <div><p className="text-xs font-medium text-blue-400 mb-1">Coordenadores ({coordenadores.length})</p>{coordenadores.map((c) => { const cols = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); return <div key={c.uid}><button onClick={() => toggleExpand(`coord_ass_${c.uid}`)} className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm hover:bg-white/[0.04] text-left"><span className="text-white/30">{expanded[`coord_ass_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a) • {g.nome}</p></div><span className="text-white/40 text-xs shrink-0">{cols.length} militantes</span></button>{expanded[`coord_ass_${c.uid}`] && <div className="ml-8 mt-1 space-y-1">{cols.map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)}{cols.length === 0 && <p className="text-xs text-white/30 italic">Nenhum militante</p>}</div>}</div>; })}</div>}
+                {coordenadores.length > 0 && <div><p className="text-xs font-medium text-blue-400 mb-1">Coordenadores ({coordenadores.length})</p>{coordenadores.map((c) => { const cols = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid); const assessorNome = c.assessorId ? (usuarios.find((u) => u.uid === c.assessorId)?.nome || "") : ""; return <div key={c.uid}><button onClick={() => toggleExpand(`coord_ass_${c.uid}`)} className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm hover:bg-white/[0.04] text-left"><span className="text-white/30">{expanded[`coord_ass_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span><div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div><div className="flex-1 min-w-0"><p className="text-white/80 truncate">{c.nome}</p><p className="text-white/30 text-[10px] truncate">Coordenador(a){assessorNome ? ` • ${assessorNome}` : ""} • {g.nome}</p></div><span className="text-white/40 text-xs shrink-0">{cols.length} militantes</span></button>{expanded[`coord_ass_${c.uid}`] && <div className="ml-8 mt-1 space-y-1">{cols.map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome} • ${g.nome}`} />)}{cols.length === 0 && <p className="text-xs text-white/30 italic">Nenhum militante</p>}</div>}</div>; })}</div>}
                 {colabs.filter((c) => !c.coordenadorId).length > 0 && <div><p className="text-xs font-medium text-emerald-400 mb-1">Militantes diretos</p>{colabs.filter((c) => !c.coordenadorId).map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • ${g.nome}`} />)}</div>}
               </>
             );
@@ -401,7 +463,7 @@ export default function MapaPoliticoPage() {
     <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center text-lg">
-          <Map size={20} className="text-white" />
+          <MapIcon size={20} className="text-white" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-white">Mapa Político</h1>

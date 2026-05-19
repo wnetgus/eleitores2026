@@ -15,7 +15,8 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Building2, UserPlus, Globe, Plus, Power, Pencil, Trash2, ExternalLink, ChevronRight, Circle, Activity } from "lucide-react";
+import { Building2, UserPlus, Globe, Plus, Power, Pencil, Trash2, ExternalLink, ChevronRight, Circle, Activity, MapPin, Target } from "lucide-react";
+import { estados, cidades } from "@/lib/estados-cidades";
 import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
@@ -101,16 +102,29 @@ export default function GabinetesPage() {
     politicoNome: "", politicoEmail: "", politicoSenha: "",
     assessorNome: "", assessorEmail: "", assessorSenha: "",
     cargo: "", nivelPolitico: "", cicloEleitoral: "", parentGabineteId: "", partido: "", partidoOutro: "", slogan: "", corPrincipal: "#8b5cf6",
+    estado: "", cidade: "", municipios: [] as string[], metaEleitoral: "",
   });
+  const [cidadesDisponiveis, setCidadesDisponiveis] = useState<string[]>([]);
+  const [cidadesDisponiveisEdit, setCidadesDisponiveisEdit] = useState<string[]>([]);
 
   function handleNomeChange(nome: string) {
     const slug = gerarSlug(nome);
     setForm((f) => ({ ...f, nome, slug }));
   }
+
+  function handleEstadoChange(sigla: string) {
+    setForm((f) => ({ ...f, estado: sigla, cidade: "", municipios: [] }));
+    setCidadesDisponiveis(cidades[sigla] || []);
+  }
+
+  function handleEstadoChangeEdit(sigla: string) {
+    setEditForm((f) => ({ ...f, estado: sigla, cidade: "", municipios: [] }));
+    setCidadesDisponiveisEdit(cidades[sigla] || []);
+  }
   const [saving, setSaving] = useState(false);
   const [eleitorCounts, setEleitorCounts] = useState<Record<string, number>>({});
   const [editModal, setEditModal] = useState<Gabinete | null>(null);
-  const [editForm, setEditForm] = useState({ nome: "", slug: "", cargo: "", slogan: "", corPrincipal: "#8b5cf6" });
+  const [editForm, setEditForm] = useState({ nome: "", slug: "", cargo: "", slogan: "", corPrincipal: "#8b5cf6", estado: "", cidade: "", municipios: [] as string[], metaEleitoral: "" });
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData)) { router.push("/dashboard"); return; }
@@ -150,6 +164,10 @@ export default function GabinetesPage() {
         ativo: true, criadoEm: serverTimestamp(), criadoPor: userData?.uid,
       };
       if (form.parentGabineteId) dadosGabinete.parentGabineteId = form.parentGabineteId;
+      if (form.estado) dadosGabinete.estado = form.estado;
+      if (form.cidade) dadosGabinete.cidade = form.cidade;
+      if (form.municipios.length > 0) dadosGabinete.municipios = form.municipios;
+      if (form.metaEleitoral) dadosGabinete.metaEleitoral = Number(form.metaEleitoral);
       const gabineteId = await addDoc(collection(db, "campanhas"), dadosGabinete);
 
       // Criar conta do POLÍTICO (visão executiva)
@@ -173,11 +191,13 @@ export default function GabinetesPage() {
 
       toast.success("Gabinete criado com sucesso! Duas contas geradas: Político e Assessor.");
       setShowForm(false);
+      setCidadesDisponiveis([]);
       setForm({
         nome: "", slug: "",
         politicoNome: "", politicoEmail: "", politicoSenha: "",
         assessorNome: "", assessorEmail: "", assessorSenha: "",
         cargo: "", nivelPolitico: "", cicloEleitoral: "", parentGabineteId: "", partido: "", partidoOutro: "", slogan: "", corPrincipal: "#8b5cf6",
+        estado: "", cidade: "", municipios: [], metaEleitoral: "",
       });
       setShowForm(false);
       loadData();
@@ -199,14 +219,23 @@ export default function GabinetesPage() {
   }
 
   function openEdit(g: Gabinete) {
-    setEditForm({ nome: g.nome, slug: g.slug, cargo: g.cargo, slogan: g.slogan || "", corPrincipal: g.corPrincipal || "#8b5cf6" });
+    setEditForm({
+      nome: g.nome, slug: g.slug, cargo: g.cargo, slogan: g.slogan || "", corPrincipal: g.corPrincipal || "#8b5cf6",
+      estado: g.estado || "", cidade: g.cidade || "", municipios: g.municipios || [], metaEleitoral: g.metaEleitoral?.toString() || "",
+    });
+    if (g.estado) setCidadesDisponiveisEdit(cidades[g.estado] || []);
     setEditModal(g);
   }
 
   async function handleEdit() {
     if (!editModal?.id) return;
     try {
-      await updateDoc(doc(db, "campanhas", editModal.id), { nome: editForm.nome, slug: editForm.slug, cargo: editForm.cargo, slogan: editForm.slogan, corPrincipal: editForm.corPrincipal });
+      const updateData: Record<string, any> = { nome: editForm.nome, slug: editForm.slug, cargo: editForm.cargo, slogan: editForm.slogan, corPrincipal: editForm.corPrincipal };
+      if (editForm.estado) updateData.estado = editForm.estado;
+      if (editForm.cidade) updateData.cidade = editForm.cidade;
+      if (editForm.municipios.length > 0) updateData.municipios = editForm.municipios;
+      if (editForm.metaEleitoral) updateData.metaEleitoral = Number(editForm.metaEleitoral);
+      await updateDoc(doc(db, "campanhas", editModal.id), updateData);
       await registrarAtividade({ acao: "editou_gabinete", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: "super_admin", detalhes: `Editou gabinete ${editModal.nome}` });
       toast.success("Gabinete atualizado!"); setEditModal(null); loadData();
     } catch (e) { toast.error("Erro ao atualizar"); }
@@ -270,6 +299,21 @@ export default function GabinetesPage() {
             </span>
           )}
           {g.slogan && <p className="text-white/40 text-xs mt-1 italic">"{g.slogan}"</p>}
+          {(g.cidade || g.estado) && (
+            <p className="flex items-center gap-1.5 text-xs text-white/40 mt-1">
+              <MapPin size={10} />
+              {g.cidade ? `${g.cidade}${g.estado ? `, ${g.estado}` : ""}` : g.estado}
+            </p>
+          )}
+          {g.municipios && g.municipios.length > 1 && (
+            <p className="text-xs text-white/30 mt-0.5">{g.municipios.length} municípios — {g.estado}</p>
+          )}
+          {g.metaEleitoral && (
+            <p className="flex items-center gap-1.5 text-xs text-emerald-400/70 mt-1">
+              <Target size={10} />
+              Meta: {g.metaEleitoral.toLocaleString("pt-BR")} eleitores
+            </p>
+          )}
         </div>
 
         <div className="flex items-center justify-between pt-3 border-t border-white/[0.06]">
@@ -317,6 +361,57 @@ export default function GabinetesPage() {
             )}
             <Select label="Vinculado a (opcional)" value={form.parentGabineteId} onChange={(e) => setForm({ ...form, parentGabineteId: e.target.value })} options={gabinetes.filter((g) => g.id !== form.slug).map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo})` }))} emptyMessage="Nenhum gabinete disponível. Crie primeiro o gabinete superior." />
             <Input label="Slogan" value={form.slogan} onChange={(e) => setForm({ ...form, slogan: e.target.value })} placeholder="Slogan do gabinete" />
+
+            {/* SEÇÃO: Território */}
+            <div className="md:col-span-3 border-t border-white/[0.06] pt-4 mt-2">
+              <p className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2"><MapPin size={14} /> Território de Atuação</p>
+            </div>
+            <Select
+              label="Estado"
+              value={form.estado}
+              onChange={(e) => handleEstadoChange(e.target.value)}
+              options={[{ value: "", label: "Selecione o estado..." }, ...estados.map((e) => ({ value: e.sigla, label: e.nome }))]}
+            />
+            {form.nivelPolitico === "municipal" && (
+              <Select
+                label="Cidade Principal"
+                value={form.cidade}
+                onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
+                options={[{ value: "", label: "Selecione a cidade..." }, ...cidadesDisponiveis.map((c) => ({ value: c, label: c }))]}
+              />
+            )}
+            <Input
+              label="Meta Eleitoral (opcional)"
+              value={form.metaEleitoral}
+              onChange={(e) => setForm((f) => ({ ...f, metaEleitoral: e.target.value }))}
+              placeholder="Ex: 15000"
+            />
+            {(form.nivelPolitico === "federal" || form.nivelPolitico === "estadual") && form.estado && (
+              <div className="md:col-span-3">
+                <label className="block text-sm font-medium text-white/70 mb-1.5">
+                  Municípios de Atuação
+                  <span className="text-white/40 font-normal ml-2">({form.municipios.length} selecionados)</span>
+                </label>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-3 max-h-40 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-1.5">
+                  {cidadesDisponiveis.length > 0 ? cidadesDisponiveis.map((cidade) => (
+                    <label key={cidade} className="flex items-center gap-2 cursor-pointer text-sm text-white/60 hover:text-white/90 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={form.municipios.includes(cidade)}
+                        onChange={(e) => setForm((f) => ({
+                          ...f,
+                          municipios: e.target.checked ? [...f.municipios, cidade] : f.municipios.filter((c) => c !== cidade),
+                        }))}
+                        className="accent-emerald-500 rounded"
+                      />
+                      {cidade}
+                    </label>
+                  )) : (
+                    <p className="text-white/30 text-xs col-span-full">Selecione um estado primeiro</p>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* SEÇÃO: Dados do Político */}
             <div className="md:col-span-3 border-t border-white/[0.06] pt-4 mt-2">
@@ -389,6 +484,54 @@ export default function GabinetesPage() {
           <div>
             <label className="block text-sm font-medium text-white/70 mb-1.5">Cor Principal</label>
             <input type="color" value={editForm.corPrincipal} onChange={(e) => setEditForm({ ...editForm, corPrincipal: e.target.value })} className="w-full h-10 bg-white/5 border border-white/10 rounded-xl cursor-pointer" />
+          </div>
+          <div className="border-t border-white/[0.06] pt-3">
+            <p className="text-xs font-semibold text-emerald-400 mb-3 flex items-center gap-1.5"><MapPin size={12} /> Território</p>
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                label="Estado"
+                value={editForm.estado}
+                onChange={(e) => handleEstadoChangeEdit(e.target.value)}
+                options={[{ value: "", label: "Estado..." }, ...estados.map((e) => ({ value: e.sigla, label: e.nome }))]}
+              />
+              <Select
+                label="Cidade Principal"
+                value={editForm.cidade}
+                onChange={(e) => setEditForm((f) => ({ ...f, cidade: e.target.value }))}
+                options={[{ value: "", label: "Cidade..." }, ...cidadesDisponiveisEdit.map((c) => ({ value: c, label: c }))]}
+              />
+            </div>
+            {editModal?.nivelPolitico !== "municipal" && editForm.estado && cidadesDisponiveisEdit.length > 0 && (
+              <div className="mt-3">
+                <label className="block text-xs font-medium text-white/60 mb-1.5">
+                  Municípios de Atuação <span className="text-white/30">({editForm.municipios.length} selecionados)</span>
+                </label>
+                <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 max-h-32 overflow-y-auto grid grid-cols-2 gap-1">
+                  {cidadesDisponiveisEdit.map((cidade) => (
+                    <label key={cidade} className="flex items-center gap-1.5 cursor-pointer text-xs text-white/60 hover:text-white/90 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={editForm.municipios.includes(cidade)}
+                        onChange={(e) => setEditForm((f) => ({
+                          ...f,
+                          municipios: e.target.checked ? [...f.municipios, cidade] : f.municipios.filter((c) => c !== cidade),
+                        }))}
+                        className="accent-emerald-500 rounded"
+                      />
+                      {cidade}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="mt-3">
+              <Input
+                label="Meta Eleitoral (opcional)"
+                value={editForm.metaEleitoral}
+                onChange={(e) => setEditForm((f) => ({ ...f, metaEleitoral: e.target.value }))}
+                placeholder="Ex: 15000"
+              />
+            </div>
           </div>
           <div className="flex gap-3 pt-2">
             <Button onClick={handleEdit} className="flex-1">Salvar Alterações</Button>

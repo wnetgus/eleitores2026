@@ -61,26 +61,38 @@ export default function CoordenadoresPage() {
   async function loadCoordenadores() {
     try {
       if (isSuperOrMaster(userData)) {
-        const gSnap = await getDocs(collection(db, "campanhas"));
+        const [gSnap, aSnap] = await Promise.all([
+          getDocs(collection(db, "campanhas")),
+          getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"))),
+        ]);
         setTodosGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
+        setAssessoresDisponiveis(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
         if (gabineteIdParam) {
           const gDoc = await getDoc(doc(db, "campanhas", gabineteIdParam));
           if (gDoc.exists()) {
             const g = gDoc.data() as Gabinete;
             setGabineteContexto({ id: gabineteIdParam, nome: g.nome, cargo: g.cargo?.replace(/_/g, " ") });
           }
-          const aSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", gabineteIdParam)));
-          setAssessoresDisponiveis(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
         }
       }
       const constraints: any[] = [where("role", "==", "coordenador")];
-      if (!isSuperOrMaster(userData) && userData?.campanhaId) constraints.push(where("campanhaId", "==", userData.campanhaId));
-      constraints.push(orderBy("criadoEm", "desc"));
+      if (isAssessor(userData) && userData?.uid) {
+        constraints.push(where("assessorId", "==", userData.uid));
+      } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
+        constraints.push(where("campanhaId", "==", userData.campanhaId));
+        constraints.push(orderBy("criadoEm", "desc"));
+      } else {
+        constraints.push(orderBy("criadoEm", "desc"));
+      }
       const q = query(collection(db, "usuarios"), ...constraints);
       const snap = await getDocs(q);
       const coords = snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
       setCoordenadores(coords);
-      const colabSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador")));
+      const gabIdScope = userData?.gabineteId || userData?.campanhaId;
+      const colabQuery = isSuperOrMaster(userData) || !gabIdScope
+        ? query(collection(db, "usuarios"), where("role", "==", "colaborador"))
+        : query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", gabIdScope));
+      const colabSnap = await getDocs(colabQuery);
       const count: Record<string, number> = {};
       colabSnap.docs.forEach((d) => {
         const data = d.data();
@@ -102,6 +114,7 @@ export default function CoordenadoresPage() {
       await setDoc(doc(db, "usuarios", cred.user.uid), {
         email: form.email, nome: form.nome, role: "coordenador", estado: form.estado, cidadePrincipal: form.cidadePrincipal, regiao: form.regiao,
         campanhaId, gabineteId: campanhaId, criadoEm: new Date(), ativo: true, criadoPor: userData?.uid,
+        ...(isAssessor(userData) ? { assessorId: userData!.uid } : form.assessorId ? { assessorId: form.assessorId } : {}),
       });
       await registrarAtividade({ acao: "criar_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Criou coordenador ${form.nome}` });
       toast.success("Coordenador criado!");
@@ -143,6 +156,12 @@ export default function CoordenadoresPage() {
     } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
   }
 
+  const assessorMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    assessoresDisponiveis.forEach((a) => { map[a.uid] = a.nome; });
+    return map;
+  }, [assessoresDisponiveis]);
+
   const coordenadoresFiltrados = useMemo(() => {
     let lista = coordenadores;
     if (filtros.texto) {
@@ -154,6 +173,9 @@ export default function CoordenadoresPage() {
     }
     if (filtros.gabineteId) {
       lista = lista.filter((c) => (c.gabineteId || c.campanhaId) === filtros.gabineteId);
+    }
+    if (filtros.assessorId) {
+      lista = lista.filter((c) => c.assessorId === filtros.assessorId || c.criadoPor === filtros.assessorId);
     }
     return lista;
   }, [coordenadores, filtros]);
@@ -195,12 +217,12 @@ export default function CoordenadoresPage() {
               options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
             />
           )}
-          {gabineteContexto && assessoresDisponiveis.length > 0 && (
+          {gabineteContexto && assessoresDisponiveis.filter((a) => (a.gabineteId || a.campanhaId) === gabineteIdParam).length > 0 && (
             <Select
               label="Assessor responsável"
               value={form.assessorId}
               onChange={(e) => setForm({ ...form, assessorId: e.target.value })}
-              options={[{ value: "", label: "Selecione o assessor..." }, ...assessoresDisponiveis.map((a) => ({ value: a.uid, label: a.nome }))]}
+              options={[{ value: "", label: "Selecione o assessor..." }, ...assessoresDisponiveis.filter((a) => (a.gabineteId || a.campanhaId) === gabineteIdParam).map((a) => ({ value: a.uid, label: a.nome }))]}
             />
           )}
           <Input label="Nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do coordenador" />
@@ -227,6 +249,9 @@ export default function CoordenadoresPage() {
           <div className="flex items-center gap-2">
             <Target size={18} className="text-blue-400" />
             <h3 className="text-white font-semibold">Coordenadores Ativos <span className="ml-2 text-sm font-normal text-white/40">({coordenadoresFiltrados.length})</span></h3>
+            {filtros.assessorId && assessorMap[filtros.assessorId] && (
+              <p className="text-xs text-purple-400/60 mt-0.5">Equipe de <span className="text-purple-400">{assessorMap[filtros.assessorId]}</span></p>
+            )}
           </div>
           {filtroAtivo && (
             <button onClick={() => router.push("/coordenadores")} className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 bg-blue-500/10 px-3 py-1.5 rounded-lg border border-blue-500/20 transition-all">
@@ -267,6 +292,12 @@ export default function CoordenadoresPage() {
                   <Users size={12} className="text-white/30" />
                   <span className={qtdColab === 0 ? "text-amber-400/70" : "text-white/50"}>{qtdColab} colaborador{qtdColab !== 1 ? "es" : ""}</span>
                 </div>
+                {c.assessorId && assessorMap[c.assessorId] && (
+                  <div className="flex items-center gap-2 text-xs text-white/50">
+                    <Shield size={12} className="text-purple-400/50" />
+                    <span>Assessor: <span className="text-purple-300/70">{assessorMap[c.assessorId]}</span></span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-white/30">Criado em: {formatDate(c.criadoEm)}</span>
                   {userData?.uid !== c.uid && (

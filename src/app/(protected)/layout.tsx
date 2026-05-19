@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -9,10 +9,10 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && !user) router.push("/login");
-  }, [user, loading, router]);
+    if (!loading && (!user || !userData)) router.push("/login");
+  }, [user, userData, loading, router]);
 
-  if (loading) {
+  if (loading || !user || !userData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
         <div className="flex flex-col items-center gap-3">
@@ -25,8 +25,6 @@ export default function ProtectedLayout({ children }: { children: React.ReactNod
       </div>
     );
   }
-
-  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f]">

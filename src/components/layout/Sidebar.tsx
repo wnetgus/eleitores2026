@@ -32,7 +32,7 @@ import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, query, where } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
 import { isSuperAdmin, isAdminMaster, isPolitico, isPrefeito, isVereador, isAssessor, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
 import { ROLE_CONFIG } from "@/types";
 
@@ -103,7 +103,6 @@ const coordenadorMenu = [
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
   { href: "/eleitores", label: "Eleitores", icon: Users },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
-  { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: TrendingUp },
 ];
 
@@ -117,6 +116,7 @@ export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [pendentesCount, setPendentesCount] = useState(0);
+  const [hierarquia, setHierarquia] = useState<{ coordenador?: string; assessor?: string }>({});
   const pathname = usePathname();
   const { userData } = useAuth();
   const router = useRouter();
@@ -124,13 +124,38 @@ export function Sidebar() {
   useEffect(() => {
     async function loadPendentes() {
       try {
-        const q = query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente"]));
+        const isAdm = isSuperAdmin(userData!) || isAdminMaster(userData!);
+        const gabId = userData?.gabineteId || userData?.campanhaId;
+        const q = isAdm || !gabId
+          ? query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente"]))
+          : query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente"]), where("campanhaId", "==", gabId));
         const snap = await getDocs(q);
         setPendentesCount(snap.size);
       } catch {}
     }
+    async function loadHierarquia() {
+      try {
+        if (isCoordenador(userData!) && userData?.assessorId) {
+          const snap = await getDoc(doc(db, "usuarios", userData.assessorId));
+          if (snap.exists()) setHierarquia({ assessor: snap.data().nome || "" });
+        } else if (isColaborador(userData!) && userData?.coordenadorId) {
+          const coordSnap = await getDoc(doc(db, "usuarios", userData.coordenadorId));
+          if (!coordSnap.exists()) return;
+          const coordData = coordSnap.data();
+          const h: { coordenador?: string; assessor?: string } = { coordenador: coordData.nome || "" };
+          if (coordData.assessorId) {
+            const assessorSnap = await getDoc(doc(db, "usuarios", coordData.assessorId));
+            if (assessorSnap.exists()) h.assessor = assessorSnap.data().nome || "";
+          }
+          setHierarquia(h);
+        }
+      } catch {}
+    }
     if (userData && (isSuperAdmin(userData) || isAdminMaster(userData) || isAssessor(userData))) {
       loadPendentes();
+    }
+    if (userData) {
+      loadHierarquia();
     }
   }, [userData]);
 
@@ -239,6 +264,8 @@ export function Sidebar() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white/90 font-medium truncate">{userData.nome}</p>
                 <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>Operador • {roleInfo.label}</p>
+                {hierarquia.coordenador && <p className="text-[10px] text-white/40 truncate">Coordenação: {hierarquia.coordenador}</p>}
+                {hierarquia.assessor && <p className="text-[10px] text-white/30 truncate">Assessoria: {hierarquia.assessor}</p>}
               </div>
             </div>
           )}

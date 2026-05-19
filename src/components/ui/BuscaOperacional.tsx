@@ -82,18 +82,22 @@ function gerarNiveis(
 
   const { gabineteId, assessorId, coordenadorId } = filtrosAtuais;
 
-  if (pagina === "assessores" && podeVerGabinete) {
+  // Gabinete: assessores page bloqueia cascata até selecionar; coordenadores/colaboradores mostram a lista completa por padrão
+  if (podeVerGabinete && (pagina === "assessores" || pagina === "coordenadores" || pagina === "colaboradores")) {
     const ops = (gabinetes || []).map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ") || ""})` }));
     niveis.push({ chave: "gabineteId", placeholder: "Selecione o gabinete...", opcoes: ops });
-    if (!gabineteId) return niveis;
+    if (pagina === "assessores" && !gabineteId) return niveis;
   }
 
   if (podeVerAssessor && pagina !== "assessores") {
     let ops: { value: string; label: string }[] = [];
-    if (pagina === "coordenadores" && gabineteId) {
-      ops = (assessores || []).filter((a) => (a.gabineteId || a.campanhaId) === gabineteId).map((a) => ({ value: a.uid, label: a.nome }));
-    } else if (pagina === "colaboradores" && gabineteId) {
-      ops = (assessores || []).filter((a) => (a.gabineteId || a.campanhaId) === gabineteId).map((a) => ({ value: a.uid, label: a.nome }));
+    if (pagina === "coordenadores" || pagina === "colaboradores") {
+      if (gabineteId) {
+        ops = (assessores || []).filter((a) => (a.gabineteId || a.campanhaId) === gabineteId).map((a) => ({ value: a.uid, label: a.nome }));
+      } else if (!podeVerGabinete) {
+        // politico/prefeito/vereador: assessores já vêm escopados pela página
+        ops = (assessores || []).map((a) => ({ value: a.uid, label: a.nome }));
+      }
     } else if (pagina === "eleitores") {
       if (podeVerGabinete && gabineteId) {
         ops = (assessores || []).filter((a) => (a.gabineteId || a.campanhaId) === gabineteId).map((a) => ({ value: a.uid, label: a.nome }));
@@ -107,10 +111,11 @@ function gerarNiveis(
     }
   }
 
-  if (podeVerCoordenador) {
+  // Coordenador select não faz sentido na própria página de coordenadores (seria redundante)
+  if (podeVerCoordenador && pagina !== "coordenadores") {
     let ops: { value: string; label: string }[] = [];
     if (assessorId) {
-      ops = (coordenadores || []).filter((c) => (c.gabineteId || c.campanhaId) === (assessores?.find((a) => a.uid === assessorId)?.gabineteId || assessorId) || c.criadoPor === assessorId).map((c) => ({ value: c.uid, label: c.nome }));
+      ops = (coordenadores || []).filter((c) => c.assessorId === assessorId || c.criadoPor === assessorId).map((c) => ({ value: c.uid, label: c.nome }));
     } else if (gabineteId) {
       ops = (coordenadores || []).filter((c) => (c.gabineteId || c.campanhaId) === gabineteId).map((c) => ({ value: c.uid, label: c.nome }));
     } else if (!podeVerGabinete && !podeVerAssessor) {
@@ -127,8 +132,12 @@ function gerarNiveis(
     if (coordenadorId) {
       ops = (colaboradores || []).filter((c) => c.coordenadorId === coordenadorId).map((c) => ({ value: c.uid, label: c.nome }));
     } else if (assessorId) {
-      const gabId = assessores?.find((a) => a.uid === assessorId)?.gabineteId || assessorId;
-      ops = (colaboradores || []).filter((c) => (c.gabineteId || c.campanhaId) === gabId).map((c) => ({ value: c.uid, label: c.nome }));
+      const myCoordIds = (coordenadores || [])
+        .filter((c) => c.assessorId === assessorId || c.criadoPor === assessorId)
+        .map((c) => c.uid);
+      ops = myCoordIds.length > 0
+        ? (colaboradores || []).filter((c) => myCoordIds.includes(c.coordenadorId || "")).map((c) => ({ value: c.uid, label: c.nome }))
+        : (colaboradores || []).filter((c) => (c.gabineteId || c.campanhaId) === (assessores?.find((a) => a.uid === assessorId)?.gabineteId)).map((c) => ({ value: c.uid, label: c.nome }));
     } else if (gabineteId) {
       ops = (colaboradores || []).filter((c) => (c.gabineteId || c.campanhaId) === gabineteId).map((c) => ({ value: c.uid, label: c.nome }));
     } else if (!podeVerGabinete && !podeVerAssessor && !podeVerCoordenador) {
@@ -149,9 +158,14 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
   const [coordenadorId, setCoordenadorId] = useState("");
   const [colaboradorId, setColaboradorId] = useState("");
 
-  if (!userData) return null;
-
   const filtrosAtuais: FiltrosOperacionais = { texto, gabineteId: gabineteId || undefined, assessorId: assessorId || undefined, coordenadorId: coordenadorId || undefined, colaboradorId: colaboradorId || undefined };
+
+  const niveis = useMemo(
+    () => userData ? gerarNiveis(pagina, userData.role, gabinetes, assessores, coordenadores, colaboradores, filtrosAtuais) : [],
+    [pagina, userData?.role, gabinetes, assessores, coordenadores, colaboradores, gabineteId, assessorId, coordenadorId]
+  );
+
+  if (!userData) return null;
 
   function emitir(parcial: Partial<FiltrosOperacionais>) {
     const novo = { ...filtrosAtuais, ...parcial };
@@ -165,10 +179,10 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
 
   function handleNivel(chave: keyof FiltrosOperacionais, valor: string) {
     const reset: Partial<FiltrosOperacionais> = { texto };
-    const niveis = ["gabineteId", "assessorId", "coordenadorId", "colaboradorId"];
-    const idx = niveis.indexOf(chave);
-    for (let i = idx; i < niveis.length; i++) {
-      (reset as any)[niveis[i]] = undefined;
+    const nivelKeys = ["gabineteId", "assessorId", "coordenadorId", "colaboradorId"];
+    const idx = nivelKeys.indexOf(chave);
+    for (let i = idx; i < nivelKeys.length; i++) {
+      (reset as any)[nivelKeys[i]] = undefined;
     }
     (reset as any)[chave] = valor || undefined;
 
@@ -179,8 +193,6 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
 
     onFilter(reset as FiltrosOperacionais);
   }
-
-  const niveis = useMemo(() => gerarNiveis(pagina, userData.role, gabinetes, assessores, coordenadores, colaboradores, filtrosAtuais), [pagina, userData?.role, gabinetes, assessores, coordenadores, colaboradores, gabineteId, assessorId, coordenadorId]);
 
   return (
     <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full">
