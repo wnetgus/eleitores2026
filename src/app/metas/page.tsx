@@ -232,6 +232,10 @@ export default function MetasPage() {
     ? resolverMeta(userData.uid)
     : { valor: 0, tipo: "sem_meta" as const };
   const progressoMeta = minhaMeta > 0 ? Math.min(100, Math.round((eleitores.length / minhaMeta) * 100)) : 0;
+  const cidadesExpansao = Object.entries(
+    eleitores.reduce<Record<string, number>>((acc, e) => { acc[e.cidade] = (acc[e.cidade] || 0) + 1; return acc; }, {})
+  ).sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const maxExpansao = cidadesExpansao[0]?.[1] || 1;
 
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8" style={{ color: roleInfo.text.replace("text-", "") } as React.CSSProperties} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
@@ -240,8 +244,8 @@ export default function MetasPage() {
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center text-lg`}>{roleInfo.icon}</div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Metas</h1>
-          <p className={`text-sm ${roleInfo.text}`}>Acompanhe sua produtividade</p>
+          <h1 className="text-2xl font-bold text-white">{isPolitico(userData) ? "Metas de Expansão" : "Metas"}</h1>
+          <p className={`text-sm ${roleInfo.text}`}>{isPolitico(userData) ? "Evolução territorial da base política" : "Acompanhe sua produtividade"}</p>
         </div>
       </div>
 
@@ -556,36 +560,55 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      <GlassCard className="p-5">
-        <h3 className="text-white font-semibold mb-4">
-          {isColaborador(userData) ? "Meus Cadastros" : "Cadastros"}
-        </h3>
-        <div className="overflow-x-auto max-h-80 overflow-y-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-white/40 border-b border-white/[0.06]">
-                <th className="text-left py-2 px-2 font-medium">Nome</th>
-                <th className="text-left py-2 px-2 font-medium">Cidade</th>
-                <th className="text-left py-2 px-2 font-medium">Grau</th>
-                <th className="text-left py-2 px-2 font-medium">Data</th>
-              </tr>
-            </thead>
-            <tbody>
-              {eleitores.map((e) => (
-                <tr key={e.id} className="border-b border-white/[0.03]">
-                  <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td>
-                  <td className="py-2 px-2 text-white/50">{e.cidade}</td>
-                  <td className="py-2 px-2">
-                    <Badge variant={e.grauApoio === "forte" ? "success" : e.grauApoio === "medio" ? "warning" : e.grauApoio === "fraco" ? "danger" : "info"}>{e.grauApoio}</Badge>
-                  </td>
-                  <td className="py-2 px-2 text-white/40 text-xs">{formatDate(e.criadoEm)}</td>
-                </tr>
+      {isPolitico(userData) ? (
+        cidadesExpansao.length > 0 && (
+          <GlassCard className="p-5">
+            <h3 className="text-white font-semibold mb-5">Expansão Territorial</h3>
+            <div className="space-y-2.5">
+              {cidadesExpansao.map(([cidade, total]) => (
+                <div key={cidade} className="flex items-center gap-3">
+                  <span className="text-sm text-white/70 w-36 shrink-0 truncate">{cidade}</span>
+                  <div className="flex-1 bg-white/[0.04] rounded-full h-1.5">
+                    <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.round((total / maxExpansao) * 100)}%` }} />
+                  </div>
+                  <span className="text-sm text-white/50 w-8 text-right shrink-0">{total}</span>
+                </div>
               ))}
-              {eleitores.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-white/30">Nenhum cadastro ainda</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </GlassCard>
+            </div>
+          </GlassCard>
+        )
+      ) : (
+        <GlassCard className="p-5">
+          <h3 className="text-white font-semibold mb-4">
+            {isColaborador(userData) ? "Meus Cadastros" : "Cadastros"}
+          </h3>
+          <div className="overflow-x-auto max-h-80 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-white/40 border-b border-white/[0.06]">
+                  <th className="text-left py-2 px-2 font-medium">Nome</th>
+                  <th className="text-left py-2 px-2 font-medium">Cidade</th>
+                  <th className="text-left py-2 px-2 font-medium">Grau</th>
+                  <th className="text-left py-2 px-2 font-medium">Data</th>
+                </tr>
+              </thead>
+              <tbody>
+                {eleitores.map((e) => (
+                  <tr key={e.id} className="border-b border-white/[0.03]">
+                    <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td>
+                    <td className="py-2 px-2 text-white/50">{e.cidade}</td>
+                    <td className="py-2 px-2">
+                      <Badge variant={e.grauApoio === "forte" ? "success" : e.grauApoio === "medio" ? "warning" : e.grauApoio === "fraco" ? "danger" : "info"}>{e.grauApoio}</Badge>
+                    </td>
+                    <td className="py-2 px-2 text-white/40 text-xs">{formatDate(e.criadoEm)}</td>
+                  </tr>
+                ))}
+                {eleitores.length === 0 && <tr><td colSpan={4} className="py-8 text-center text-white/30">Nenhum cadastro ainda</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      )}
     </div>
   );
 }

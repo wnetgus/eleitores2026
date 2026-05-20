@@ -1,11 +1,59 @@
 "use client";
 
+import { useEffect } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { Toaster } from "react-hot-toast";
+
+const LEGACY_KEYS = ["eleitores_debug", "login_debug_log"];
+const BUILD_KEY = "_bid";
+
+function CacheBuster() {
+  // Build ID check — detects stale cached JS after a new Vercel deploy
+  useEffect(() => {
+    const buildId = process.env.NEXT_PUBLIC_BUILD_ID;
+    if (!buildId) return;
+
+    // Remove debug artifacts left from dev investigation
+    LEGACY_KEYS.forEach((k) => {
+      try { localStorage.removeItem(k); } catch {}
+    });
+
+    // Unregister any accidental service workers
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.unregister());
+      });
+    }
+
+    try {
+      const stored = localStorage.getItem(BUILD_KEY);
+      if (stored && stored !== buildId) {
+        // Stale bundle detected — reload once to fetch fresh assets
+        localStorage.setItem(BUILD_KEY, buildId);
+        window.location.reload();
+        return;
+      }
+      localStorage.setItem(BUILD_KEY, buildId);
+    } catch {}
+  }, []);
+
+  // BFCache detection — Chrome mobile restores pages from memory on back-navigation,
+  // bypassing network. e.persisted=true means the page came from BFCache.
+  useEffect(() => {
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) window.location.reload();
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  return null;
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
+      <CacheBuster />
       {children}
       <Toaster
         position="top-right"

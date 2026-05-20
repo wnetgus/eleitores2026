@@ -79,6 +79,7 @@ export interface Eleitor {
   grauApoio: "forte" | "medio" | "fraco" | "indeciso";
   candidatoId?: string;
   voto?: string;
+  motivoPrincipal?: string;
   observacoes: string;
   colaboradorId: string;
   colaboradorNome: string;

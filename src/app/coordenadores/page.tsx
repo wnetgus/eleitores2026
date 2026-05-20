@@ -19,7 +19,7 @@ import { Target, UserPlus, Shield, Mail, MapPin, Pencil, Power, Users, Filter, X
 import toast from "react-hot-toast";
 import { formatDate, sugerirEmail } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
-import { estados, cidades } from "@/lib/estados-cidades";
+import { estados, getCidades } from "@/lib/estados-cidades";
 import { Modal } from "@/components/ui/Modal";
 
 
@@ -131,7 +131,7 @@ export default function CoordenadoresPage() {
 
   function openEdit(c: AppUser) {
     setEditForm({ nome: c.nome, email: c.email, estado: c.estado || "", cidadePrincipal: c.cidadePrincipal || "", regiao: c.regiao || "" });
-    setCidadesEditDisponiveis(c.estado ? (cidades[c.estado] || []) : []);
+    setCidadesEditDisponiveis(c.estado ? getCidades(c.estado) : []);
     setEditModal(c);
   }
 
@@ -228,7 +228,7 @@ export default function CoordenadoresPage() {
           <Input label="Nome" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do coordenador" />
           <Input label="Email" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailManual(true); }} onFocus={() => setEmailManual(true)} placeholder="email@exemplo.com" />
           <Input label="Senha" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
-          <Select label="Estado" value={form.estado} onChange={(e) => { setForm({ ...form, estado: e.target.value, cidadePrincipal: "" }); setCidadesDisponiveis(cidades[e.target.value] || []); }} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
+          <Select label="Estado" value={form.estado} onChange={(e) => { setForm({ ...form, estado: e.target.value, cidadePrincipal: "" }); setCidadesDisponiveis(getCidades(e.target.value)); }} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
           <Select label="Cidade Principal" value={form.cidadePrincipal} onChange={(e) => setForm({ ...form, cidadePrincipal: e.target.value })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
           <Input label="Região" value={form.regiao} onChange={(e) => setForm({ ...form, regiao: e.target.value })} placeholder="Ex: Zona Sul" />
           <div className="flex items-end"><Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Criando..." : "Criar Coordenador"}</Button></div>
@@ -320,7 +320,7 @@ export default function CoordenadoresPage() {
         <div className="space-y-4">
           <Input label="Nome" value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
           <Input label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
-          <Select label="Estado" value={editForm.estado} onChange={(e) => { setEditForm({ ...editForm, estado: e.target.value, cidadePrincipal: "" }); setCidadesEditDisponiveis(cidades[e.target.value] || []); }} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
+          <Select label="Estado" value={editForm.estado} onChange={(e) => { setEditForm({ ...editForm, estado: e.target.value, cidadePrincipal: "" }); setCidadesEditDisponiveis(getCidades(e.target.value)); }} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
           <Select label="Cidade Principal" value={editForm.cidadePrincipal} onChange={(e) => setEditForm({ ...editForm, cidadePrincipal: e.target.value })} options={cidadesEditDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!editForm.estado} />
           <Input label="Região" value={editForm.regiao} onChange={(e) => setEditForm({ ...editForm, regiao: e.target.value })} />
           <div className="flex gap-3 pt-2">

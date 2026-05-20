@@ -57,51 +57,70 @@ export default function PainelGabinetePage() {
         ? query(collection(db, "atividades"), orderBy("criadoEm", "desc"), limit(50))
         : query(collection(db, "atividades"), where("gabineteId", "==", id), orderBy("criadoEm", "desc"), limit(50));
 
-      const [gSnap, eSnap, aSnap, cSnap] = await Promise.all([
+      const [gResult, eResult, aResult, cResult] = await Promise.allSettled([
         getDoc(doc(db, "campanhas", id)),
         getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", id), orderBy("criadoEm", "desc"))),
         getDocs(aQuery),
         getDocs(query(collection(db, "candidatos"), where("gabineteId", "==", id))),
       ]);
 
-      let allUsuarios: AppUser[];
-      if (isAdmin) {
-        const uSnap = await getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc")));
-        allUsuarios = uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
-      } else {
-        const [uSnap1, uSnap2] = await Promise.all([
-          getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", id), orderBy("criadoEm", "desc"))),
-          getDocs(query(collection(db, "usuarios"), where("gabineteId", "==", id), orderBy("criadoEm", "desc"))),
-        ]);
-        const uMap = new Map<string, AppUser>();
-        [...uSnap1.docs, ...uSnap2.docs].forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
-        allUsuarios = [...uMap.values()];
+      if (gResult.status === "rejected") {
+        console.error("Permissão negada ao ler gabinete:", gResult.reason?.code || gResult.reason);
+        return;
       }
+      const gSnap = gResult.value;
+      if (!gSnap.exists()) return;
 
       setGabinete({ id: gSnap.id, ...gSnap.data() } as Gabinete);
-      setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+
+      if (eResult.status === "fulfilled")
+        setEleitores(eResult.value.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+      if (aResult.status === "fulfilled")
+        setAtividades(aResult.value.docs.map((d) => ({ id: d.id, ...d.data() } as Atividade)));
+      if (cResult.status === "fulfilled")
+        setCandidatos(cResult.value.docs.map((d) => ({ id: d.id, ...d.data() } as Candidato)));
+
+      let allUsuarios: AppUser[] = [];
+      try {
+        if (isAdmin) {
+          const uSnap = await getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc")));
+          allUsuarios = uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+        } else {
+          const [uSnap1, uSnap2] = await Promise.allSettled([
+            getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", id), orderBy("criadoEm", "desc"))),
+            getDocs(query(collection(db, "usuarios"), where("gabineteId", "==", id), orderBy("criadoEm", "desc"))),
+          ]);
+          const uMap = new Map<string, AppUser>();
+          [uSnap1, uSnap2].forEach((r) => {
+            if (r.status === "fulfilled")
+              r.value.docs.forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
+          });
+          allUsuarios = [...uMap.values()];
+        }
+      } catch (e) { console.error("Erro ao carregar usuários:", e); }
       setUsuarios(allUsuarios);
-      setAtividades(aSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Atividade)));
-      setCandidatos(cSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Candidato)));
 
       const gData = gSnap.data() as Gabinete;
       if (isAdmin && gData?.parentGabineteId) {
-        const parentSnap = await getDoc(doc(db, "campanhas", gData.parentGabineteId));
-        if (parentSnap.exists()) {
-          gData.parentGabineteNome = parentSnap.data().nome;
-        }
+        try {
+          const parentSnap = await getDoc(doc(db, "campanhas", gData.parentGabineteId));
+          if (parentSnap.exists()) gData.parentGabineteNome = parentSnap.data().nome;
+        } catch {}
       }
 
-      const filhos = await buscarGabinetesFilhos(id);
-      setGabinetesFilhos(filhos);
-      if (isAdmin && filhos.length > 0) {
-        const filhoIds = filhos.map((f) => f.id!).filter(Boolean);
-        const eleitoresFilhosData = await buscarEleitoresPorGabinetes(filhoIds);
-        setEleitoresFilhos(eleitoresFilhosData);
-      }
-      const todos = isAdmin ? await getGabinetes() : [];
+      try {
+        const filhos = await buscarGabinetesFilhos(id);
+        setGabinetesFilhos(filhos);
+        if (isAdmin && filhos.length > 0) {
+          const filhoIds = filhos.map((f) => f.id!).filter(Boolean);
+          const eleitoresFilhosData = await buscarEleitoresPorGabinetes(filhoIds);
+          setEleitoresFilhos(eleitoresFilhosData);
+        }
+      } catch {}
+
+      const todos = isAdmin ? await getGabinetes().catch(() => []) : [];
       setTodosGabinetes(todos);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+    } catch (e) { console.error("Erro ao carregar painel:", e); } finally { setLoading(false); }
   }
 
   async function vincularGabinete() {

@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { Eleitor, Candidato } from "@/types";
 import { atualizarEleitor, registrarAtividade, buscarCandidatos } from "@/lib/firestore";
 import { useAuth } from "@/contexts/AuthContext";
-import { estados, cidades } from "@/lib/estados-cidades";
+import { estados, getCidades, getBairros } from "@/lib/estados-cidades";
+import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -17,6 +18,19 @@ interface Props {
   onClose: () => void;
   onSaved: () => void;
 }
+
+const MOTIVOS_PRINCIPAIS = [
+  { value: "", label: "Selecione (opcional)..." },
+  { value: "nao_conhece", label: "Não conhece o candidato" },
+  { value: "apoia_outro", label: "Já apoia outro candidato" },
+  { value: "nao_gosta", label: "Não gosta do político" },
+  { value: "partido", label: "Insatisfação com o partido" },
+  { value: "reeleicao", label: "Não vota em reeleição" },
+  { value: "presenca", label: "Falta presença no bairro" },
+  { value: "promessa", label: "Promessa não cumprida" },
+  { value: "sem_interesse", label: "Sem interesse político" },
+  { value: "outro", label: "Outro" },
+];
 
 const grauOptions = [
   { value: "forte", label: "Forte" },
@@ -33,6 +47,7 @@ const tipoDocOptions = [
 
 export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
   const { userData } = useAuth();
+  const isOperacional = !!(userData && (isColaborador(userData) || isCoordenador(userData) || isAssessor(userData) || isSuperOrMaster(userData)));
   const [candidatos, setCandidatos] = useState<Candidato[]>([]);
   const [form, setForm] = useState({
     nomeCompleto: eleitor.nomeCompleto,
@@ -51,8 +66,9 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
     observacoes: eleitor.observacoes,
     colaboradorNome: eleitor.colaboradorNome,
     coordenadorNome: eleitor.coordenadorNome || "",
+    motivoPrincipal: eleitor.motivoPrincipal || "",
   });
-  const [cidadesLista, setCidadesLista] = useState(cidades[eleitor.estado] || []);
+  const [cidadesLista, setCidadesLista] = useState(getCidades(eleitor.estado));
   const [saving, setSaving] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
 
@@ -70,14 +86,16 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
       const res = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
       const data = await res.json();
       if (!data.erro) {
+        const novoEstado = data.uf || "";
         setForm((f) => ({
           ...f, cep: cepLimpo,
           logradouro: data.logradouro || f.logradouro,
-          bairro: data.bairro || f.bairro,
+          // If estado changes, only keep bairro if CEP provides one
+          bairro: data.bairro || (novoEstado && novoEstado !== f.estado ? "" : f.bairro),
           cidade: data.localidade || f.cidade,
-          estado: data.uf || f.estado,
+          estado: novoEstado || f.estado,
         }));
-        setCidadesLista(cidades[data.uf] || []);
+        if (novoEstado) setCidadesLista(getCidades(novoEstado));
       }
     } catch {} finally { setBuscandoCep(false); }
   }
@@ -106,6 +124,7 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
       if (form.complemento) data.complemento = form.complemento;
       if (form.candidatoId) data.candidatoId = form.candidatoId;
       if (form.coordenadorNome) data.coordenadorNome = form.coordenadorNome;
+      if (form.motivoPrincipal) data.motivoPrincipal = form.motivoPrincipal;
       await atualizarEleitor(eleitor.id, data);
       await registrarAtividade({
         acao: "editou_eleitor", usuarioId: userData.uid, usuarioNome: userData.nome,
@@ -144,16 +163,42 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
         <Select
           label="Estado"
           value={form.estado}
-          onChange={(e) => { setForm({ ...form, estado: e.target.value, cidade: "" }); setCidadesLista(cidades[e.target.value] || []); }}
+          onChange={(e) => { setForm({ ...form, estado: e.target.value, cidade: "", bairro: "" }); setCidadesLista(getCidades(e.target.value)); }}
           options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))}
         />
         <Select
           label="Cidade"
           value={form.cidade}
-          onChange={(e) => setForm({ ...form, cidade: e.target.value })}
+          onChange={(e) => setForm({ ...form, cidade: e.target.value, bairro: "" })}
           options={cidadesLista.map((c) => ({ value: c, label: c }))}
         />
-        <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} />
+        {isOperacional ? (
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-1.5">Bairro</label>
+            <input
+              list="edit-bairros-datalist"
+              value={form.bairro}
+              onChange={(e) => setForm({ ...form, bairro: e.target.value })}
+              placeholder="Digite ou selecione o bairro"
+              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+            />
+            <datalist id="edit-bairros-datalist">
+              {getBairros(form.cidade).map((b) => (
+                <option key={`${form.cidade}-${b}`} value={b} />
+              ))}
+            </datalist>
+          </div>
+        ) : (
+          <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} />
+        )}
+        {isOperacional && (
+          <Select
+            label="Motivo Principal"
+            value={form.motivoPrincipal}
+            onChange={(e) => setForm({ ...form, motivoPrincipal: e.target.value })}
+            options={MOTIVOS_PRINCIPAIS}
+          />
+        )}
         {candidatos.length > 0 && (
           <Select
             label="Candidato"
@@ -169,7 +214,9 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
           <textarea
             value={form.observacoes}
             onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-            className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all h-20 resize-none"
+            placeholder={isOperacional ? "Detalhes adicionais (opcional)" : ""}
+            rows={isOperacional ? 3 : 2}
+            className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
           />
         </div>
         {buscandoCep && <p className="text-sm text-white/40 animate-pulse">Buscando CEP...</p>}

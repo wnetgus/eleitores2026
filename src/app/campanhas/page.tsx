@@ -16,7 +16,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Building2, UserPlus, Globe, Plus, Power, Pencil, Trash2, ExternalLink, ChevronRight, Circle, Activity, MapPin, Target } from "lucide-react";
-import { estados, cidades } from "@/lib/estados-cidades";
+import { estados, getCidades } from "@/lib/estados-cidades";
 import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
@@ -114,12 +114,12 @@ export default function GabinetesPage() {
 
   function handleEstadoChange(sigla: string) {
     setForm((f) => ({ ...f, estado: sigla, cidade: "", municipios: [] }));
-    setCidadesDisponiveis(cidades[sigla] || []);
+    setCidadesDisponiveis(getCidades(sigla));
   }
 
   function handleEstadoChangeEdit(sigla: string) {
     setEditForm((f) => ({ ...f, estado: sigla, cidade: "", municipios: [] }));
-    setCidadesDisponiveisEdit(cidades[sigla] || []);
+    setCidadesDisponiveisEdit(getCidades(sigla));
   }
   const [saving, setSaving] = useState(false);
   const [eleitorCounts, setEleitorCounts] = useState<Record<string, number>>({});
@@ -223,7 +223,7 @@ export default function GabinetesPage() {
       nome: g.nome, slug: g.slug, cargo: g.cargo, slogan: g.slogan || "", corPrincipal: g.corPrincipal || "#8b5cf6",
       estado: g.estado || "", cidade: g.cidade || "", municipios: g.municipios || [], metaEleitoral: g.metaEleitoral?.toString() || "",
     });
-    if (g.estado) setCidadesDisponiveisEdit(cidades[g.estado] || []);
+    if (g.estado) setCidadesDisponiveisEdit(getCidades(g.estado));
     setEditModal(g);
   }
 
@@ -394,7 +394,7 @@ export default function GabinetesPage() {
                 </label>
                 <div className="bg-white/5 border border-white/10 rounded-xl p-3 max-h-40 overflow-y-auto grid grid-cols-2 md:grid-cols-3 gap-1.5">
                   {cidadesDisponiveis.length > 0 ? cidadesDisponiveis.map((cidade) => (
-                    <label key={cidade} className="flex items-center gap-2 cursor-pointer text-sm text-white/60 hover:text-white/90 transition-colors">
+                    <label key={`${form.estado}-${cidade}`} className="flex items-center gap-2 cursor-pointer text-sm text-white/60 hover:text-white/90 transition-colors">
                       <input
                         type="checkbox"
                         checked={form.municipios.includes(cidade)}
@@ -508,7 +508,7 @@ export default function GabinetesPage() {
                 </label>
                 <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 max-h-32 overflow-y-auto grid grid-cols-2 gap-1">
                   {cidadesDisponiveisEdit.map((cidade) => (
-                    <label key={cidade} className="flex items-center gap-1.5 cursor-pointer text-xs text-white/60 hover:text-white/90 transition-colors">
+                    <label key={`${editForm.estado}-${cidade}`} className="flex items-center gap-1.5 cursor-pointer text-xs text-white/60 hover:text-white/90 transition-colors">
                       <input
                         type="checkbox"
                         checked={editForm.municipios.includes(cidade)}

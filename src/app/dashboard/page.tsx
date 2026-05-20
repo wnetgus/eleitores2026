@@ -311,6 +311,68 @@ export default function DashboardPage() {
   const necessarioPorDia = diasParaEleicao > 0 && faltam > 0 ? Math.ceil(faltam / diasParaEleicao) : 0;
   const mostrarInteligencia = !isSuperOrMaster(userData) && (sfp !== null || ic !== null || colabsParaAnalise.length > 0 || metaScopeTotal > 0);
 
+  const crescimentoTerritorial = (() => {
+    if (!isPolitico(userData)) return [];
+    const agora = Date.now();
+    const d30 = agora - 30 * 86400000;
+    const d60 = agora - 60 * 86400000;
+    const map30: Record<string, number> = {};
+    const mapPrev: Record<string, number> = {};
+    eleitoresFiltrados.forEach((e) => {
+      const t = parseDate(e.criadoEm).getTime();
+      if (t > d30) map30[e.cidade] = (map30[e.cidade] || 0) + 1;
+      else if (t > d60) mapPrev[e.cidade] = (mapPrev[e.cidade] || 0) + 1;
+    });
+    return Object.entries(map30)
+      .map(([cidade, atual]) => {
+        const prev = mapPrev[cidade] || 0;
+        const delta = prev > 0 ? Math.round(((atual - prev) / prev) * 100) : 100;
+        return { cidade, atual, prev, delta };
+      })
+      .sort((a, b) => b.delta - a.delta)
+      .slice(0, 8);
+  })();
+  const maxCrescDelta = crescimentoTerritorial.length > 0
+    ? Math.max(...crescimentoTerritorial.map((i) => Math.abs(i.delta)), 1)
+    : 1;
+
+  const crescimento30dPolitico = isPolitico(userData) ? (() => {
+    const agora = Date.now();
+    const u30 = eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
+    const a30 = eleitoresFiltrados.filter((e) => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
+    return a30 > 0 ? Math.round(((u30 - a30) / a30) * 100) : u30 > 0 ? 100 : 0;
+  })() : 0;
+
+  const projecaoVotos = isPolitico(userData) && eleitoresFiltrados.length > 0 ? Math.round(
+    eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length * 0.9 +
+    eleitoresFiltrados.filter((e) => e.grauApoio === "medio").length * 0.6 +
+    eleitoresFiltrados.filter((e) => e.grauApoio === "indeciso").length * 0.25 +
+    eleitoresFiltrados.filter((e) => e.grauApoio === "fraco").length * 0.05
+  ) : 0;
+
+  const municipiosSemAtividade30d = isPolitico(userData) && eleitoresFiltrados.length > 0 ? (() => {
+    const comRegistros = new Set(eleitoresFiltrados.map((e) => e.cidade));
+    const comRecentes  = new Set(eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 30 * 86400000).map((e) => e.cidade));
+    return Array.from(comRegistros).filter((c) => !comRecentes.has(c)).length;
+  })() : 0;
+
+  const concentracaoRisco = isPolitico(userData) && eleitoresFiltrados.length >= 10 ? (() => {
+    const cids = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => { acc[e.cidade] = (acc[e.cidade] || 0) + 1; return acc; }, {});
+    const top3 = Object.values(cids).sort((a, b) => b - a).slice(0, 3).reduce((s, v) => s + v, 0);
+    return Math.round((top3 / eleitoresFiltrados.length) * 100);
+  })() : 0;
+
+  const indiceSaudeTerritorial = isPolitico(userData) && eleitoresFiltrados.length > 0 ? (() => {
+    const total = eleitoresFiltrados.length;
+    const pctForte = eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length / total;
+    const d30 = eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 30 * 86400000).length;
+    const qualidade      = Math.min(40, Math.round(pctForte * 100 * 0.4));
+    const crescScore     = crescimento30dPolitico > 20 ? 25 : crescimento30dPolitico > 5 ? 18 : crescimento30dPolitico > 0 ? 10 : 0;
+    const diversScore    = Math.round((1 - concentracaoRisco / 100) * 20);
+    const atividadeScore = Math.min(15, Math.round((d30 / total) * 15));
+    return Math.min(100, Math.round(qualidade + crescScore + diversScore + atividadeScore));
+  })() : 0;
+
   return (
     <div className="space-y-6 animate-in">
       {/* SEÇÃO PREMIUM — SUPER ADMIN */}
@@ -480,11 +542,68 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-white/40">Operador</p>
+            <p className="text-xs text-white/40">{isPolitico(userData) ? "Político" : "Operador"}</p>
             <p className="text-sm text-white/80 font-medium">{userData.nome}</p>
             <p className={`text-xs ${roleInfo.text}`}>{roleInfo.label}</p>
           </div>
         </div>
+      )}
+
+      {/* BRIEFING EXECUTIVO — exclusivo para deputado federal */}
+      {isPolitico(userData) && eleitoresFiltrados.length > 0 && (
+        <GlassCard className="p-5 border-violet-500/10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Zap size={15} className="text-violet-400" />
+              <span className="text-xs text-violet-400 font-semibold uppercase tracking-wider">Briefing Executivo</span>
+            </div>
+            <span className="text-[11px] text-white/20">{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</span>
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm text-white/80 leading-relaxed">
+              {ultimos7 > 0
+                ? `Sua base cresceu ${ultimos7} apoiador${ultimos7 !== 1 ? "es" : ""} nos últimos 7 dias.`
+                : "Nenhum cadastro novo nos últimos 7 dias — considere acionar sua equipe."}
+              {topCidade ? ` ${topCidade[0]} é seu território mais forte.` : ""}
+            </p>
+            {municipiosSemAtividade30d > 0 && (
+              <p className="text-sm text-amber-400/80">
+                ⚠ {municipiosSemAtividade30d} {municipiosSemAtividade30d === 1 ? "município sem" : "municípios sem"} novos cadastros nos últimos 30 dias.
+              </p>
+            )}
+            {concentracaoRisco > 70 && (
+              <p className="text-sm text-red-400/80">
+                ⚠ {concentracaoRisco}% da base concentrada em 3 territórios — risco de dependência territorial.
+              </p>
+            )}
+            {projecaoVotos > 0 && (
+              <p className="text-sm text-white/50">
+                Potencial estimado: <span className="text-violet-400 font-semibold">{projecaoVotos.toLocaleString("pt-BR")} votos</span> com a base atual.
+              </p>
+            )}
+          </div>
+          {indiceSaudeTerritorial > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/[0.05] flex items-center gap-4 flex-wrap">
+              <div>
+                <p className="text-[11px] text-white/30 uppercase tracking-wider mb-1.5">Índice de Saúde Territorial</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-28 h-1.5 bg-white/[0.06] rounded-full">
+                    <div
+                      className={`h-1.5 rounded-full transition-all ${indiceSaudeTerritorial >= 70 ? "bg-emerald-500" : indiceSaudeTerritorial >= 45 ? "bg-amber-500" : "bg-red-500"}`}
+                      style={{ width: `${indiceSaudeTerritorial}%` }}
+                    />
+                  </div>
+                  <span className={`text-lg font-bold ${indiceSaudeTerritorial >= 70 ? "text-emerald-400" : indiceSaudeTerritorial >= 45 ? "text-amber-400" : "text-red-400"}`}>
+                    {indiceSaudeTerritorial}<span className="text-sm font-normal text-white/30">/100</span>
+                  </span>
+                </div>
+              </div>
+              <p className="text-xs text-white/25 ml-auto hidden sm:block">
+                {indiceSaudeTerritorial >= 70 ? "Base sólida e crescente" : indiceSaudeTerritorial >= 45 ? "Atenção a algumas regiões" : "Requer ação estratégica"}
+              </p>
+            </div>
+          )}
+        </GlassCard>
       )}
 
       {/* CABEÇALHO: Coordenador */}
@@ -916,6 +1035,32 @@ export default function DashboardPage() {
             {isPrefeito(userData) && cidadesArray.length > 0 && <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />}
             {isVereador(userData) && cidadesArray.length > 0 && <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />}
             {estadosArray.length > 0 && <ApoiadoresPorEstado data={estadosArray} />}
+            {isPolitico(userData) && crescimentoTerritorial.length > 0 && (
+              <GlassCard className="p-5">
+                <div className="flex items-center gap-2 mb-5">
+                  <TrendingUp size={16} className="text-violet-400" />
+                  <h3 className="text-white font-semibold">Crescimento Territorial — 30 dias</h3>
+                </div>
+                <div className="space-y-3">
+                  {crescimentoTerritorial.map((item) => (
+                    <div key={item.cidade} className="flex items-center gap-3">
+                      <span className="text-sm text-white/70 w-28 shrink-0 truncate">{item.cidade}</span>
+                      <div className="flex-1 bg-white/[0.04] rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full ${item.delta >= 0 ? "bg-emerald-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.round((Math.abs(item.delta) / maxCrescDelta) * 100)}%` }}
+                        />
+                      </div>
+                      <span className={`text-sm font-bold w-14 text-right shrink-0 ${item.delta >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {item.delta > 0 ? "+" : ""}{item.delta}%
+                      </span>
+                      <span className="text-xs text-white/25 w-12 text-right shrink-0">{item.atual} cad.</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-[11px] text-white/20 mt-4">Últimos 30 dias vs. 30 dias anteriores</p>
+              </GlassCard>
+            )}
           </div>
 
           <GlassCard className="p-5">

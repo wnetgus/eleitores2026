@@ -15,7 +15,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { formatDate, parseDate, mascaraTelefone, mascaraCEP, mascaraDocumento, sugerirEmail } from "@/lib/utils";
-import { estados, cidades } from "@/lib/estados-cidades";
+import { estados, getCidades } from "@/lib/estados-cidades";
 import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
 import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
 import { Users, Trophy, TrendingUp, Calendar, UserPlus, Zap, Mail, MapPin, Building2, ChevronRight, Trash2, Pencil, Search } from "lucide-react";
@@ -127,7 +127,7 @@ export default function ColaboradoresPage() {
 
   function handleEstadoChange(sigla: string) {
     setForm((f) => ({ ...f, estado: sigla, cidade: "" }));
-    setCidadesDisponiveis(cidades[sigla] || []);
+    setCidadesDisponiveis(getCidades(sigla));
   }
 
   async function buscarCep(cep: string) {
@@ -146,7 +146,7 @@ export default function ColaboradoresPage() {
           cidade: data.localidade || f.cidade,
           estado: siglaEstado || f.estado,
         }));
-        setCidadesDisponiveis(cidades[siglaEstado] || []);
+        setCidadesDisponiveis(getCidades(siglaEstado));
       }
     } catch {} finally { setBuscandoCep(false); }
   }

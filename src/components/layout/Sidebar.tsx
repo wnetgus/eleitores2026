@@ -55,15 +55,13 @@ const superAdminMenu = [
 ];
 
 const politicoMenu = [
-  { href: "/dashboard", label: "Meu Mandato", icon: Crown },
-  { href: "/mapa-politico", label: "Mapa Político", icon: Map },
+  { href: "/dashboard", label: "Centro de Mandato", icon: Crown },
+  { href: "/mapa-politico", label: "Força Territorial", icon: Map },
   { href: "/assessores", label: "Assessores", icon: Shield },
-  { href: "/coordenadores", label: "Coordenadores", icon: Target },
-  { href: "/colaboradores", label: "Colaboradores", icon: Users },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
-  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/eleitores", label: "Base Eleitoral", icon: TrendingUp },
+  { href: "/relatorios", label: "Inteligência Política", icon: Zap },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
-  { href: "/metas", label: "Metas", icon: TrendingUp },
+  { href: "/metas", label: "Metas de Expansão", icon: Target },
 ];
 
 const prefeitoMenu = [
@@ -263,7 +261,7 @@ export function Sidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white/90 font-medium truncate">{userData.nome}</p>
-                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>Operador • {roleInfo.label}</p>
+                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>{isAdmin ? "Admin" : isPoliticoRole ? "Político" : "Operador"} • {roleInfo.label}</p>
                 {hierarquia.coordenador && <p className="text-[10px] text-white/40 truncate">Coordenação: {hierarquia.coordenador}</p>}
                 {hierarquia.assessor && <p className="text-[10px] text-white/30 truncate">Assessoria: {hierarquia.assessor}</p>}
               </div>
