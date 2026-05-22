@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * seed-cenario-fake.mjs
- * Cria o micro-cenário político fake para validação da plataforma.
+ * seed-cenario-fake.mjs — v2.0 ESCALA TERRITORIAL
+ *
+ * Simulação política regional robusta para validação cognitiva da plataforma.
+ * 16 assessores · ~80 coordenadores · ~300 mobilizadores · ~4000 eleitores
+ * Nordeste (PE, BA, CE, PB, AL, RN) — distribuição territorial realista
  *
  * USO:
  *   node scripts/seed-cenario-fake.mjs           (cria)
@@ -18,471 +21,608 @@ import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 
-// ============================================================
-// ENV — lê .env.local (mesmo padrão dos outros scripts)
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
+// ENV
+// ─────────────────────────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url));
 try {
-  const envContent = readFileSync(resolve(__dirname, "..", ".env.local"), "utf-8");
-  for (const line of envContent.split("\n")) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eqIdx = trimmed.indexOf("=");
-    if (eqIdx === -1) continue;
-    const key = trimmed.slice(0, eqIdx).trim();
-    let val = trimmed.slice(eqIdx + 1).trim();
-    if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) val = val.slice(1, -1);
-    if (!process.env[key]) process.env[key] = val;
+  const env = readFileSync(resolve(__dirname, "..", ".env.local"), "utf-8");
+  for (const line of env.split("\n")) {
+    const t = line.trim();
+    if (!t || t.startsWith("#")) continue;
+    const i = t.indexOf("=");
+    if (i === -1) continue;
+    const k = t.slice(0, i).trim();
+    let v = t.slice(i + 1).trim();
+    if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) v = v.slice(1, -1);
+    if (!process.env[k]) process.env[k] = v;
   }
-} catch { /* vars já podem estar no ambiente */ }
+} catch { /* vars já no ambiente */ }
 
-// ============================================================
-// CORES
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
+// FIREBASE
+// ─────────────────────────────────────────────────────────────────
 const C = {
   reset: "\x1b[0m", bold: "\x1b[1m", dim: "\x1b[2m",
   red: "\x1b[31m", green: "\x1b[32m", yellow: "\x1b[33m",
-  blue: "\x1b[34m", cyan: "\x1b[36m", white: "\x1b[37m",
+  blue: "\x1b[34m", cyan: "\x1b[36m",
 };
-const log = (msg, c = C.reset) => console.log(c + msg + C.reset);
+const log = (m, c = C.reset) => console.log(c + m + C.reset);
 
-// ============================================================
-// FIREBASE ADMIN
-// ============================================================
 const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
 const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
 const projectId = process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
-
 if (!privateKey || !clientEmail || !projectId) {
   log("❌ Variáveis de ambiente não encontradas.", C.red);
-  log("   Necessário em .env.local: FIREBASE_ADMIN_PRIVATE_KEY, FIREBASE_ADMIN_CLIENT_EMAIL, NEXT_PUBLIC_FIREBASE_PROJECT_ID", C.yellow);
+  log("   Necessário: FIREBASE_ADMIN_PRIVATE_KEY, FIREBASE_ADMIN_CLIENT_EMAIL, NEXT_PUBLIC_FIREBASE_PROJECT_ID", C.yellow);
   process.exit(1);
 }
-if (getApps().length === 0) {
-  initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
-}
+if (getApps().length === 0) initializeApp({ credential: cert({ projectId, clientEmail, privateKey }) });
 
 const auth = getAuth();
 const db = getFirestore();
 const MANIFEST = db.collection("_seed_manifest").doc("cenario_01");
 
-// ============================================================
-// CONSTANTES DO CENÁRIO
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
+// CONSTANTES
+// ─────────────────────────────────────────────────────────────────
 const SENHA = "111111";
 const SUPER_EMAIL = "wnetgus@gmail.com";
 const IS_RESET = process.argv.includes("--reset");
 
-// Nomes reais fictícios para eleitores (pool de 65)
+// Pool de nomes — 80 nomes fictícios
 const NOMES = [
-  "João Silva", "Maria Santos", "Pedro Oliveira", "Ana Costa", "Carlos Ferreira",
-  "Fernanda Lima", "Lucas Rodrigues", "Juliana Pereira", "Roberto Alves", "Patricia Gomes",
-  "Marcos Souza", "Camila Ribeiro", "Anderson Carvalho", "Tânia Martins", "Rafael Nascimento",
-  "Sandra Barbosa", "Thiago Lopes", "Cristina Moura", "Gustavo Dias", "Beatriz Castro",
-  "Felipe Campos", "Vanessa Ramos", "Eduardo Correia", "Simone Pinto", "Henrique Barros",
-  "Letícia Cunha", "Rodrigo Teixeira", "Mariana Cruz", "Diego Monteiro", "Priscila Nunes",
-  "Vinicius Cavalcanti", "Rosana Freitas", "Leonardo Tavares", "Claudia Pires", "Gustavo Mendes",
-  "Elaine Nogueira", "Sergio Azevedo", "Viviane Cardoso", "Leandro Barros", "Miriam Vieira",
-  "André Fonseca", "Cláudia Arruda", "Renato Sousa", "Denise Figueiredo", "Maurício Aguiar",
-  "Sônia Macedo", "Fábio Cavalcante", "Raquel Medeiros", "Wagner Sampaio", "Giovanna Rocha",
-  "Cesar Andrade", "Monica Paiva", "Nilton Melo", "Adriana Vaz", "Luciano Prado",
-  "Tereza Torres", "Manoel Reis", "Catarina Porto", "Cid Batista", "Helena Queiroz",
-  "Ademar Luz", "Ruth Corrêa", "Raimundo Faria", "Silvana Braga", "Vilma Lacerda",
+  "João Silva","Maria Santos","Pedro Oliveira","Ana Costa","Carlos Ferreira",
+  "Fernanda Lima","Lucas Rodrigues","Juliana Pereira","Roberto Alves","Patricia Gomes",
+  "Marcos Souza","Camila Ribeiro","Anderson Carvalho","Tânia Martins","Rafael Nascimento",
+  "Sandra Barbosa","Thiago Lopes","Cristina Moura","Gustavo Dias","Beatriz Castro",
+  "Felipe Campos","Vanessa Ramos","Eduardo Correia","Simone Pinto","Henrique Barros",
+  "Letícia Cunha","Rodrigo Teixeira","Mariana Cruz","Diego Monteiro","Priscila Nunes",
+  "Vinicius Cavalcanti","Rosana Freitas","Leonardo Tavares","Claudia Pires","Gustavo Mendes",
+  "Elaine Nogueira","Sergio Azevedo","Viviane Cardoso","Leandro Barros","Miriam Vieira",
+  "André Fonseca","Cláudia Arruda","Renato Sousa","Denise Figueiredo","Maurício Aguiar",
+  "Sônia Macedo","Fábio Cavalcante","Raquel Medeiros","Wagner Sampaio","Giovanna Rocha",
+  "Cesar Andrade","Monica Paiva","Nilton Melo","Adriana Vaz","Luciano Prado",
+  "Tereza Torres","Manoel Reis","Catarina Porto","Cid Batista","Helena Queiroz",
+  "Ademar Luz","Ruth Corrêa","Raimundo Faria","Silvana Braga","Vilma Lacerda",
+  "Edson Carvalho","Nadir Souza","Alcides Ferreira","Zilda Costa","Benedita Silva",
+  "Antônio Barros","Conceição Lima","Francisco Pereira","Iracema Santos","Josefa Alves",
+  "Cícero Nunes","Dalva Ribeiro","Expedito Araujo","Gracinha Melo","Heraldo Campos",
 ];
-let _nomeIdx = 0;
-const proximoNome = () => NOMES[_nomeIdx++ % NOMES.length];
-
-let _docIdx = 100001;
-const proximoDoc = () => String(_docIdx++).padStart(11, "0");
-
-// ts(n) = Timestamp de n dias atrás
+let _ni = 0;
+const proximoNome = () => NOMES[_ni++ % NOMES.length];
+let _di = 200001;
+const proximoDoc  = () => String(_di++).padStart(11, "0");
+let _ei = 1;
+const proximoEmail = (role) => `${role}.${_ei++}@cenario.fake`;
 const ts = (n) => Timestamp.fromDate(new Date(Date.now() - n * 86_400_000));
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const novoId = () => db.collection("_tmp").doc().id;
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
+// PERFIS TERRITORIAIS
+// ─────────────────────────────────────────────────────────────────
+// graus: [forte%, medio%, fraco%, indeciso%]
+const PERFIS = {
+  dominante: { graus: [0.55,0.30,0.08,0.07], diasEleitor: ()=>Math.random()<0.75?rnd(1,28):rnd(30,80), diasMob: ()=>rnd(1,4),  diasCoord: ()=>rnd(1,3)  },
+  crescendo: { graus: [0.42,0.38,0.10,0.10], diasEleitor: ()=>Math.random()<0.80?rnd(1,22):rnd(23,70), diasMob: ()=>rnd(1,6),  diasCoord: ()=>rnd(1,4)  },
+  emergente: { graus: [0.45,0.35,0.10,0.10], diasEleitor: ()=>rnd(1,18),                               diasMob: ()=>rnd(1,5),  diasCoord: ()=>rnd(1,4)  },
+  parado:    { graus: [0.32,0.38,0.18,0.12], diasEleitor: ()=>rnd(32,65),                              diasMob: ()=>rnd(12,28),diasCoord: ()=>rnd(10,22) },
+  estagnado: { graus: [0.28,0.40,0.20,0.12], diasEleitor: ()=>rnd(38,100),                             diasMob: ()=>rnd(38,70),diasCoord: ()=>rnd(35,60) },
+  critico:   { graus: [0.08,0.18,0.44,0.30], diasEleitor: ()=>rnd(50,120),                             diasMob: ()=>rnd(45,90),diasCoord: ()=>rnd(40,80) },
+};
+
+function gerarGrau(perfilNome) {
+  const [f, m, fr] = PERFIS[perfilNome].graus;
+  const r = Math.random();
+  if (r < f)       return "forte";
+  if (r < f + m)   return "medio";
+  if (r < f + m + fr) return "fraco";
+  return "indeciso";
+}
+
+// ─────────────────────────────────────────────────────────────────
+// DEFINIÇÃO TERRITORIAL (16 assessores regionais)
+// ─────────────────────────────────────────────────────────────────
+// Cada território: assessor com auth, coords/mobs como Firestore-only
+// coords: número por cidade | mobsPorCoord | ePorMob: eleitores por mobilizador
+// ─────────────────────────────────────────────────────────────────
+const TERRITORIOS = [
+  // ── PE — RECIFE METROPOLITANO (DOMINANTE) ──────────────────────
+  {
+    id: "pe.recife", perfil: "dominante",
+    assessorEmail: "assessor.pe.recife@mail.com",
+    assessorNome: "Marcos Tenório", cidadePrincipal: "Recife", estado: "PE",
+    cidades: [
+      { nome:"Recife",   estado:"PE", bairros:["Boa Vista","Casa Amarela","Várzea","Torre","Madalena","Boa Viagem","Afogados","Dois Irmãos"], coords:4, mobsPorCoord:5, ePorMob:22 },
+      { nome:"Olinda",   estado:"PE", bairros:["Carmo","Amparo","Rio Doce","Jardim Atlântico"],                                               coords:2, mobsPorCoord:4, ePorMob:12 },
+      { nome:"Paulista", estado:"PE", bairros:["Centro","Nova Esperança","Maranguape"],                                                       coords:2, mobsPorCoord:3, ePorMob:10 },
+    ],
+  },
+  // ── PE — INTERIOR AGRESTE (CRESCENDO) ─────────────────────────
+  {
+    id: "pe.interior", perfil: "crescendo",
+    assessorEmail: "assessor.pe.interior@mail.com",
+    assessorNome: "Carla Barros", cidadePrincipal: "Caruaru", estado: "PE",
+    cidades: [
+      { nome:"Caruaru",   estado:"PE", bairros:["Centro","Maurício de Nassau","Indianópolis","Rocha Cavalcante"], coords:3, mobsPorCoord:4, ePorMob:13 },
+      { nome:"Garanhuns", estado:"PE", bairros:["Centro","Heliópolis","Magano","São José"],                        coords:2, mobsPorCoord:3, ePorMob:9  },
+      { nome:"Caetés",    estado:"PE", bairros:["Centro","Vila Nova"],                                             coords:1, mobsPorCoord:2, ePorMob:6  },
+    ],
+  },
+  // ── PE — SERTÃO OESTE (ESTAGNADO) ────────────────────────────
+  {
+    id: "pe.oeste", perfil: "estagnado",
+    assessorEmail: "assessor.pe.oeste@mail.com",
+    assessorNome: "Fábio Alcântara", cidadePrincipal: "Petrolina", estado: "PE",
+    cidades: [
+      { nome:"Petrolina", estado:"PE", bairros:["Centro","Cohab","Jardim Quadrado","José e Maria"], coords:2, mobsPorCoord:3, ePorMob:9 },
+      { nome:"Araripina", estado:"PE", bairros:["Centro","Bela Vista"],                             coords:1, mobsPorCoord:2, ePorMob:5 },
+      { nome:"Salgueiro", estado:"PE", bairros:["Centro","Santa Cruz"],                             coords:1, mobsPorCoord:2, ePorMob:4 },
+    ],
+  },
+  // ── PE — ZONA DA MATA (EMERGENTE) ─────────────────────────────
+  {
+    id: "pe.mata", perfil: "emergente",
+    assessorEmail: "assessor.pe.mata@mail.com",
+    assessorNome: "Cintia Amorim", cidadePrincipal: "Caruaru", estado: "PE",
+    cidades: [
+      { nome:"Caruaru",  estado:"PE", bairros:["Rocha Cavalcante","Boa Vista","Petrópolis"],  coords:2, mobsPorCoord:3, ePorMob:10 },
+      { nome:"Bezerros", estado:"PE", bairros:["Centro","Santa Catarina"],                    coords:1, mobsPorCoord:2, ePorMob:6  },
+      { nome:"Gravatá",  estado:"PE", bairros:["Centro","Chã Grande"],                        coords:1, mobsPorCoord:2, ePorMob:5  },
+    ],
+  },
+  // ── BA — FEIRA DE SANTANA (CRESCENDO) ─────────────────────────
+  {
+    id: "ba.feira", perfil: "crescendo",
+    assessorEmail: "assessor.ba.feira@mail.com",
+    assessorNome: "Patrícia Nunes", cidadePrincipal: "Feira de Santana", estado: "BA",
+    cidades: [
+      { nome:"Feira de Santana",      estado:"BA", bairros:["Centro","Kalilândia","Papagaio","Brasília","Caseb","Muchila"], coords:4, mobsPorCoord:5, ePorMob:16 },
+      { nome:"Santo Antônio de Jesus",estado:"BA", bairros:["Centro","Nossa Senhora","Loteamento"],                        coords:2, mobsPorCoord:3, ePorMob:9  },
+    ],
+  },
+  // ── BA — VITÓRIA DA CONQUISTA (PARADO) ────────────────────────
+  {
+    id: "ba.conquista", perfil: "parado",
+    assessorEmail: "assessor.ba.conquista@mail.com",
+    assessorNome: "Jorge Lima", cidadePrincipal: "Vitória da Conquista", estado: "BA",
+    cidades: [
+      { nome:"Vitória da Conquista", estado:"BA", bairros:["Centro","Ibirapuera","Lagoa","Brasil","Recreio"],     coords:3, mobsPorCoord:4, ePorMob:10 },
+      { nome:"Jequié",               estado:"BA", bairros:["Centro","Jequiezinho","Mandacaru","Joaquim Romão"],    coords:2, mobsPorCoord:3, ePorMob:7  },
+    ],
+  },
+  // ── BA — NORTE/PAULO AFONSO (CRÍTICO) ────────────────────────
+  {
+    id: "ba.norte", perfil: "critico",
+    assessorEmail: "assessor.ba.norte@mail.com",
+    assessorNome: "Sandra Melo", cidadePrincipal: "Paulo Afonso", estado: "BA",
+    cidades: [
+      { nome:"Paulo Afonso", estado:"BA", bairros:["Centro","Caatinga","Cohab"],       coords:2, mobsPorCoord:2, ePorMob:5 },
+      { nome:"Juazeiro",     estado:"BA", bairros:["Centro","Massangano","Juremal"],   coords:1, mobsPorCoord:2, ePorMob:4 },
+    ],
+  },
+  // ── BA — SUL (PARADO) ─────────────────────────────────────────
+  {
+    id: "ba.sul", perfil: "parado",
+    assessorEmail: "assessor.ba.sul@mail.com",
+    assessorNome: "Ricardo Vaz", cidadePrincipal: "Ilhéus", estado: "BA",
+    cidades: [
+      { nome:"Ilhéus",  estado:"BA", bairros:["Centro","Olivença","São Caetano","Pontalzinho"],  coords:2, mobsPorCoord:3, ePorMob:9 },
+      { nome:"Itabuna", estado:"BA", bairros:["Centro","Zildolândia","Banco da Vitória"],        coords:2, mobsPorCoord:3, ePorMob:7 },
+    ],
+  },
+  // ── CE — CARIRI/INTERIOR (DOMINANTE) ──────────────────────────
+  {
+    id: "ce.interior", perfil: "dominante",
+    assessorEmail: "assessor.ce.interior@mail.com",
+    assessorNome: "Luiz Freitas", cidadePrincipal: "Juazeiro do Norte", estado: "CE",
+    cidades: [
+      { nome:"Juazeiro do Norte", estado:"CE", bairros:["Centro","Lagoa Seca","Triângulo","Salesiano","Limoeiro","São Miguel"], coords:4, mobsPorCoord:5, ePorMob:18 },
+      { nome:"Crato",             estado:"CE", bairros:["Centro","Seminário","Pinto Madeira","Mirandão"],                        coords:2, mobsPorCoord:3, ePorMob:10 },
+      { nome:"Sobral",            estado:"CE", bairros:["Centro","Derby","Terrenos Novos","Padre Ibiapina"],                     coords:2, mobsPorCoord:3, ePorMob:9  },
+    ],
+  },
+  // ── CE — FORTALEZA CAPITAL (EMERGENTE) ────────────────────────
+  {
+    id: "ce.capital", perfil: "emergente",
+    assessorEmail: "assessor.ce.capital@mail.com",
+    assessorNome: "Andréia Costa", cidadePrincipal: "Fortaleza", estado: "CE",
+    cidades: [
+      { nome:"Fortaleza", estado:"CE", bairros:["Aldeota","Maraponga","Parangaba","Messejana","Bom Jardim","Conjunto Ceará","Ellery"], coords:5, mobsPorCoord:5, ePorMob:14 },
+      { nome:"Caucaia",   estado:"CE", bairros:["Centro","Jurema","Parque Tabapuá","Mirambé"],                                         coords:2, mobsPorCoord:3, ePorMob:8  },
+    ],
+  },
+  // ── PB — JOÃO PESSOA CAPITAL (EMERGENTE) ──────────────────────
+  {
+    id: "pb.capital", perfil: "emergente",
+    assessorEmail: "assessor.pb.capital@mail.com",
+    assessorNome: "Fernanda Rocha", cidadePrincipal: "João Pessoa", estado: "PB",
+    cidades: [
+      { nome:"João Pessoa", estado:"PB", bairros:["Centro","Mangabeira","Bancários","Tambauzinho","Expedicionários","Valentina"], coords:3, mobsPorCoord:4, ePorMob:11 },
+      { nome:"Cabedelo",    estado:"PB", bairros:["Centro","Ponta de Mato","Camboinha"],                                           coords:1, mobsPorCoord:3, ePorMob:7  },
+    ],
+  },
+  // ── PB — CAMPINA GRANDE INTERIOR (PARADO) ─────────────────────
+  {
+    id: "pb.interior", perfil: "parado",
+    assessorEmail: "assessor.pb.interior@mail.com",
+    assessorNome: "Hélio Santos", cidadePrincipal: "Campina Grande", estado: "PB",
+    cidades: [
+      { nome:"Campina Grande", estado:"PB", bairros:["Centro","Bodocongó","Pedregal","Catole","Miriam","Dinamérica"], coords:3, mobsPorCoord:4, ePorMob:10 },
+      { nome:"Patos",          estado:"PB", bairros:["Centro","Jatobá","Alto da Tubiba"],                             coords:1, mobsPorCoord:2, ePorMob:6  },
+    ],
+  },
+  // ── AL — MACEIÓ CAPITAL (CRÍTICO) ─────────────────────────────
+  {
+    id: "al.capital", perfil: "critico",
+    assessorEmail: "assessor.al.capital@mail.com",
+    assessorNome: "Débora Lira", cidadePrincipal: "Maceió", estado: "AL",
+    cidades: [
+      { nome:"Maceió", estado:"AL", bairros:["Centro","Pajuçara","Farol","Serraria","Benedito Bentes"], coords:2, mobsPorCoord:3, ePorMob:7 },
+    ],
+  },
+  // ── AL — INTERIOR (ESTAGNADO) ─────────────────────────────────
+  {
+    id: "al.interior", perfil: "estagnado",
+    assessorEmail: "assessor.al.interior@mail.com",
+    assessorNome: "Tiago Fonseca", cidadePrincipal: "Arapiraca", estado: "AL",
+    cidades: [
+      { nome:"Arapiraca",         estado:"AL", bairros:["Centro","Cacimbas","Jardim Esperança","Primavera"], coords:2, mobsPorCoord:3, ePorMob:7 },
+      { nome:"União dos Palmares",estado:"AL", bairros:["Centro","São Pedro"],                               coords:1, mobsPorCoord:2, ePorMob:4 },
+    ],
+  },
+  // ── RN — MULTIREGIONAL A (CRESCENDO / SOBRECARREGADO) ─────────
+  {
+    id: "nordeste.a", perfil: "crescendo",
+    assessorEmail: "assessor.nordeste.a@mail.com",
+    assessorNome: "Viviane Queiroz", cidadePrincipal: "Mossoró", estado: "RN",
+    cidades: [
+      { nome:"Mossoró",    estado:"RN", bairros:["Centro","Santo Antônio","Aeroporto","Nova Betânia"], coords:2, mobsPorCoord:3, ePorMob:9 },
+      { nome:"Santa Cruz", estado:"RN", bairros:["Centro","Alto da Boa Vista"],                        coords:1, mobsPorCoord:2, ePorMob:6 },
+      { nome:"Caicó",      estado:"RN", bairros:["Centro","São João","Penedo"],                        coords:1, mobsPorCoord:2, ePorMob:5 },
+    ],
+  },
+  // ── RN — MULTIREGIONAL B (ESTAGNADO / SUBPERFORMANDO) ─────────
+  {
+    id: "nordeste.b", perfil: "estagnado",
+    assessorEmail: "assessor.nordeste.b@mail.com",
+    assessorNome: "Renato Prado", cidadePrincipal: "Natal", estado: "RN",
+    cidades: [
+      { nome:"Natal",      estado:"RN", bairros:["Centro","Alecrim","Lagoa Nova","Capim Macio","Cidade Alta"], coords:2, mobsPorCoord:3, ePorMob:8 },
+      { nome:"Parnamirim", estado:"RN", bairros:["Centro","Emaús","Nova Parnamirim"],                          coords:1, mobsPorCoord:2, ePorMob:5 },
+    ],
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────
 // HELPERS
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
 async function criarUsuario(email, dados) {
   let uid;
   try {
-    const user = await auth.createUser({ email, password: SENHA });
-    uid = user.uid;
+    const u = await auth.createUser({ email, password: SENHA });
+    uid = u.uid;
     log(`  ✅ [${dados.role}] ${email}`, C.green);
   } catch (e) {
     if (e.code === "auth/email-already-in-use") {
-      const user = await auth.getUserByEmail(email);
-      uid = user.uid;
-      log(`  🔄 [${dados.role}] ${email} (já existia — reutilizando)`, C.yellow);
+      const u = await auth.getUserByEmail(email);
+      uid = u.uid;
+      log(`  🔄 [${dados.role}] ${email} (reutilizando)`, C.yellow);
     } else {
       log(`  ❌ ${email}: ${e.message}`, C.red);
       return null;
     }
   }
-  await db.collection("usuarios").doc(uid).set(
-    { uid, email, ativo: true, _fake: true, ...dados },
-    { merge: false }
-  );
+  await db.collection("usuarios").doc(uid).set({ uid, email, ativo: true, _fake: true, ...dados }, { merge: false });
   return uid;
 }
 
-async function criarEleitores(specs) {
-  // specs: [{ colaboradorId, colaboradorNome, coordenadorId, coordenadorNome, cidade, bairros, graus, diasAtras }]
+// Grava documentos Firestore em lote (sem Auth) — para coords/mobs em escala
+async function batchWriteUsuarios(registros) {
   const ids = [];
-  for (const spec of specs) {
+  for (let i = 0; i < registros.length; i += 400) {
     const batch = db.batch();
-    const batchIds = [];
-    for (let i = 0; i < spec.graus.length; i++) {
-      const ref = db.collection("eleitores").doc();
-      batch.set(ref, {
-        campanhaId: spec.campanhaId,
-        colaboradorId: spec.colaboradorId,
-        colaboradorNome: spec.colaboradorNome,
-        coordenadorId: spec.coordenadorId,
-        coordenadorNome: spec.coordenadorNome,
-        nomeCompleto: proximoNome(),
-        tipoDocumento: "titulo",
-        documento: proximoDoc(),
-        estado: "SP",
-        cidade: spec.cidade,
-        bairro: spec.bairros[i % spec.bairros.length],
-        grauApoio: spec.graus[i],
-        observacoes: "",
-        criadoEm: ts(spec.diasAtras[i]),
-        _fake: true,
-      });
-      batchIds.push(ref.id);
-    }
+    registros.slice(i, i + 400).forEach(({ id, dados }) => {
+      batch.set(db.collection("usuarios").doc(id), { ativo: true, _fake: true, ...dados });
+      ids.push(id);
+    });
     await batch.commit();
-    ids.push(...batchIds);
-    log(`  ✅ ${spec.colaboradorNome}: ${batchIds.length} eleitores (${spec.cidade})`, C.green);
   }
   return ids;
 }
 
-async function appendManifesto(campo, ids) {
-  await MANIFEST.update({ [campo]: FieldValue.arrayUnion(...ids) });
+async function batchWriteEleitores(registros) {
+  const ids = [];
+  for (let i = 0; i < registros.length; i += 400) {
+    const batch = db.batch();
+    registros.slice(i, i + 400).forEach(dados => {
+      const ref = db.collection("eleitores").doc();
+      batch.set(ref, { _fake: true, ...dados });
+      ids.push(ref.id);
+    });
+    await batch.commit();
+  }
+  return ids;
 }
 
-// ============================================================
+// Append seguro ao manifesto (chunks de 400 para respeitar limites)
+async function appendManifesto(campo, ids) {
+  for (let i = 0; i < ids.length; i += 400) {
+    await MANIFEST.update({ [campo]: FieldValue.arrayUnion(...ids.slice(i, i + 400)) });
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
 // LIMPEZA PRÉ-RESET
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
 async function limparAnterior() {
   log("\n🗑️  Removendo cenário anterior...", C.yellow);
   const snap = await MANIFEST.get();
-  if (!snap.exists) { log("  Manifesto não encontrado. Nada a limpar.", C.dim); return; }
-
+  if (!snap.exists) { log("  Manifesto não encontrado.", C.dim); return; }
   const data = snap.data();
   const colMap = { eleitorIds: "eleitores", usuarioIds: "usuarios", gabineteIds: "campanhas" };
-
   for (const [campo, col] of Object.entries(colMap)) {
     const ids = data[campo] || [];
     if (!ids.length) continue;
     for (let i = 0; i < ids.length; i += 500) {
       const batch = db.batch();
-      ids.slice(i, i + 500).forEach((id) => batch.delete(db.collection(col).doc(id)));
+      ids.slice(i, i + 500).forEach(id => batch.delete(db.collection(col).doc(id)));
       await batch.commit();
     }
     log(`  🗑️  ${col}: ${ids.length} documentos removidos`, C.dim);
   }
-
   const authUids = data.authUids || [];
   if (authUids.length) {
     await auth.deleteUsers(authUids);
     log(`  🗑️  Auth: ${authUids.length} usuários removidos`, C.dim);
   }
-
   await MANIFEST.delete();
   log("  ✅ Cenário anterior limpo.\n", C.green);
 }
 
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
 // MAIN
-// ============================================================
+// ─────────────────────────────────────────────────────────────────
 async function main() {
-  log("\n" + "═".repeat(64), C.cyan);
-  log("  🌱  SEED — CENÁRIO POLÍTICO FAKE — ELEITORES 2026", C.bold + C.cyan);
-  log("═".repeat(64) + "\n", C.cyan);
+  log("\n" + "═".repeat(70), C.cyan);
+  log("  🌱  SEED v2.0 — ESCALA TERRITORIAL — ELEITORES 2026", C.bold + C.cyan);
+  log("═".repeat(70) + "\n", C.cyan);
 
-  // Verificar double-run
   const manifestSnap = await MANIFEST.get();
   if (manifestSnap.exists && !IS_RESET) {
-    log("⚠️  Cenário já existe! Use --reset para recriar:", C.yellow);
-    log("   node scripts/seed-cenario-fake.mjs --reset\n", C.dim);
+    log("⚠️  Cenário já existe. Use --reset para recriar:", C.yellow);
+    log("   npm run seed:fake:reset\n", C.dim);
     process.exit(0);
   }
   if (IS_RESET) await limparAnterior();
 
-  // Iniciar manifesto (escrito antes de qualquer dado — safe rollback)
+  // Manifesto inicial
   await MANIFEST.set({
     criadoEm: FieldValue.serverTimestamp(),
-    versao: "1.0",
-    gabineteIds: [],
-    authUids: [],
-    usuarioIds: [],
-    eleitorIds: [],
+    versao: "2.0",
+    gabineteIds: [], authUids: [], usuarioIds: [], eleitorIds: [],
   });
 
   const superUid = (await auth.getUserByEmail(SUPER_EMAIL)).uid;
 
-  // ============================================================
+  // ─────────────────────────────────────────────────────────────
   // GABINETE
-  // ============================================================
-  log("📌 GABINETE — Carlos Drummond (Dep. Federal - UNIÃO)", C.blue + C.bold);
+  // ─────────────────────────────────────────────────────────────
+  log("📌 GABINETE — Ricardo Cavalcanti (Dep. Federal — AVANTE)", C.blue + C.bold);
   const gabRef = await db.collection("campanhas").add({
-    nome: "Carlos Drummond — Força SP 2026",
-    slug: "carlos-drummond-forca-sp-2026",
-    politicoNome: "Carlos Drummond",
+    nome: "Ricardo Cavalcanti — Nordeste 2026",
+    slug: "ricardo-cavalcanti-nordeste-2026",
+    politicoNome: "Ricardo Cavalcanti",
     politicoEmail: "dep.federal@mail.com",
-    politicoPartido: "UNIÃO",
-    politicoNumero: "1026",
+    politicoPartido: "AVANTE",
+    politicoNumero: "7026",
     cargo: "deputado_federal",
     nivelPolitico: "federal",
     cicloEleitoral: "estadual_federal_2026",
-    corPrincipal: "#7c3aed",
-    estado: "SP",
-    municipios: ["Campinas", "Americana", "Sorocaba"],
-    metaEleitoral: 500,
+    corPrincipal: "#d97706",
+    estado: "PE",
+    municipios: ["Recife","Caruaru","Petrolina","Fortaleza","Juazeiro do Norte","Feira de Santana","João Pessoa","Maceió","Natal"],
+    metaEleitoral: 50000,
     ativo: true,
     criadoPor: superUid,
-    criadoEm: ts(45),
+    criadoEm: ts(60),
     _fake: true,
   });
   const gabId = gabRef.id;
+  await gabRef.update({ gabineteId: gabId, campanhaId: gabId });
   await appendManifesto("gabineteIds", [gabId]);
-  log(`  ✅ Gabinete criado: ${gabId}\n`, C.green);
+  log(`  ✅ Gabinete: ${gabId}\n`, C.green);
 
-  // ============================================================
-  // USUÁRIOS
-  // ============================================================
-  log("👤 USUÁRIOS", C.blue + C.bold);
-  const B = { gabineteId: gabId, campanhaId: gabId, criadoPor: superUid };
+  const BASE = { gabineteId: gabId, campanhaId: gabId, criadoPor: superUid };
 
-  // Político
+  // ─────────────────────────────────────────────────────────────
+  // POLÍTICO
+  // ─────────────────────────────────────────────────────────────
+  log("👤 POLÍTICO", C.blue + C.bold);
   const depUid = await criarUsuario("dep.federal@mail.com", {
-    ...B, nome: "Carlos Drummond", role: "politico",
-    criadoEm: ts(45), ultimaAtividade: ts(1),
+    ...BASE, nome: "Ricardo Cavalcanti", role: "politico",
+    criadoEm: ts(60), ultimaAtividade: ts(0),
   });
+  await appendManifesto("authUids", [depUid]);
+  await appendManifesto("usuarioIds", [depUid]);
 
-  // Assessores
-  const anaUid = await criarUsuario("assessora.ana@mail.com", {
-    ...B, nome: "Ana Lima", role: "assessor",
-    criadoEm: ts(40), ultimaAtividade: ts(1),
-  });
-  const brunoUid = await criarUsuario("assessor.bruno@mail.com", {
-    ...B, nome: "Bruno Melo", role: "assessor",
-    criadoEm: ts(40), ultimaAtividade: ts(14),
-  });
+  // ─────────────────────────────────────────────────────────────
+  // ASSESSORES + ESTRUTURA TERRITORIAL
+  // ─────────────────────────────────────────────────────────────
+  log("\n🗺️  ASSESSORES REGIONAIS + ESTRUTURA TERRITORIAL\n", C.blue + C.bold);
 
-  // Coordenadores — assessorId vincula explicitamente ao assessor responsável
-  const ccId = await criarUsuario("coord.campinas@mail.com", {
-    ...B, nome: "Rafael Moreira", role: "coordenador",
-    assessorId: anaUid, criadoEm: ts(35), ultimaAtividade: ts(1),
-  });
-  const caId = await criarUsuario("coord.americana@mail.com", {
-    ...B, nome: "Julia Fernandes", role: "coordenador",
-    assessorId: anaUid, criadoEm: ts(35), ultimaAtividade: ts(3),
-  });
-  const csId = await criarUsuario("coord.sorocaba@mail.com", {
-    ...B, nome: "Diego Pires", role: "coordenador",
-    assessorId: brunoUid, criadoEm: ts(35), ultimaAtividade: ts(7),
-  });
-  const ciId = await criarUsuario("coord.interior@mail.com", {
-    ...B, nome: "Marcos Tadeu", role: "coordenador",
-    assessorId: brunoUid, criadoEm: ts(35), ultimaAtividade: ts(9),
-  });
+  let totalCoords = 0;
+  let totalMobs = 0;
+  let totalEleitores = 0;
+  const resumoTerritorial = [];
 
-  // Colaboradores
-  const c01 = await criarUsuario("colab.01@mail.com", {
-    ...B, nome: "Vitor Carvalho", role: "colaborador", status: "ativo",
-    coordenadorId: ccId, criadoEm: ts(30), ultimaAtividade: ts(1),
-  });
-  const c02 = await criarUsuario("colab.02@mail.com", {
-    ...B, nome: "Luana Souza", role: "colaborador", status: "ativo",
-    coordenadorId: ccId, criadoEm: ts(30), ultimaAtividade: ts(2),
-  });
-  const c03 = await criarUsuario("colab.03@mail.com", {
-    ...B, nome: "Eduardo Braga", role: "colaborador", status: "ativo",
-    coordenadorId: caId, criadoEm: ts(30), ultimaAtividade: ts(3),
-  });
-  const c04 = await criarUsuario("colab.04@mail.com", {
-    // criadoEm há 4 dias → status "iniciando" (grace period 7d)
-    ...B, nome: "Rebeca Torres", role: "colaborador", status: "ativo",
-    coordenadorId: caId, criadoEm: ts(4),
-    // sem ultimaAtividade propositalmente
-  });
-  const c05 = await criarUsuario("colab.05@mail.com", {
-    ...B, nome: "Henrique Leal", role: "colaborador", status: "ativo",
-    coordenadorId: csId, criadoEm: ts(30), ultimaAtividade: ts(7),
-  });
-  const c06 = await criarUsuario("colab.06@mail.com", {
-    ...B, nome: "Tania Cardoso", role: "colaborador", status: "ativo",
-    coordenadorId: csId, criadoEm: ts(30), ultimaAtividade: ts(12),
-  });
-  const c07 = await criarUsuario("colab.07@mail.com", {
-    ...B, nome: "Silvio Queiroz", role: "colaborador", status: "ativo",
-    coordenadorId: ciId, criadoEm: ts(30), ultimaAtividade: ts(8),
-  });
-  const c08 = await criarUsuario("colab.08@mail.com", {
-    // criadoEm há 20 dias, nunca ativou → "sem_atividade"
-    ...B, nome: "Norma Faria", role: "colaborador", status: "ativo",
-    coordenadorId: ciId, criadoEm: ts(20),
-    // sem ultimaAtividade propositalmente
-  });
+  for (const territorio of TERRITORIOS) {
+    const perfil = PERFIS[territorio.perfil];
+    log(`  ▶ ${territorio.id} [${territorio.perfil}]`, C.cyan);
 
-  const allUids = [depUid, anaUid, brunoUid, ccId, caId, csId, ciId, c01, c02, c03, c04, c05, c06, c07, c08].filter(Boolean);
-  await appendManifesto("authUids", allUids);
-  await appendManifesto("usuarioIds", allUids);
-  log("", C.reset);
+    // ASSESSOR — Auth + Firestore
+    const assessorUid = await criarUsuario(territorio.assessorEmail, {
+      ...BASE,
+      nome: territorio.assessorNome,
+      role: "assessor",
+      cidadePrincipal: territorio.cidadePrincipal,
+      cidade: territorio.cidadePrincipal,
+      estado: territorio.estado,
+      criadoEm: ts(rnd(50, 70)),
+      ultimaAtividade: ts(perfil.diasCoord()),
+    });
+    if (!assessorUid) continue;
+    await appendManifesto("authUids",  [assessorUid]);
+    await appendManifesto("usuarioIds",[assessorUid]);
 
-  // ============================================================
-  // ELEITORES
-  // ============================================================
-  log("🗳️  ELEITORES", C.blue + C.bold);
+    // Gerar coords, mobs e eleitores em memória para este território
+    const coordRegistros  = [];
+    const mobRegistros    = [];
+    const eleitorRegistros = [];
 
-  // Bairros por cidade
-  const BC = ["Centro", "Cambuí", "Taquaral", "Jardins", "Guanabara", "Santa Lúcia"];
-  const BA = ["Centro", "Parque Novo Mundo", "São Domingos", "Vila Medon"];
-  const BS = ["Centro", "Jardim Europa", "Wanel Ville", "Campolim", "Vitória Régia"];
-  const BI = ["Centro", "Vila Nova", "Bela Vista"];
+    for (const cidade of territorio.cidades) {
+      for (let ci = 0; ci < cidade.coords; ci++) {
+        const coordId   = novoId();
+        const coordNome = proximoNome();
 
-  /*
-   * Distribuição planejada de criadoEm para ativar IC corretamente:
-   *
-   * Equipe Campinas/Americana (Ana) → IC acelerando (+89%)
-   *   colab.01: 10 na última semana (dias 1-6) + 5 semana anterior (dias 8-12)
-   *   colab.02:  7 na última semana (dias 1-6) + 4 semana anterior (dias 8-12)
-   *   colab.03:  6 na última semana (dias 1-5)
-   *   colab.04:  5 na última semana (dias 1-4)
-   *
-   * Equipe Sorocaba/Interior (Bruno) → zerou após parar (dias 8-13)
-   *   colab.05: 12 na semana anterior (dias 8-13)
-   *   colab.06:  8 na semana anterior (dias 8-13)
-   *   colab.07:  6 na semana anterior (dias 8-13)
-   *   colab.08:  0 (nunca cadastrou)
-   *
-   * IC gabinete total:
-   *   atual (0-7d):    10+7+6+5 = 28
-   *   anterior (7-14d): 5+4+12+8+6 = 35
-   *   variação: -20% → retraindo → alerta dispara para assessores
-   */
-  const eleitorIds = await criarEleitores([
-    {
-      campanhaId: gabId, colaboradorId: c01, colaboradorNome: "Vitor Carvalho",
-      coordenadorId: ccId, coordenadorNome: "Rafael Moreira",
-      cidade: "Campinas", bairros: BC,
-      graus:     ["forte","forte","forte","forte","forte","medio","medio","medio","medio","medio","fraco","fraco","fraco","indeciso","indeciso"],
-      diasAtras: [1,      1,      2,      2,      3,      3,      4,      4,      5,      6,      8,      9,      10,     11,        12     ],
-    },
-    {
-      campanhaId: gabId, colaboradorId: c02, colaboradorNome: "Luana Souza",
-      coordenadorId: ccId, coordenadorNome: "Rafael Moreira",
-      cidade: "Campinas", bairros: BC,
-      graus:     ["forte","forte","forte","medio","medio","medio","medio","medio","fraco","fraco","indeciso"],
-      diasAtras: [1,      2,      3,      3,      4,      5,      6,      6,      8,      10,     12      ],
-    },
-    {
-      campanhaId: gabId, colaboradorId: c03, colaboradorNome: "Eduardo Braga",
-      coordenadorId: caId, coordenadorNome: "Julia Fernandes",
-      cidade: "Americana", bairros: BA,
-      graus:     ["forte","forte","forte","medio","medio","indeciso"],
-      diasAtras: [1,      2,      2,      3,      4,      5       ],
-    },
-    {
-      campanhaId: gabId, colaboradorId: c04, colaboradorNome: "Rebeca Torres",
-      coordenadorId: caId, coordenadorNome: "Julia Fernandes",
-      cidade: "Americana", bairros: BA,
-      graus:     ["forte","forte","medio","medio","fraco"],
-      diasAtras: [1,      2,      2,      3,      4     ],
-    },
-    {
-      campanhaId: gabId, colaboradorId: c05, colaboradorNome: "Henrique Leal",
-      coordenadorId: csId, coordenadorNome: "Diego Pires",
-      cidade: "Sorocaba", bairros: BS,
-      graus:     ["forte","forte","medio","medio","medio","fraco","fraco","fraco","fraco","indeciso","indeciso","indeciso"],
-      diasAtras: [8,      9,      9,      10,     10,     11,     11,     12,     12,     13,        13,        13       ],
-    },
-    {
-      campanhaId: gabId, colaboradorId: c06, colaboradorNome: "Tania Cardoso",
-      coordenadorId: csId, coordenadorNome: "Diego Pires",
-      cidade: "Sorocaba", bairros: BS,
-      graus:     ["forte","medio","medio","fraco","fraco","fraco","indeciso","indeciso"],
-      diasAtras: [8,      9,      10,     10,     11,     12,     12,        13       ],
-    },
-    {
-      campanhaId: gabId, colaboradorId: c07, colaboradorNome: "Silvio Queiroz",
-      coordenadorId: ciId, coordenadorNome: "Marcos Tadeu",
-      cidade: "São Paulo", bairros: BI,
-      graus:     ["forte","medio","medio","fraco","fraco","indeciso"],
-      diasAtras: [8,      9,      10,     11,     12,     13       ],
-    },
-    // colab.08 (Norma Faria): 0 eleitores — sem atividade proposital
-  ]);
+        coordRegistros.push({
+          id: coordId,
+          dados: {
+            ...BASE,
+            uid: coordId,
+            nome: coordNome,
+            email: proximoEmail("coord"),
+            role: "coordenador",
+            assessorId: assessorUid,
+            cidadePrincipal: cidade.nome,
+            cidade: cidade.nome,
+            estado: cidade.estado,
+            criadoEm: ts(rnd(40, 60)),
+            ultimaAtividade: ts(perfil.diasCoord()),
+          },
+        });
 
-  log(`\n  ⚠️  Norma Faria (colab.08): 0 eleitores — sem atividade`, C.yellow);
-  await appendManifesto("eleitorIds", eleitorIds);
+        for (let mi = 0; mi < cidade.mobsPorCoord; mi++) {
+          const mobId   = novoId();
+          const mobNome = proximoNome();
 
-  // ============================================================
-  // TABELA DE LOGINS
-  // ============================================================
-  const total = eleitorIds.length;
-  log("\n" + "═".repeat(64), C.cyan);
-  log("  📋  LOGINS DO CENÁRIO FAKE — senha: 111111 (todos)", C.bold + C.cyan);
-  log("═".repeat(64), C.cyan);
+          mobRegistros.push({
+            id: mobId,
+            dados: {
+              ...BASE,
+              uid: mobId,
+              nome: mobNome,
+              email: proximoEmail("mob"),
+              role: "colaborador",
+              status: "ativo",
+              coordenadorId: coordId,
+              assessorId: assessorUid,
+              cidade: cidade.nome,
+              estado: cidade.estado,
+              criadoEm: ts(rnd(25, 45)),
+              ultimaAtividade: ts(perfil.diasMob()),
+            },
+          });
 
-  const pad = (s, n) => String(s).padEnd(n);
-  log(`\n  ${pad("EMAIL", 32)} ROLE / SITUAÇÃO`, C.dim);
-  log("  " + "─".repeat(60), C.dim);
+          for (let ei = 0; ei < cidade.ePorMob; ei++) {
+            eleitorRegistros.push({
+              campanhaId: gabId,
+              colaboradorId: mobId,
+              colaboradorNome: mobNome,
+              coordenadorId: coordId,
+              coordenadorNome: coordNome,
+              nomeCompleto: proximoNome(),
+              tipoDocumento: "titulo",
+              documento: proximoDoc(),
+              estado: cidade.estado,
+              cidade: cidade.nome,
+              bairro: cidade.bairros[ei % cidade.bairros.length],
+              grauApoio: gerarGrau(territorio.perfil),
+              observacoes: "",
+              criadoEm: ts(perfil.diasEleitor()),
+            });
+          }
+        }
+      }
+    }
 
-  const linhas = [
-    ["dep.federal@mail.com",      "político    Carlos Drummond (visão executiva)"],
-    ["assessora.ana@mail.com",    "assessor    Ana Lima — ativa ✅ (alertas de equipe visíveis)"],
-    ["assessor.bruno@mail.com",   "assessor    Bruno Melo — inativo 14d ⚠️  (mesmos alertas)"],
-    ["coord.campinas@mail.com",   "coordenador Rafael Moreira — ativo ✅ sem alertas"],
-    ["coord.americana@mail.com",  "coordenador Julia Fernandes — ativa ✅ sem alertas"],
-    ["coord.sorocaba@mail.com",   "coordenador Diego Pires — parado 7d 🟡 ALERTA"],
-    ["coord.interior@mail.com",   "coordenador Marcos Tadeu — parado 9d 🟡 ALERTA"],
-    ["colab.01@mail.com",         "colaborador Vitor Carvalho | Campinas | Ativo ✅"],
-    ["colab.02@mail.com",         "colaborador Luana Souza   | Campinas | Ativo ✅"],
-    ["colab.03@mail.com",         "colaborador Eduardo Braga | Americana | Ativo ✅"],
-    ["colab.04@mail.com",         "colaborador Rebeca Torres | Americana | Iniciando 🔵 (4d)"],
-    ["colab.05@mail.com",         "colaborador Henrique Leal | Sorocaba  | Parado 7d 🟠"],
-    ["colab.06@mail.com",         "colaborador Tania Cardoso | Sorocaba  | Inativo 12d 🔴"],
-    ["colab.07@mail.com",         "colaborador Silvio Queiroz | Interior | Parado 8d 🟠"],
-    ["colab.08@mail.com",         "colaborador Norma Faria   | Interior  | Sem atividade ⚫"],
-  ];
+    // Batch write coords
+    const coordIds = await batchWriteUsuarios(coordRegistros);
+    await appendManifesto("usuarioIds", coordIds);
 
-  for (const [email, desc] of linhas) {
-    log(`  ${pad(email, 32)} ${desc}`);
+    // Batch write mobs
+    const mobIds = await batchWriteUsuarios(mobRegistros);
+    await appendManifesto("usuarioIds", mobIds);
+
+    // Batch write eleitores
+    const eIds = await batchWriteEleitores(eleitorRegistros);
+    await appendManifesto("eleitorIds", eIds);
+
+    totalCoords   += coordIds.length;
+    totalMobs     += mobIds.length;
+    totalEleitores += eIds.length;
+
+    resumoTerritorial.push({
+      id: territorio.id,
+      perfil: territorio.perfil,
+      assessor: territorio.assessorNome,
+      coords: coordIds.length,
+      mobs: mobIds.length,
+      eleitores: eIds.length,
+    });
+
+    log(`     ${coordIds.length} coords · ${mobIds.length} mobs · ${eIds.length} eleitores`, C.dim);
   }
 
-  log("\n  📊 RESUMO DO CENÁRIO", C.bold);
-  log(`  • 1 gabinete: Carlos Drummond — Força SP 2026 (UNIÃO)`);
-  log(`  • 15 usuários (1 político + 2 assessores + 4 coordenadores + 8 colaboradores)`);
-  log(`  • ${total} eleitores — Campinas, Americana, Sorocaba, São Paulo`);
-  log(`  • IC gabinete: -20% semana a semana → retraindo 🟡`);
-  log(`  • IC coord.campinas: +89% → acelerando ✅`);
-  log(`  • IC coord.sorocaba: -100% → queda 🔴`);
+  // ─────────────────────────────────────────────────────────────
+  // RESUMO FINAL
+  // ─────────────────────────────────────────────────────────────
+  const pad = (s, n) => String(s).padEnd(n);
+  const padL = (s, n) => String(s).padStart(n);
 
-  log("\n  🎯 ALERTAS ESPERADOS POR ROLE", C.bold);
-  log("  assessora.ana / assessor.bruno:");
-  log("    🔴 Tania Cardoso inativa (12d)");
-  log("    🟡 Henrique Leal parado (7d), Silvio Queiroz parado (8d)");
-  log("    🟡 Crescimento em queda: -20% vs semana");
-  log("  coord.sorocaba:");
-  log("    🔴 Toda a equipe sem atividade recente");
-  log("    🟡 Cadastros em queda: -100%");
-  log("  coord.interior:");
-  log("    🟡 Silvio Queiroz sem atividade recente");
-  log("    🟡 Cadastros em queda: -100%");
-  log("  coord.campinas / coord.americana:");
-  log("    ✅ Nenhum alerta");
+  log("\n" + "═".repeat(70), C.cyan);
+  log("  📋  LOGINS DO CENÁRIO — senha: 111111 (todos)", C.bold + C.cyan);
+  log("═".repeat(70), C.cyan);
+  log(`\n  ${pad("EMAIL", 38)} ROLE / TERRITÓRIO`, C.dim);
+  log("  " + "─".repeat(65), C.dim);
+  log(`  ${pad("dep.federal@mail.com", 38)} político  · Ricardo Cavalcanti (visão executiva total)`);
+  log("  " + "─".repeat(65), C.dim);
+
+  const perfilIcon = { dominante:"✅", crescendo:"📈", emergente:"🌱", parado:"🟡", estagnado:"🟠", critico:"🔴" };
+  for (const t of TERRITORIOS) {
+    log(`  ${pad(t.assessorEmail, 38)} assessor  · ${t.assessorNome} — ${t.cidadePrincipal}/${t.estado} ${perfilIcon[t.perfil]}`);
+  }
+
+  log("\n" + "═".repeat(70), C.cyan);
+  log("  📊  RESUMO TERRITORIAL", C.bold + C.cyan);
+  log("═".repeat(70), C.cyan);
+  log(`\n  ${pad("TERRITÓRIO", 18)} ${pad("PERFIL", 10)} ${padL("COORDS", 7)} ${padL("MOBS", 6)} ${padL("ELEITORES", 10)}`, C.dim);
+  log("  " + "─".repeat(55), C.dim);
+  for (const r of resumoTerritorial) {
+    log(`  ${pad(r.id, 18)} ${pad(r.perfil, 10)} ${padL(r.coords, 7)} ${padL(r.mobs, 6)} ${padL(r.eleitores, 10)}`);
+  }
+  log("  " + "─".repeat(55), C.dim);
+  log(`  ${"TOTAL".padEnd(18)} ${"".padEnd(10)} ${padL(totalCoords, 7)} ${padL(totalMobs, 6)} ${padL(totalEleitores, 10)}`, C.bold);
+
+  log("\n  🎯 PADRÕES TERRITORIAIS PARA VALIDAÇÃO:", C.bold);
+  log("  ✅ Dominante   → PE/Recife, CE/Cariri        alta base, eleitores recentes, força >50%");
+  log("  📈 Crescendo   → PE/Interior, BA/Feira        crescimento acelerado, atividade recente");
+  log("  🌱 Emergente   → PE/Mata, CE/Fortaleza, PB    base nova, últimos 18 dias, qualidade média");
+  log("  🟡 Parado      → BA/Conquista, PB/Interior    atividade entre 32-65 dias, estabilizou");
+  log("  🟠 Estagnado   → PE/Oeste, AL/Interior, RN/B  sem novos registros há 38-100 dias");
+  log("  🔴 Crítico     → BA/Norte, AL/Capital         baixo volume, rejeição alta, abandono");
 
   log("\n  🧹 PARA LIMPAR:", C.bold);
   log("  node scripts/limpar-cenario-fake.mjs --confirm");
-  log("═".repeat(64) + "\n", C.cyan);
+  log("═".repeat(70) + "\n", C.cyan);
+
+  log(`  Total Auth: 1 político + ${TERRITORIOS.length} assessores = ${1 + TERRITORIOS.length} contas`, C.green);
+  log(`  Total Firestore: ${2 + totalCoords + totalMobs} usuários + ${totalEleitores} eleitores + 1 gabinete\n`, C.green);
 }
 
 main().catch((e) => {
-  log(`\n❌ Erro: ${e.message}`, C.red);
+  log(`\n❌ Erro fatal: ${e.message}`, C.red);
   console.error(e);
   process.exit(1);
 });

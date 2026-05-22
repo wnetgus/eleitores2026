@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [eleitoresFilhos, setEleitoresFilhos] = useState<Eleitor[]>([]);
   const [meusCoordIds, setMeusCoordIds] = useState<string[]>([]);
   const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date>(new Date());
+  const [filtroQualidade, setFiltroQualidade] = useState("");
 
   useEffect(() => {
     async function load() {
@@ -230,7 +231,7 @@ export default function DashboardPage() {
       ? usuarios.filter((u) => u.role === "colaborador" && u.status === "pendente" && meusCoordIds.includes(u.coordenadorId || ""))
       : [];
     if (pendentesAssessor.length > 0) {
-      alertas.push({ tipo: "alerta", mensagem: `${pendentesAssessor.length} colaborador${pendentesAssessor.length > 1 ? "es" : ""} aguardando aprovação`, acao: "Ver solicitações", link: "/solicitacoes" });
+      alertas.push({ tipo: "alerta", mensagem: `${pendentesAssessor.length} novo${pendentesAssessor.length > 1 ? "s mobilizadores aguardando" : " mobilizador aguardando"} incorporação à equipe`, acao: "Ver solicitações", link: "/solicitacoes" });
     }
     const colabsAssessor = meusCoordIds.length > 0
       ? usuarios.filter((u) => u.role === "colaborador" && (!u.status || u.status === "ativo") && meusCoordIds.includes(u.coordenadorId || ""))
@@ -238,14 +239,14 @@ export default function DashboardPage() {
     const inativos = colabsAssessor.filter((u) => calcularSaudeColaborador(u.ultimaAtividade, u.criadoEm).status === "inativo");
     const parados  = colabsAssessor.filter((u) => calcularSaudeColaborador(u.ultimaAtividade, u.criadoEm).status === "parado");
     if (inativos.length > 0) {
-      alertas.push({ tipo: "erro", mensagem: `${inativos.length} colaborador${inativos.length > 1 ? "es inativos" : " inativo"} (sem atividade há mais de 10 dias)`, acao: "Ver colaboradores", link: "/colaboradores" });
+      alertas.push({ tipo: "erro", mensagem: `Presença reduzida: ${inativos.length} mobilizador${inativos.length > 1 ? "es" : ""} sem atividade territorial há +10 dias`, acao: "Ver mobilizadores", link: "/colaboradores" });
     }
     if (parados.length > 0) {
-      alertas.push({ tipo: "alerta", mensagem: `${parados.length} colaborador${parados.length > 1 ? "es parados" : " parado"} (6-10 dias sem cadastrar)`, acao: "Ver colaboradores", link: "/colaboradores" });
+      alertas.push({ tipo: "alerta", mensagem: `${parados.length} mobilizador${parados.length > 1 ? "es com" : " com"} atividade territorial em queda (6–10 dias)`, acao: "Ver mobilizadores", link: "/colaboradores" });
     }
     const icAssessor = calcularIC(eleitores);
     if (icAssessor && icAssessor.atual + icAssessor.anterior >= 10 && (icAssessor.direcao === "queda" || icAssessor.direcao === "retraindo")) {
-      alertas.push({ tipo: "alerta", mensagem: `Crescimento em queda: ${icAssessor.label} nos últimos 7 dias`, acao: "Ver relatório", link: "/relatorios" });
+      alertas.push({ tipo: "alerta", mensagem: `Expansão territorial desacelerando: ${icAssessor.label} nos últimos 7 dias`, acao: "Ver inteligência", link: "/relatorios" });
     }
   }
 
@@ -788,7 +789,7 @@ export default function DashboardPage() {
       {(isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessor(userData)) && (estadosDisponiveis.length > 0 || bairrosDisponiveis.length > 0) && (
         <div className="flex items-center gap-3 flex-wrap">
           <Filter size={16} className="text-white/30" />
-          {(isSuperOrMaster(userData) || isPolitico(userData) || isAssessor(userData)) && estadosDisponiveis.length > 0 && (
+          {(isSuperOrMaster(userData) || isPolitico(userData)) && estadosDisponiveis.length > 0 && (
             <Select
               label="Estado"
               value={filtroEstado}
@@ -1007,22 +1008,54 @@ export default function DashboardPage() {
           )}
 
           <GlassCard className="p-5">
-            <h3 className="text-white font-semibold mb-4">Últimos Cadastros</h3>
+            <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+              <h3 className="text-white font-semibold">Últimos Cadastros</h3>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { key: "",         label: "Todos"    },
+                  { key: "forte",    label: "Fortes"   },
+                  { key: "medio",    label: "Médios"   },
+                  { key: "indeciso", label: "Indecisos"},
+                  { key: "fraco",    label: "Fracos"   },
+                  { key: "recentes", label: "Recentes" },
+                ] as const).map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setFiltroQualidade(key)}
+                    className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all border ${
+                      filtroQualidade === key
+                        ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                        : "text-white/30 border-white/[0.07] hover:text-white/55 hover:border-white/20"
+                    }`}
+                  >{label}</button>
+                ))}
+              </div>
+            </div>
+            {(() => {
+              const agora = Date.now();
+              const lista = filtroQualidade === "recentes"
+                ? eleitores.filter((e) => parseDate(e.criadoEm).getTime() > agora - 7 * 86400000)
+                : filtroQualidade
+                ? eleitores.filter((e) => e.grauApoio === filtroQualidade)
+                : eleitores;
+              return (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead><tr className="text-white/40 border-b border-white/[0.06]"><th className="text-left py-3 px-2 font-medium">Nome</th><th className="text-left py-3 px-2 font-medium">Cidade</th><th className="text-left py-3 px-2 font-medium">Grau</th><th className="text-left py-3 px-2 font-medium">Colaborador</th><th className="text-left py-3 px-2 font-medium">Coordenador</th><th className="text-left py-3 px-2 font-medium">Data</th></tr></thead>
                 <tbody>
-                  {eleitores.slice(0, 15).map((e) => (
+                  {lista.slice(0, 15).map((e) => (
                     <tr key={e.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                       <td className="py-3 px-2 text-white/80">{e.nomeCompleto}</td><td className="py-3 px-2 text-white/60">{e.cidade}</td>
                       <td className="py-3 px-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span></td>
                       <td className="py-3 px-2 text-white/60">{e.colaboradorNome}</td><td className="py-3 px-2 text-white/60">{e.coordenadorNome || "-"}</td><td className="py-3 px-2 text-white/40 text-xs">{formatDate(e.criadoEm)}</td>
                     </tr>
                   ))}
-                  {eleitores.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-white/30">Nenhum cadastro encontrado</td></tr>}
+                  {lista.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-white/30">{filtroQualidade ? "Nenhum registro nesta categoria" : "Nenhum cadastro encontrado"}</td></tr>}
                 </tbody>
               </table>
             </div>
+              );
+            })()}
           </GlassCard>
         </>
       )}

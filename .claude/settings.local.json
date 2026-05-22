@@ -24,7 +24,11 @@
       "Bash(Select-Object -First 100)",
       "Bash(firebase deploy *)",
       "Bash(Get-ChildItem -Path \"src\\\\app\" -Recurse -Filter \"layout.tsx\")",
-      "Bash(Select-Object -ExpandProperty FullName)"
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "PowerShell(\\(Get-Content \"c:\\\\Users\\\\Weyne\\\\VS CODE Projetos\\\\Eleitores2026\\\\src\\\\lib\\\\estados-cidades.ts\" | Measure-Object -Line\\).Lines)",
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

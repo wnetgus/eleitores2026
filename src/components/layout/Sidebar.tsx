@@ -83,17 +83,17 @@ const vereadorMenu = [
 ];
 
 const assessorMenu = [
-  { href: "/dashboard", label: "Dashboard", icon: Crown },
+  { href: "/dashboard", label: "Painel Regional", icon: Crown },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
   { href: "/solicitacoes", label: "Solicitações", icon: Clock },
   { href: "/assessores", label: "Assessores", icon: Shield },
-  { href: "/coordenadores", label: "Coordenadores", icon: Target },
-  { href: "/colaboradores", label: "Colaboradores", icon: Users },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/coordenadores", label: "Estrutura Regional", icon: Target },
+  { href: "/colaboradores", label: "Mobilizadores", icon: Zap },
+  { href: "/eleitores", label: "Base Eleitoral", icon: TrendingUp },
   { href: "/candidatos", label: "Candidatos", icon: Star },
-  { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/relatorios", label: "Inteligência Regional", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
-  { href: "/metas", label: "Metas", icon: TrendingUp },
+  { href: "/metas", label: "Metas", icon: Flag },
 ];
 
 const coordenadorMenu = [
@@ -261,9 +261,12 @@ export function Sidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white/90 font-medium truncate">{userData.nome}</p>
-                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>{isAdmin ? "Admin" : isPoliticoRole ? "Político" : "Operador"} • {roleInfo.label}</p>
+                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>{isAdmin ? "Admin" : isPoliticoRole ? "Político" : isAssessor(userData) ? "Articulação Regional" : "Operador"} • {roleInfo.label}</p>
                 {hierarquia.coordenador && <p className="text-[10px] text-white/40 truncate">Coordenação: {hierarquia.coordenador}</p>}
                 {hierarquia.assessor && <p className="text-[10px] text-white/30 truncate">Assessoria: {hierarquia.assessor}</p>}
+                {isAssessor(userData) && (userData?.cidadePrincipal || userData?.cidade) && (
+                  <p className="text-[10px] text-white/30 truncate">{userData.cidadePrincipal || userData.cidade}</p>
+                )}
               </div>
             </div>
           )}

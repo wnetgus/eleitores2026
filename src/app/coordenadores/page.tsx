@@ -277,6 +277,14 @@ export default function CoordenadoresPage() {
                     <div>
                       <p className="text-white font-medium text-sm">{c.nome}</p>
                       <div className="flex items-center gap-1"><Mail size={12} className="text-white/30" /><p className="text-xs text-white/40">{c.email}</p></div>
+                      {(c.cidadePrincipal || c.cidade) && (
+                        <div className="flex items-center gap-1 mt-0.5">
+                          <MapPin size={11} className="text-white/20 shrink-0" />
+                          <p className="text-[11px] text-white/35 truncate">
+                            {c.cidadePrincipal || c.cidade}{c.estado ? ` · ${c.estado}` : ""}{c.regiao ? ` — ${c.regiao}` : ""}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">

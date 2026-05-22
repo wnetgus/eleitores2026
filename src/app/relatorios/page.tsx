@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { formatDate, parseDate } from "@/lib/utils";
 import { FileSpreadsheet, FileText, Filter, Search, TrendingUp, MapPin, Zap } from "lucide-react";
-import { isPolitico } from "@/lib/permissions";
+import { isPolitico, isAssessor } from "@/lib/permissions";
 import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import toast from "react-hot-toast";
 
@@ -50,11 +50,23 @@ export default function RelatoriosPage() {
     load();
   }, []);
 
+  const cidadesOpcoes = useMemo(() => {
+    const base = filtros.estado ? eleitores.filter((e) => e.estado === filtros.estado) : eleitores;
+    return [...new Set(base.map((e) => e.cidade).filter(Boolean))].sort();
+  }, [eleitores, filtros.estado]);
+
+  const bairrosOpcoes = useMemo(() => {
+    const base = filtros.cidade
+      ? eleitores.filter((e) => e.cidade === filtros.cidade)
+      : filtros.estado ? eleitores.filter((e) => e.estado === filtros.estado) : eleitores;
+    return [...new Set(base.map((e) => e.bairro).filter(Boolean))].sort();
+  }, [eleitores, filtros.estado, filtros.cidade]);
+
   useEffect(() => {
     let result = [...eleitores];
     if (filtros.estado) result = result.filter((e) => e.estado === filtros.estado);
-    if (filtros.cidade) result = result.filter((e) => e.cidade.toLowerCase().includes(filtros.cidade.toLowerCase()));
-    if (filtros.bairro) result = result.filter((e) => e.bairro.toLowerCase().includes(filtros.bairro.toLowerCase()));
+    if (filtros.cidade) result = result.filter((e) => e.cidade === filtros.cidade);
+    if (filtros.bairro) result = result.filter((e) => e.bairro === filtros.bairro);
     if (filtros.grauApoio) result = result.filter((e) => e.grauApoio === filtros.grauApoio);
     if (filtros.search) { const s = filtros.search.toLowerCase(); result = result.filter((e) => e.nomeCompleto.toLowerCase().includes(s) || e.cidade.toLowerCase().includes(s)); }
     if (filtros.dataInicio) { const inicio = new Date(filtros.dataInicio); result = result.filter((e) => parseDate(e.criadoEm) >= inicio); }
@@ -336,9 +348,23 @@ export default function RelatoriosPage() {
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Filter size={18} className="text-emerald-400" /><h3 className="text-white font-semibold">Filtros</h3></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <Select value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value })} options={estadoOptions} label="Estado" />
-          <div><label className="block text-sm font-medium text-white/70 mb-1.5">Cidade</label><input type="text" value={filtros.cidade} onChange={(e) => setFiltros({ ...filtros, cidade: e.target.value })} placeholder="Filtrar cidade..." className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
-          <div><label className="block text-sm font-medium text-white/70 mb-1.5">Bairro</label><input type="text" value={filtros.bairro} onChange={(e) => setFiltros({ ...filtros, bairro: e.target.value })} placeholder="Filtrar bairro..." className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
+          {!isAssessor(userData) && (
+            <Select value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value, cidade: "", bairro: "" })} options={estadoOptions} label="Estado" />
+          )}
+          <Select
+            label="Cidade"
+            value={filtros.cidade}
+            onChange={(e) => setFiltros({ ...filtros, cidade: e.target.value, bairro: "" })}
+            options={[{ value: "", label: "Todas as cidades" }, ...cidadesOpcoes.map((c) => ({ value: c, label: c }))]}
+            disabled={cidadesOpcoes.length === 0}
+          />
+          <Select
+            label="Bairro"
+            value={filtros.bairro}
+            onChange={(e) => setFiltros({ ...filtros, bairro: e.target.value })}
+            options={[{ value: "", label: "Todos os bairros" }, ...bairrosOpcoes.map((b) => ({ value: b, label: b }))]}
+            disabled={bairrosOpcoes.length === 0}
+          />
           <Select value={filtros.grauApoio} onChange={(e) => setFiltros({ ...filtros, grauApoio: e.target.value })} options={grauOptions} label="Grau de Apoio" />
           <div><label className="block text-sm font-medium text-white/70 mb-1.5">Data Início</label><input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
           <div><label className="block text-sm font-medium text-white/70 mb-1.5">Data Fim</label><input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
@@ -346,19 +372,65 @@ export default function RelatoriosPage() {
         </div>
         <div className="mt-4 text-sm text-white/40">{filtered.length} de {eleitores.length} registros encontrados</div>
       </GlassCard>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+
+      {/* VISÃO TERRITORIAL RESUMIDA */}
+      {filtered.length > 0 && (() => {
+        const resumo = Object.entries(
+          filtered.reduce<Record<string, { total: number; fortes: number; recentes: number }>>((acc, e) => {
+            if (!acc[e.cidade]) acc[e.cidade] = { total: 0, fortes: 0, recentes: 0 };
+            acc[e.cidade].total++;
+            if (e.grauApoio === "forte") acc[e.cidade].fortes++;
+            if (parseDate(e.criadoEm).getTime() > Date.now() - 30 * 86400000) acc[e.cidade].recentes++;
+            return acc;
+          }, {})
+        ).map(([cidade, s]) => ({ cidade, ...s, pct: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0 }))
+          .sort((a, b) => b.total - a.total).slice(0, 8);
+        return (
+          <GlassCard className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin size={14} className="text-emerald-400" />
+              <span className="text-sm font-semibold text-white">Visão Territorial</span>
+              <span className="text-xs text-white/30 ml-auto">{resumo.length} cidades</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {resumo.map((r) => (
+                <div key={r.cidade} className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] space-y-1.5">
+                  <p className="text-xs text-white/70 font-medium truncate">{r.cidade}</p>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-lg font-bold text-white">{r.total}</span>
+                    <span className={`text-xs font-medium ${r.pct >= 40 ? "text-emerald-400" : r.pct >= 20 ? "text-amber-400" : "text-red-400"}`}>{r.pct}% fortes</span>
+                  </div>
+                  <div className="w-full bg-white/[0.04] rounded-full h-1">
+                    <div className={`h-1 rounded-full ${r.pct >= 40 ? "bg-emerald-500" : r.pct >= 20 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${r.pct}%` }} />
+                  </div>
+                  {r.recentes > 0 && <p className="text-[10px] text-emerald-400/70">+{r.recentes} nos 30d</p>}
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        );
+      })()}
+
+      <GlassCard className="p-4">
+        <div className="flex items-center gap-2 mb-3">
+          <TrendingUp size={14} className="text-white/30" />
+          <span className="text-xs font-medium text-white/40">Registros individuais</span>
+          <span className="text-xs text-white/20 ml-auto">{filtered.length}</span>
+        </div>
+      <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+        <table className="w-full text-xs">
           <thead><tr className="text-white/40 border-b border-white/[0.06]"><th className="text-left py-3 px-2 font-medium">Nome</th><th className="text-left py-3 px-2 font-medium">Telefone</th><th className="text-left py-3 px-2 font-medium">Documento</th><th className="text-left py-3 px-2 font-medium">Estado</th><th className="text-left py-3 px-2 font-medium">Cidade</th><th className="text-left py-3 px-2 font-medium">Bairro</th><th className="text-left py-3 px-2 font-medium">Grau</th><th className="text-left py-3 px-2 font-medium">Colaborador</th><th className="text-left py-3 px-2 font-medium">Data</th></tr></thead>
           <tbody>{filtered.map((e) => (
             <tr key={e.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-              <td className="py-3 px-2 text-white/80">{e.nomeCompleto}</td><td className="py-3 px-2 text-white/60">{e.telefone || "-"}</td><td className="py-3 px-2 text-white/60 font-mono text-xs">{e.tipoDocumento?.toUpperCase()}: {e.documento}</td>
-              <td className="py-3 px-2 text-white/60">{e.estado}</td><td className="py-3 px-2 text-white/60">{e.cidade}</td><td className="py-3 px-2 text-white/60">{e.bairro || "-"}</td>
-              <td className="py-3 px-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span></td>
-              <td className="py-3 px-2 text-white/60">{e.colaboradorNome}</td><td className="py-3 px-2 text-white/40 text-xs">{formatDate(e.criadoEm)}</td>
+              <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td><td className="py-2 px-2 text-white/50">{e.telefone || "-"}</td><td className="py-2 px-2 text-white/50 font-mono">{e.tipoDocumento?.toUpperCase()}: {e.documento}</td>
+              <td className="py-2 px-2 text-white/50">{e.estado}</td><td className="py-2 px-2 text-white/50">{e.cidade}</td><td className="py-2 px-2 text-white/50">{e.bairro || "-"}</td>
+              <td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span></td>
+              <td className="py-2 px-2 text-white/50">{e.colaboradorNome}</td><td className="py-2 px-2 text-white/30">{formatDate(e.criadoEm)}</td>
             </tr>
           ))}{filtered.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-white/30">Nenhum registro encontrado</td></tr>}</tbody>
         </table>
       </div>
+      </GlassCard>
     </div>
   );
 }

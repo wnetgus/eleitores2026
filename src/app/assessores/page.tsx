@@ -6,7 +6,7 @@ import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { AppUser, Gabinete, ROLE_CONFIG } from "@/types";
+import { AppUser, Gabinete, Eleitor, ROLE_CONFIG } from "@/types";
 import { getRoleConfig, isSuperOrMaster, isPrefeito, isAssessor, isPolitico, canViewAssessores, canManageUsers } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
@@ -15,9 +15,9 @@ import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
 import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
-import { Shield, UserPlus, Mail, Pencil, Power, Building2, Trash2, Search } from "lucide-react";
+import { Shield, UserPlus, Mail, Pencil, Building2, Trash2, MapPin, Users, TrendingUp, TrendingDown } from "lucide-react";
 import toast from "react-hot-toast";
-import { formatDate, sugerirEmail } from "@/lib/utils";
+import { formatDate, sugerirEmail, parseDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
 import { Modal } from "@/components/ui/Modal";
 
@@ -38,6 +38,9 @@ export default function AssessoresPage() {
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
 
   const [gabinetesMap, setGabinetesMap] = useState<Record<string, { nome: string; politicoNome: string; cargo: string }>>({});
+  const [coordenaoresExec, setCoordenadoresExec] = useState<AppUser[]>([]);
+  const [eleitoresExec, setEleitoresExec] = useState<Eleitor[]>([]);
+  const [ordenacao, setOrdenacao] = useState<"forca" | "criticos" | "crescimento" | "estagnados">("forca");
   const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessor(userData);
   const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
 
@@ -81,6 +84,18 @@ export default function AssessoresPage() {
         await loadGabinetesMap();
         const gSnap = await getDocs(collection(db, "campanhas"));
         setTodosGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
+      }
+      if (userData && isPolitico(userData)) {
+        const scopeId = userData?.gabineteId || userData?.campanhaId;
+        if (scopeId) {
+          const fieldName = userData?.gabineteId ? "gabineteId" : "campanhaId";
+          const [coordSnap, elSnap] = await Promise.all([
+            getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where(fieldName, "==", scopeId))),
+            getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", scopeId))),
+          ]);
+          setCoordenadoresExec(coordSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+          setEleitoresExec(elSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        }
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
@@ -136,6 +151,50 @@ export default function AssessoresPage() {
     } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
   }
 
+  const statsExec = useMemo(() => {
+    if (!userData || !isPolitico(userData)) return [];
+    const agora = Date.now();
+    return assessores.map((a) => {
+      const meusCoords = coordenaoresExec.filter((c) => c.assessorId === a.uid);
+      const coordIds = new Set(meusCoords.map((c) => c.uid));
+      const meusEleitores = eleitoresExec.filter((e) => coordIds.has(e.coordenadorId));
+
+      const territorio = (() => {
+        if (a.cidadePrincipal) return a.cidadePrincipal;
+        if (a.cidade) return a.cidade;
+        const contagem: Record<string, number> = {};
+        meusEleitores.forEach((e) => { contagem[e.cidade] = (contagem[e.cidade] || 0) + 1; });
+        return Object.entries(contagem).sort((x, y) => y[1] - x[1])[0]?.[0] ?? null;
+      })();
+
+      const totalEleitores = meusEleitores.length;
+      const fortes = meusEleitores.filter((e) => e.grauApoio === "forte").length;
+      const forca = totalEleitores > 0 ? Math.round((fortes / totalEleitores) * 100) : 0;
+      const recentes30 = meusEleitores.filter((e) => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
+      const prev30 = meusEleitores.filter((e) => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
+      const tendencia = prev30 > 0 ? Math.round(((recentes30 - prev30) / prev30) * 100) : recentes30 > 0 ? 100 : 0;
+
+      return { uid: a.uid, nome: a.nome, ativo: a.ativo, territorio, totalEleitores, totalCoords: meusCoords.length, forca, recentes30, tendencia };
+    });
+  }, [assessores, coordenaoresExec, eleitoresExec, userData]);
+
+  const statsExecOrdenados = useMemo(() => {
+    const lista = [...statsExec];
+    if (ordenacao === "forca") {
+      return lista.sort((a, b) => b.forca - a.forca || b.totalEleitores - a.totalEleitores);
+    }
+    if (ordenacao === "criticos") {
+      const score = (s: typeof statsExec[0]) =>
+        (100 - s.forca) * 0.6 + (s.recentes30 === 0 ? 40 : 0) + (s.tendencia < 0 ? 15 : 0);
+      return lista.sort((a, b) => score(b) - score(a));
+    }
+    if (ordenacao === "crescimento") {
+      return lista.sort((a, b) => b.tendencia - a.tendencia || b.recentes30 - a.recentes30);
+    }
+    // estagnados
+    return lista.sort((a, b) => a.recentes30 - b.recentes30 || a.tendencia - b.tendencia);
+  }, [statsExec, ordenacao]);
+
   const assessoresFiltrados = useMemo(() => {
     let lista = assessores;
     if (filtros.texto) {
@@ -153,6 +212,151 @@ export default function AssessoresPage() {
 
   if (!userData || !podeAcessar) return null;
   const config = getRoleConfig(userData);
+
+  if (isPolitico(userData)) {
+    const totalBracos = statsExec.length;
+    const bracosAtivos = statsExec.filter((s) => s.recentes30 > 0).length;
+    const totalEleitoresCobertos = statsExec.reduce((sum, s) => sum + s.totalEleitores, 0);
+    const totalCoordenadores = coordenaoresExec.length;
+
+    return (
+      <div className="space-y-6 animate-in">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center text-lg`}>🗺️</div>
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-white">Força Territorial</h1>
+            <p className="text-sm text-amber-400/70">
+              {totalBracos} {totalBracos === 1 ? "braço regional" : "braços regionais"} do mandato
+              {bracosAtivos > 0 && ` · ${bracosAtivos} com atividade nos últimos 30 dias`}
+            </p>
+          </div>
+          <BuscaGlobal userData={userData} />
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <GlassCard className="p-4 text-center">
+            <p className="text-3xl font-bold text-white">{totalBracos}</p>
+            <p className="text-xs text-white/40 mt-1">Braços regionais</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-3xl font-bold text-amber-400">{bracosAtivos}</p>
+            <p className="text-xs text-white/40 mt-1">Com atividade recente</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-3xl font-bold text-white">{totalEleitoresCobertos.toLocaleString("pt-BR")}</p>
+            <p className="text-xs text-white/40 mt-1">Eleitores cobertos</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-3xl font-bold text-white">{totalCoordenadores}</p>
+            <p className="text-xs text-white/40 mt-1">Coordenadores ativos</p>
+          </GlassCard>
+        </div>
+
+        {!loading && statsExec.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-white/20 pr-1 tracking-wide uppercase">Prioridade</span>
+            {(
+              [
+                { key: "forca",      label: "Mais fortes" },
+                { key: "criticos",   label: "Críticos"    },
+                { key: "crescimento",label: "Crescimento" },
+                { key: "estagnados", label: "Estagnados"  },
+              ] as const
+            ).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setOrdenacao(key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+                  ordenacao === key
+                    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                    : "text-white/30 border-white/[0.07] hover:text-white/55 hover:border-white/20"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center py-12">
+            <svg className="animate-spin h-6 w-6 text-amber-500" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {statsExecOrdenados.map((s) => {
+              const statusAtivo   = s.recentes30 > 0;
+              const statusVazio   = s.totalEleitores === 0;
+              const statusLabel   = statusAtivo ? "Território Ativo" : statusVazio ? "Sem base mapeada" : "Presença Reduzida";
+              const statusDot     = statusAtivo ? "bg-emerald-400" : statusVazio ? "bg-white/20" : "bg-amber-400";
+              const statusText    = statusAtivo ? "text-emerald-400" : statusVazio ? "text-white/30" : "text-amber-400";
+
+              return (
+                <div key={s.uid} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] space-y-3 hover:border-white/[0.10] transition-colors">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white font-bold text-sm">
+                        {s.nome.charAt(0).toUpperCase()}
+                      </div>
+                      <p className="text-white font-semibold text-sm truncate">{s.nome}</p>
+                    </div>
+                    <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-full bg-white/[0.04] ${statusText}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
+                      <span className="text-xs font-medium whitespace-nowrap">{statusLabel}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-sm">
+                    <MapPin size={13} className="text-white/30 shrink-0" />
+                    <span className={s.territorio ? "text-white/70 font-medium" : "text-white/25 italic"}>
+                      {s.territorio ?? "Território não definido"}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/[0.05]">
+                    <div className="text-center">
+                      <p className="text-white font-bold text-lg leading-tight">{s.totalEleitores}</p>
+                      <p className="text-white/30 text-xs mt-0.5">eleitores</p>
+                    </div>
+                    <div className="text-center border-x border-white/[0.05]">
+                      <div className="flex items-center justify-center gap-1">
+                        <Users size={12} className="text-white/30" />
+                        <p className="text-white font-bold text-lg leading-tight">{s.totalCoords}</p>
+                      </div>
+                      <p className="text-white/30 text-xs mt-0.5">coords</p>
+                    </div>
+                    <div className="text-center">
+                      <p className={`font-bold text-lg leading-tight ${s.forca >= 40 ? "text-emerald-400" : s.forca >= 20 ? "text-amber-400" : s.totalEleitores > 0 ? "text-red-400" : "text-white/30"}`}>
+                        {s.totalEleitores > 0 ? `${s.forca}%` : "—"}
+                      </p>
+                      <p className="text-white/30 text-xs mt-0.5">força</p>
+                    </div>
+                  </div>
+
+                  {s.totalEleitores > 0 && (
+                    <div className="flex items-center justify-between text-xs pt-1">
+                      <span className={s.recentes30 > 0 ? "text-emerald-400" : "text-white/25"}>
+                        {s.recentes30 > 0 ? `+${s.recentes30} nos últimos 30d` : "Sem novos cadastros em 30d"}
+                      </span>
+                      {s.tendencia !== 0 && (
+                        <span className={`flex items-center gap-0.5 font-medium ${s.tendencia > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                          {s.tendencia > 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                          {s.tendencia > 0 ? "+" : ""}{s.tendencia}%
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {statsExec.length === 0 && (
+              <p className="col-span-full text-center text-white/30 py-12">Nenhum braço territorial cadastrado</p>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-in">

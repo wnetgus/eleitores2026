@@ -8,12 +8,16 @@ import { isSuperOrMaster, isAssessor } from "@/lib/permissions";
 import { useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
+import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { UserPlus, Upload, FileSpreadsheet, Loader2, Plus, Trash2, HelpCircle } from "lucide-react";
 import toast from "react-hot-toast";
 import * as XLSX from "xlsx";
+
+const PARTIDOS_COMUNS = ["PT","PL","União Brasil","PSD","MDB","Republicanos","PP","AVANTE","Podemos","PDT","PSB","Solidariedade","Cidadania","PSDB","PV","PSOL","PCdoB","Patriota","NOVO","Rede"];
+const CARGOS_COMUNS = ["Vereador","Vereadora","Prefeito","Prefeita","Vice-Prefeito","Deputado Estadual","Deputada Estadual","Deputado Federal","Deputada Federal","Senador","Senadora","Governador","Governadora"];
 
 export default function CandidatosPage() {
   const { userData } = useAuth();
@@ -27,6 +31,8 @@ export default function CandidatosPage() {
   const [preview, setPreview] = useState<{ nome: string; partido: string; numero: string; cargo: string; ativo: boolean }[]>([]);
   const [form, setForm] = useState({ nome: "", partido: "", numero: "", cargo: "" });
   const [showAjuda, setShowAjuda] = useState(false);
+  const [partidoCustom, setPartidoCustom] = useState(false);
+  const [cargoCustom, setCargoCustom] = useState(false);
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) {
@@ -139,9 +145,51 @@ export default function CandidatosPage() {
           <h3 className="text-white font-semibold mb-4">Novo Candidato</h3>
           <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <Input label="Nome *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do candidato" />
-            <Input label="Partido *" value={form.partido} onChange={(e) => setForm({ ...form, partido: e.target.value })} placeholder="Ex: PT, PSDB..." />
+            <div>
+              {!partidoCustom ? (
+                <Select
+                  label="Partido *"
+                  value={form.partido}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom") { setPartidoCustom(true); setForm({ ...form, partido: "" }); }
+                    else setForm({ ...form, partido: e.target.value });
+                  }}
+                  options={[
+                    { value: "", label: "Selecione o partido..." },
+                    ...PARTIDOS_COMUNS.map((p) => ({ value: p, label: p })),
+                    { value: "__custom", label: "Outro (digitar)..." },
+                  ]}
+                />
+              ) : (
+                <div className="space-y-1">
+                  <Input label="Partido *" value={form.partido} onChange={(e) => setForm({ ...form, partido: e.target.value })} placeholder="Digite o partido..." autoFocus />
+                  <button type="button" onClick={() => { setPartidoCustom(false); setForm({ ...form, partido: "" }); }} className="text-[11px] text-white/30 hover:text-white/50 transition-colors">← voltar à lista</button>
+                </div>
+              )}
+            </div>
             <Input label="Número *" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Número de campanha" />
-            <Input label="Cargo *" value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} placeholder="Ex: Vereador" />
+            <div>
+              {!cargoCustom ? (
+                <Select
+                  label="Cargo *"
+                  value={form.cargo}
+                  onChange={(e) => {
+                    if (e.target.value === "__custom") { setCargoCustom(true); setForm({ ...form, cargo: "" }); }
+                    else setForm({ ...form, cargo: e.target.value });
+                  }}
+                  options={[
+                    { value: "", label: "Selecione o cargo..." },
+                    ...CARGOS_COMUNS.map((c) => ({ value: c, label: c })),
+                    { value: "__custom", label: "Outro (digitar)..." },
+                  ]}
+                />
+              ) : (
+                <div className="space-y-1">
+                  <Input label="Cargo *" value={form.cargo} onChange={(e) => setForm({ ...form, cargo: e.target.value })} placeholder="Digite o cargo..." autoFocus />
+                  <button type="button" onClick={() => { setCargoCustom(false); setForm({ ...form, cargo: "" }); }} className="text-[11px] text-white/30 hover:text-white/50 transition-colors">← voltar à lista</button>
+                </div>
+              )}
+            </div>
             <div className="md:col-span-2 lg:col-span-4"><Button type="submit" loading={saving}><UserPlus size={18} /> {saving ? "Salvando..." : "Cadastrar"}</Button></div>
           </form>
         </GlassCard>
