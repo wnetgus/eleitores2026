@@ -33,6 +33,7 @@ export default function RelatoriosPage() {
   const [filtered, setFiltered] = useState<Eleitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtros, setFiltros] = useState({ estado: "", cidade: "", bairro: "", grauApoio: "", dataInicio: "", dataFim: "", search: "" });
+  const [grauPill, setGrauPill] = useState<"" | "forte" | "medio" | "fraco" | "indeciso" | "recente">("");
 
   useEffect(() => {
     async function load() {
@@ -98,6 +99,46 @@ export default function RelatoriosPage() {
       toast.success("PDF premium exportado!");
     } catch (e) { toast.error("Erro ao exportar PDF"); }
   }
+
+  const radarTerritorial = useMemo(() => {
+    if (!userData || !isAssessor(userData) || filtered.length === 0) return null;
+    const agora30d = Date.now() - 30 * 86400000;
+    const mapa: Record<string, { label: string; total: number; fortes: number; fracos: number; indecisos: number; recentes: number }> = {};
+    for (const e of filtered) {
+      const key = `${e.bairro || ""}||${e.cidade}`;
+      const label = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
+      if (!mapa[key]) mapa[key] = { label, total: 0, fortes: 0, fracos: 0, indecisos: 0, recentes: 0 };
+      mapa[key].total++;
+      if (e.grauApoio === "forte")    mapa[key].fortes++;
+      if (e.grauApoio === "fraco")    mapa[key].fracos++;
+      if (e.grauApoio === "indeciso") mapa[key].indecisos++;
+      if (parseDate(e.criadoEm).getTime() > agora30d) mapa[key].recentes++;
+    }
+    const stats = Object.values(mapa);
+    const crescendo     = stats.filter((b) => b.recentes > 0).sort((a, b) => b.recentes - a.recentes).slice(0, 5);
+    const estagnados    = stats.filter((b) => b.total > 2 && b.recentes === 0).sort((a, b) => b.total - a.total).slice(0, 5);
+    const oportunidades = stats.filter((b) => b.total > 0 && b.indecisos / b.total >= 0.20).sort((a, b) => b.indecisos - a.indecisos).slice(0, 5);
+    const atencao       = stats.filter((b) => b.total > 0 && b.fracos / b.total >= 0.25).sort((a, b) => (b.fracos / b.total) - (a.fracos / a.total)).slice(0, 5);
+    const frases: string[] = [];
+    if (crescendo.length > 0) {
+      const labels = crescendo.slice(0, 2).map((t) => t.label).join(" e ");
+      const mais = crescendo.length > 2 ? ` e mais ${crescendo.length - 2}` : "";
+      frases.push(`${labels}${mais} ${crescendo.length === 1 ? "apresentou" : "apresentaram"} crescimento recente.`);
+    }
+    if (estagnados.length > 0) {
+      const labels = estagnados.slice(0, 2).map((t) => t.label).join(" e ");
+      frases.push(`${labels} ${estagnados.length === 1 ? "permanece" : "permanecem"} sem atividade há mais de 30 dias.`);
+    }
+    if (oportunidades.length > 0) {
+      const top = oportunidades[0];
+      frases.push(`Principal oportunidade em ${top.label}: ${Math.round((top.indecisos / top.total) * 100)}% de indecisos.`);
+    }
+    if (atencao.length > 0) {
+      const top = atencao[0];
+      frases.push(`Atenção em ${top.label}: ${Math.round((top.fracos / top.total) * 100)}% de rejeição registrada.`);
+    }
+    return { crescendo, estagnados, oportunidades, atencao, briefing: frases };
+  }, [filtered, userData]);
 
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8 text-emerald-500" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
@@ -342,7 +383,10 @@ export default function RelatoriosPage() {
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold text-white">Relatórios</h1><p className="text-white/50 text-sm mt-1">Filtre e exporte seus dados</p></div>
+        <div>
+          <h1 className="text-2xl font-bold text-white">{isAssessor(userData) ? "Radar Territorial" : "Relatórios"}</h1>
+          <p className="text-white/50 text-sm mt-1">{isAssessor(userData) ? `Inteligência regional · ${filtered.length} apoiadores na base` : "Filtre e exporte seus dados"}</p>
+        </div>
         <div className="flex items-center gap-2"><Button variant="secondary" onClick={exportExcelPremiumAction}><FileSpreadsheet size={16} /> Excel Premium</Button><Button variant="secondary" onClick={exportPDFPremiumAction}><FileText size={16} /> PDF Premium</Button></div>
       </div>
       <GlassCard className="p-5">
@@ -372,6 +416,108 @@ export default function RelatoriosPage() {
         </div>
         <div className="mt-4 text-sm text-white/40">{filtered.length} de {eleitores.length} registros encontrados</div>
       </GlassCard>
+
+      {/* Radar Territorial — assessor */}
+      {radarTerritorial && (
+        <>
+          {radarTerritorial.briefing.length > 0 && (
+            <GlassCard className="p-4 border-violet-500/10">
+              <p className="text-[11px] text-violet-300/50 uppercase tracking-wide mb-2 font-medium">Briefing Regional</p>
+              <p className="text-white/70 text-sm leading-relaxed">{radarTerritorial.briefing.join(" ")}</p>
+            </GlassCard>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <GlassCard className="p-4 border-emerald-500/10">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp size={13} className="text-emerald-400" />
+                <h3 className="text-emerald-400 font-semibold text-sm">Crescimento</h3>
+                {radarTerritorial.crescendo.length > 0 && <span className="ml-auto text-xs text-emerald-400/40">{radarTerritorial.crescendo.length}</span>}
+              </div>
+              {radarTerritorial.crescendo.length > 0 ? (
+                <div className="space-y-2">
+                  {radarTerritorial.crescendo.map((t) => (
+                    <div key={t.label} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/65 truncate">{t.label}</span>
+                      <span className="text-xs text-emerald-400 shrink-0">+{t.recentes}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-white/25 italic">Sem crescimento recente</p>
+              )}
+            </GlassCard>
+
+            <GlassCard className="p-4 border-amber-500/10">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm leading-none">⚠</span>
+                <h3 className="text-amber-400 font-semibold text-sm">Estagnados</h3>
+                {radarTerritorial.estagnados.length > 0 && <span className="ml-auto text-xs text-amber-400/40">{radarTerritorial.estagnados.length}</span>}
+              </div>
+              {radarTerritorial.estagnados.length > 0 ? (
+                <div className="space-y-2">
+                  {radarTerritorial.estagnados.map((t) => (
+                    <div key={t.label} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/65 truncate">{t.label}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-white/30">{t.total}</span>
+                        <a href={`https://wa.me/?text=${encodeURIComponent(`⚠ Território estagnado: ${t.label} — ${t.total} apoiadores sem atividade há 30 dias.`)}`} target="_blank" rel="noopener noreferrer" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-white/25 italic">Todos os territórios ativos</p>
+              )}
+            </GlassCard>
+
+            <GlassCard className="p-4 border-blue-500/10">
+              <div className="flex items-center gap-2 mb-3">
+                <Zap size={13} className="text-blue-400" />
+                <h3 className="text-blue-400 font-semibold text-sm">Oportunidades</h3>
+                {radarTerritorial.oportunidades.length > 0 && <span className="ml-auto text-xs text-blue-400/40">{radarTerritorial.oportunidades.length}</span>}
+              </div>
+              {radarTerritorial.oportunidades.length > 0 ? (
+                <div className="space-y-2">
+                  {radarTerritorial.oportunidades.map((t) => (
+                    <div key={t.label} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/65 truncate">{t.label}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-blue-400">{Math.round((t.indecisos / t.total) * 100)}%</span>
+                        <a href={`https://wa.me/?text=${encodeURIComponent(`🎯 Oportunidade: ${t.label} — ${t.indecisos} indecisos (${Math.round((t.indecisos / t.total) * 100)}%). Intensificar abordagem.`)}`} target="_blank" rel="noopener noreferrer" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-white/25 italic">Sem concentração de indecisos</p>
+              )}
+            </GlassCard>
+
+            <GlassCard className="p-4 border-red-500/10">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-sm leading-none">🚨</span>
+                <h3 className="text-red-400 font-semibold text-sm">Atenção</h3>
+                {radarTerritorial.atencao.length > 0 && <span className="ml-auto text-xs text-red-400/40">{radarTerritorial.atencao.length}</span>}
+              </div>
+              {radarTerritorial.atencao.length > 0 ? (
+                <div className="space-y-2">
+                  {radarTerritorial.atencao.map((t) => (
+                    <div key={t.label} className="flex items-center justify-between gap-2">
+                      <span className="text-xs text-white/65 truncate">{t.label}</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-xs text-red-400">{Math.round((t.fracos / t.total) * 100)}%</span>
+                        <a href={`https://wa.me/?text=${encodeURIComponent(`🚨 Área de atenção: ${t.label} — ${Math.round((t.fracos / t.total) * 100)}% de rejeição. Avaliar estratégia.`)}`} target="_blank" rel="noopener noreferrer" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-white/25 italic">Sem alta rejeição registrada</p>
+              )}
+            </GlassCard>
+          </div>
+        </>
+      )}
 
       {/* VISÃO TERRITORIAL RESUMIDA */}
       {filtered.length > 0 && (() => {
@@ -411,25 +557,87 @@ export default function RelatoriosPage() {
         );
       })()}
 
+      {/* Pills de qualidade — leitura rápida da base */}
+      {filtered.length > 0 && (() => {
+        const agora7d = Date.now() - 7 * 86400000;
+        const contagens = {
+          forte:    filtered.filter((e) => e.grauApoio === "forte").length,
+          medio:    filtered.filter((e) => e.grauApoio === "medio").length,
+          indeciso: filtered.filter((e) => e.grauApoio === "indeciso").length,
+          fraco:    filtered.filter((e) => e.grauApoio === "fraco").length,
+          recente:  filtered.filter((e) => parseDate(e.criadoEm).getTime() > agora7d).length,
+        };
+        const pills = [
+          { key: "",         label: "Todos",    count: filtered.length, cor: "text-white/60",  ativo: "bg-white/10 text-white border-white/20" },
+          { key: "forte",    label: "Fortes",   count: contagens.forte,    cor: "text-emerald-400", ativo: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" },
+          { key: "medio",    label: "Médios",   count: contagens.medio,    cor: "text-amber-400",   ativo: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
+          { key: "indeciso", label: "Indecisos",count: contagens.indeciso, cor: "text-blue-400",    ativo: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
+          { key: "fraco",    label: "Fracos",   count: contagens.fraco,    cor: "text-red-400",     ativo: "bg-red-500/15 text-red-400 border-red-500/30" },
+          { key: "recente",  label: "Recentes", count: contagens.recente,  cor: "text-violet-400",  ativo: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
+        ] as const;
+        return (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] text-white/20 pr-1 tracking-wide uppercase">Leitura</span>
+            {pills.map(({ key, label, count, ativo }) => (
+              <button
+                key={key}
+                onClick={() => setGrauPill(grauPill === key ? "" : key as typeof grauPill)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+                  grauPill === key ? ativo : "text-white/30 border-white/[0.07] hover:text-white/55 hover:border-white/20"
+                }`}
+              >
+                {label} <span className="opacity-60 ml-0.5">·{count}</span>
+              </button>
+            ))}
+          </div>
+        );
+      })()}
+
       <GlassCard className="p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <TrendingUp size={14} className="text-white/30" />
-          <span className="text-xs font-medium text-white/40">Registros individuais</span>
-          <span className="text-xs text-white/20 ml-auto">{filtered.length}</span>
-        </div>
-      <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
-        <table className="w-full text-xs">
-          <thead><tr className="text-white/40 border-b border-white/[0.06]"><th className="text-left py-3 px-2 font-medium">Nome</th><th className="text-left py-3 px-2 font-medium">Telefone</th><th className="text-left py-3 px-2 font-medium">Documento</th><th className="text-left py-3 px-2 font-medium">Estado</th><th className="text-left py-3 px-2 font-medium">Cidade</th><th className="text-left py-3 px-2 font-medium">Bairro</th><th className="text-left py-3 px-2 font-medium">Grau</th><th className="text-left py-3 px-2 font-medium">Colaborador</th><th className="text-left py-3 px-2 font-medium">Data</th></tr></thead>
-          <tbody>{filtered.map((e) => (
-            <tr key={e.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-              <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td><td className="py-2 px-2 text-white/50">{e.telefone || "-"}</td><td className="py-2 px-2 text-white/50 font-mono">{e.tipoDocumento?.toUpperCase()}: {e.documento}</td>
-              <td className="py-2 px-2 text-white/50">{e.estado}</td><td className="py-2 px-2 text-white/50">{e.cidade}</td><td className="py-2 px-2 text-white/50">{e.bairro || "-"}</td>
-              <td className="py-2 px-2"><span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span></td>
-              <td className="py-2 px-2 text-white/50">{e.colaboradorNome}</td><td className="py-2 px-2 text-white/30">{formatDate(e.criadoEm)}</td>
-            </tr>
-          ))}{filtered.length === 0 && <tr><td colSpan={9} className="py-12 text-center text-white/30">Nenhum registro encontrado</td></tr>}</tbody>
-        </table>
-      </div>
+        {(() => {
+          const agora7d = Date.now() - 7 * 86400000;
+          const listaExibicao = grauPill === ""
+            ? filtered
+            : grauPill === "recente"
+              ? filtered.filter((e) => parseDate(e.criadoEm).getTime() > agora7d)
+              : filtered.filter((e) => e.grauApoio === grauPill);
+          return (
+            <>
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp size={14} className="text-white/30" />
+                <span className="text-xs font-medium text-white/40">Registros individuais</span>
+                <span className="text-xs text-white/20 ml-auto">{listaExibicao.length}{grauPill && ` de ${filtered.length}`}</span>
+              </div>
+              <div className="overflow-x-auto max-h-[480px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-white/40 border-b border-white/[0.06]"><th className="text-left py-3 px-2 font-medium">Nome</th><th className="text-left py-3 px-2 font-medium">Telefone</th><th className="text-left py-3 px-2 font-medium">Documento</th><th className="text-left py-3 px-2 font-medium">Estado</th><th className="text-left py-3 px-2 font-medium">Cidade</th><th className="text-left py-3 px-2 font-medium">Bairro</th><th className="text-left py-3 px-2 font-medium">Grau</th><th className="text-left py-3 px-2 font-medium">Colaborador</th><th className="text-left py-3 px-2 font-medium">Data</th></tr></thead>
+                  <tbody>
+                    {listaExibicao.map((e) => (
+                      <tr key={e.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                        <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td>
+                        <td className="py-2 px-2 text-white/50">{e.telefone || "-"}</td>
+                        <td className="py-2 px-2 text-white/50 font-mono">{e.tipoDocumento?.toUpperCase()}: {e.documento}</td>
+                        <td className="py-2 px-2 text-white/50">{e.estado}</td>
+                        <td className="py-2 px-2 text-white/50">{e.cidade}</td>
+                        <td className="py-2 px-2 text-white/50">{e.bairro || "-"}</td>
+                        <td className="py-2 px-2">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>
+                            {e.grauApoio}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-white/50">{e.colaboradorNome}</td>
+                        <td className="py-2 px-2 text-white/30">{formatDate(e.criadoEm)}</td>
+                      </tr>
+                    ))}
+                    {listaExibicao.length === 0 && (
+                      <tr><td colSpan={9} className="py-12 text-center text-white/30">Nenhum registro encontrado</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          );
+        })()}
       </GlassCard>
     </div>
   );

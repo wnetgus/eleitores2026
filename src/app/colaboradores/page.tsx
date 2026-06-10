@@ -518,6 +518,12 @@ export default function ColaboradoresPage() {
                   )}
                 </p>
               )}
+              {(c.bairro || c.cidade) && (
+                <p className="flex items-center gap-1 text-[10px] text-white/30 mt-1 truncate">
+                  <MapPin size={9} className="shrink-0 text-white/20" />
+                  <span>{[c.bairro, c.cidade].filter(Boolean).join(", ")}</span>
+                </p>
+              )}
               <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] mt-1">
                 <div className="flex items-center gap-1.5 text-xs text-white/40">
                   <Users size={11} />

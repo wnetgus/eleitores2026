@@ -13,7 +13,10 @@
     "clean:all": "node scripts/limpar-testes.mjs --all",
     "seed:fake": "node scripts/seed-cenario-fake.mjs",
     "seed:fake:reset": "node scripts/seed-cenario-fake.mjs --reset",
-    "clean:fake": "node scripts/limpar-cenario-fake.mjs --confirm"
+    "clean:fake": "node scripts/limpar-cenario-fake.mjs --confirm",
+    "seed:fake:auth": "node scripts/criar-auth-coords-mobs.mjs",
+    "seed:v3": "node scripts/seed-cenario-v3.mjs",
+    "seed:v3:reset": "node scripts/seed-cenario-v3.mjs --reset"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

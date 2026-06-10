@@ -179,10 +179,16 @@ export default function PainelGabinetePage() {
   });
 
   const rankingColaboradores = colabNoGabinete
-    .map((c) => ({
-      nome: c.nome,
-      total: eleitores.filter((e) => e.colaboradorId === c.uid).length,
-    }))
+    .map((c) => {
+      const coord = usuarios.find((u) => u.uid === c.coordenadorId);
+      const territorio = c.bairro && c.cidade ? `${c.bairro} · ${c.cidade}` : (c.cidade || "");
+      return {
+        nome: c.nome,
+        total: eleitores.filter((e) => e.colaboradorId === c.uid).length,
+        coordNome: coord?.nome || "",
+        territorio,
+      };
+    })
     .sort((a, b) => b.total - a.total)
     .slice(0, 5);
 
@@ -291,12 +297,20 @@ export default function PainelGabinetePage() {
             {rankingColaboradores.length > 0 && (
               <GlassCard className="p-5">
                 <h3 className="text-white font-semibold mb-3">Colaboradores Mais Ativos</h3>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   {rankingColaboradores.map((c, i) => (
-                    <div key={c.nome} className="flex items-center gap-3 text-sm">
-                      <span className="text-white/40 w-5">{i + 1}º</span>
-                      <span className="text-white/80 flex-1 truncate">{c.nome}</span>
-                      <span className="text-emerald-400 font-medium">{c.total}</span>
+                    <div key={c.nome} className="flex items-start gap-2.5 p-2 bg-white/[0.03] rounded-xl">
+                      <span className="text-white/30 text-xs w-5 shrink-0 mt-0.5">{i + 1}º</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white/85 text-sm font-medium truncate">{c.nome}</p>
+                        {c.coordNome && (
+                          <p className="text-white/35 text-[10px] truncate">Coord. {c.coordNome.split(" ")[0]}</p>
+                        )}
+                        {c.territorio && (
+                          <p className="text-white/25 text-[10px] truncate">{c.territorio}</p>
+                        )}
+                      </div>
+                      <span className="text-emerald-400 font-bold text-sm shrink-0">{c.total}</span>
                     </div>
                   ))}
                 </div>
@@ -397,31 +411,50 @@ export default function PainelGabinetePage() {
                 </button>
                 {equipeExpanded.coordenadores && (
                   <div className="ml-9 mt-1 space-y-1">
-                    {coordenadores.length > 0 ? coordenadores.map((c) => (
-                      <div key={c.uid} className="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] text-xs">
-                        <button onClick={() => toggleEquipe(`coord_${c.uid}`)} className="text-white/30 hover:text-white shrink-0">
-                          {equipeExpanded[`coord_${c.uid}`] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-white/80 truncate">{c.nome}</p>
-                          <p className="text-white/30 text-[10px] truncate">Coordenador(a) • {gabinete?.nome}</p>
-                        </div>
-                        <span className="text-white/20 text-[10px] shrink-0">{c.email}</span>
-                        {equipeExpanded[`coord_${c.uid}`] && (
-                          <div className="ml-4 mt-1 w-full">
-                            {colaboradoresDoCoord(c.uid).length > 0 ? colaboradoresDoCoord(c.uid).map((col) => (
-                              <div key={col.uid} className="flex items-center gap-2 p-1 text-xs">
-                                <Zap size={10} className="text-emerald-400 shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="text-white/60 truncate">{col.nome}</p>
-                                  <p className="text-white/20 text-[10px] truncate">Militante • Coordenador {c.nome} • {gabinete?.nome}</p>
-                                </div>
+                    {coordenadores.length > 0 ? coordenadores.map((c) => {
+                      const colabs = colaboradoresDoCoord(c.uid);
+                      const coordEleitores = eleitores.filter((e) => e.coordenadorId === c.uid).length;
+                      const territorio = c.bairro && c.cidade ? `${c.bairro} · ${c.cidade}` : (c.cidade || "");
+                      return (
+                        <div key={c.uid} className="rounded-xl bg-white/[0.02] overflow-hidden">
+                          <button
+                            onClick={() => toggleEquipe(`coord_${c.uid}`)}
+                            className="w-full flex items-center gap-2 p-2.5 hover:bg-white/[0.04] transition-colors text-left"
+                          >
+                            <span className="text-white/30 shrink-0">
+                              {equipeExpanded[`coord_${c.uid}`] ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-white/85 text-xs font-medium truncate">{c.nome}</p>
+                              <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                {territorio && <span className="text-white/40 text-[10px]">{territorio}</span>}
+                                <span className="text-white/25 text-[10px]">{colabs.length} colab. · {coordEleitores} eleit.</span>
                               </div>
-                            )) : <p className="text-xs text-white/30 italic">Sem militantes</p>}
-                          </div>
-                        )}
-                      </div>
-                    )) : <p className="text-xs text-white/30 italic pl-2">Nenhum coordenador</p>}
+                            </div>
+                            {c.email && <span className="text-white/15 text-[10px] shrink-0 hidden sm:block max-w-[90px] truncate">{c.email}</span>}
+                          </button>
+                          {equipeExpanded[`coord_${c.uid}`] && (
+                            <div className="border-t border-white/[0.04] px-2.5 pb-2.5 pt-2 space-y-1.5">
+                              {colabs.length > 0 ? colabs.map((col) => {
+                                const colTotal = eleitores.filter((e) => e.colaboradorId === col.uid).length;
+                                const colTerr = col.bairro && col.cidade ? `${col.bairro} · ${col.cidade}` : (col.cidade || territorio);
+                                return (
+                                  <div key={col.uid} className="flex items-start gap-2 p-2 bg-white/[0.03] rounded-lg">
+                                    <Zap size={9} className="text-emerald-400 shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-white/75 text-xs font-medium truncate">{col.nome}</p>
+                                      <p className="text-white/30 text-[10px]">Militante</p>
+                                      {colTerr && <p className="text-white/20 text-[10px] truncate">{colTerr}</p>}
+                                    </div>
+                                    {colTotal > 0 && <span className="text-emerald-400/70 text-xs font-medium shrink-0">{colTotal}</span>}
+                                  </div>
+                                );
+                              }) : <p className="text-xs text-white/25 italic pl-1">Sem militantes</p>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }) : <p className="text-xs text-white/30 italic pl-2">Nenhum coordenador</p>}
                   </div>
                 )}
               </div>
@@ -440,14 +473,18 @@ export default function PainelGabinetePage() {
                   <div className="ml-9 mt-1 space-y-1">
                     {colabNoGabinete.length > 0 ? colabNoGabinete.map((col) => {
                       const coordDoCol = usuarios.find((u) => u.uid === col.coordenadorId);
+                      const colTerr = col.bairro && col.cidade ? `${col.bairro} · ${col.cidade}` : (col.cidade || "");
+                      const colTotal = eleitores.filter((e) => e.colaboradorId === col.uid).length;
                       return (
-                        <div key={col.uid} className="flex items-center gap-2 p-1.5 rounded-lg bg-white/[0.02] text-xs">
-                          <Zap size={10} className="text-emerald-400 shrink-0" />
+                        <div key={col.uid} className="flex items-start gap-2 p-2 rounded-lg bg-white/[0.02]">
+                          <Zap size={9} className="text-emerald-400 shrink-0 mt-0.5" />
                           <div className="flex-1 min-w-0">
-                            <p className="text-white/80 truncate">{col.nome}</p>
-                            <p className="text-white/20 text-[10px] truncate">Militante {coordDoCol ? `• Coord. ${coordDoCol.nome}` : ""} • {gabinete?.nome}</p>
+                            <p className="text-white/80 text-xs font-medium truncate">{col.nome}</p>
+                            <p className="text-white/30 text-[10px]">Militante</p>
+                            {colTerr && <p className="text-white/25 text-[10px] truncate">{colTerr}</p>}
+                            {coordDoCol && <p className="text-white/20 text-[10px] truncate">Coord. {coordDoCol.nome}</p>}
                           </div>
-                          <span className="text-white/20 text-[10px] shrink-0">{col.email}</span>
+                          {colTotal > 0 && <span className="text-emerald-400/60 text-xs font-medium shrink-0">{colTotal}</span>}
                         </div>
                       );
                     }) : <p className="text-xs text-white/30 italic pl-2">Nenhum militante</p>}

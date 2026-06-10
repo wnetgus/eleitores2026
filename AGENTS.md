@@ -130,3 +130,81 @@ interface FiltrosOperacionais {
 - Visão Operacional: tabela unificada, exportação, ações rápidas, manutenção
 - Mapa Político escopado por role
 - Dashboard com filtros territoriais
+
+---
+
+## Cenário de Teste v3.0 — ATIVO (criado 2026-05-22)
+
+Cenário controlado, determinístico e rastreável para validação hierárquica territorial.
+Script: `scripts/seed-cenario-v3.mjs`
+
+```bash
+npm run seed:v3          # criar
+npm run seed:v3:reset    # apagar e recriar
+npm run clean:fake       # limpar (usa manifesto _seed_manifest/cenario_01)
+```
+
+### Estrutura
+| Nível | Qtd | Todos têm Auth |
+|---|---|---|
+| Deputado Federal | 1 | ✅ |
+| Assessores | 3 | ✅ |
+| Coordenadores | 6 | ✅ |
+| Mobilizadores | 14 | ✅ |
+| Eleitores | 141 | — |
+
+**Território:** Pernambuco — Recife · Caruaru · Petrolina
+**Gabinete:** "Ricardo Alves — Pernambuco 2026"
+**Senha padrão:** `111111`
+
+### Logins completos
+
+| Role | Email | Nome | Território |
+|---|---|---|---|
+| **Deputado** | `dep.federal@mail.com` | Ricardo Alves | PE (geral) |
+| Assessor | `assessor.recife@mail.com` | Carlos Menezes | Recife · dominante |
+| Assessor | `assessor.caruaru@mail.com` | Ana Ferreira | Caruaru · equilibrado |
+| Assessor | `assessor.petrolina@mail.com` | Pedro Santos | Petrolina · crescendo |
+| Coord | `coord.recife.boaviagem@mail.com` | Marcos Lima | Boa Viagem/Recife |
+| Coord | `coord.recife.imbiribeira@mail.com` | Juliana Costa | Imbiribeira/Recife |
+| Coord | `coord.caruaru.centro@mail.com` | Roberto Silva | Centro/Caruaru |
+| Coord | `coord.caruaru.indianopolis@mail.com` | Fernanda Luz | Indianópolis/Caruaru |
+| Coord | `coord.petrolina.centro@mail.com` | Diego Campos | Centro/Petrolina |
+| Coord | `coord.petrolina.areia@mail.com` | Patrícia Neves | Areia/Petrolina |
+| Mob | `mob.recife.boaviagem.1@mail.com` | Tânia Silva | Boa Viagem/Recife |
+| Mob | `mob.recife.boaviagem.2@mail.com` | Lucas Ramos | Boa Viagem/Recife |
+| Mob | `mob.recife.boaviagem.3@mail.com` | Beatriz Moura | Boa Viagem/Recife |
+| Mob | `mob.recife.imbiribeira.1@mail.com` | Rafael Cruz | Imbiribeira/Recife |
+| Mob | `mob.recife.imbiribeira.2@mail.com` | Camila Pinto | Imbiribeira/Recife |
+| Mob | `mob.caruaru.centro.1@mail.com` | Anderson Dias | Centro/Caruaru |
+| Mob | `mob.caruaru.centro.2@mail.com` | Sandra Barros | Centro/Caruaru |
+| Mob | `mob.caruaru.centro.3@mail.com` | Felipe Torres | Centro/Caruaru |
+| Mob | `mob.caruaru.indianopolis.1@mail.com` | Vanessa Rocha | Indianópolis/Caruaru |
+| Mob | `mob.caruaru.indianopolis.2@mail.com` | Eduardo Melo | Indianópolis/Caruaru |
+| Mob | `mob.petrolina.centro.1@mail.com` | Simone Araújo | Centro/Petrolina |
+| Mob | `mob.petrolina.centro.2@mail.com` | Henrique Lima | Centro/Petrolina |
+| Mob | `mob.petrolina.areia.1@mail.com` | Letícia Souza | Areia/Petrolina |
+| Mob | `mob.petrolina.areia.2@mail.com` | Rodrigo Fonseca | Areia/Petrolina |
+
+### Cadeia de teste recomendada (Recife · dominante)
+```
+dep.federal@mail.com          (Ricardo Alves — Deputado)
+  └─ assessor.recife@mail.com         (Carlos Menezes — Assessor)
+       └─ coord.recife.boaviagem@mail.com  (Marcos Lima — Coord)
+            └─ mob.recife.boaviagem.1@mail.com (Tânia Silva — Mob)
+                 └─ 15 eleitores vinculados · Boa Viagem/Recife
+```
+
+### Distribuição de eleitores por território
+| Território | Eleitores | Perfil |
+|---|---|---|
+| Recife — Boa Viagem | 45 | dominante |
+| Recife — Imbiribeira | 24 | dominante |
+| Caruaru — Centro | 30 | equilibrado |
+| Caruaru — Indianópolis | 16 | equilibrado |
+| Petrolina — Centro | 14 | crescendo |
+| Petrolina — Areia | 12 | crescendo |
+| **Total** | **141** | |
+
+### Super Admin preservado
+`wnetgus@gmail.com` — não pertence ao cenário fake, não é removido em nenhum reset.

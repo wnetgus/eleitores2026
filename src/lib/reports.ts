@@ -192,7 +192,7 @@ export function exportPDFPremium(eleitores: Eleitor[], titulo: string, party?: s
   doc.save(`relatorio-${c.nome.toLowerCase().replace(/\s/g, "-")}.pdf`);
 }
 
-// ==================== RELATÓRIO EXECUTIVO 1 PÁGINA ====================
+// ==================== RELATÓRIO EXECUTIVO 6 PÁGINAS ====================
 export function exportRelatorioExecutivo(
   eleitores: Eleitor[],
   titulo: string,
@@ -209,148 +209,698 @@ export function exportRelatorioExecutivo(
   const prim = hexToRgb(c.p);
   const drk = hexToRgb(c.d);
 
+  // ── Compute all stats from eleitores ──────────────────────────────────────
+  const agora30d = Date.now() - 30 * 86400e3;
+  let fortes = 0, medios = 0, indecisos = 0, fracos = 0, recentes = 0;
+  const coordMap = new Map<string, { nome: string; total: number; fortes: number; medios: number; indecisos: number; fracos: number; recentes: number }>();
+  const terrMap  = new Map<string, { label: string; total: number; indecisos: number; fracos: number; recentes: number }>();
+
+  for (const e of eleitores) {
+    if (e.grauApoio === "forte")         fortes++;
+    else if (e.grauApoio === "medio")    medios++;
+    else if (e.grauApoio === "indeciso") indecisos++;
+    else if (e.grauApoio === "fraco")    fracos++;
+    const ts = (e.criadoEm as any)?.seconds ? (e.criadoEm as any).seconds * 1000 : e.criadoEm ? new Date(e.criadoEm).getTime() : 0;
+    if (ts > agora30d) recentes++;
+    const cid = e.coordenadorId || "";
+    const cnome = e.coordenadorNome || "";
+    if (cid && cnome) {
+      if (!coordMap.has(cid)) coordMap.set(cid, { nome: cnome, total: 0, fortes: 0, medios: 0, indecisos: 0, fracos: 0, recentes: 0 });
+      const ct = coordMap.get(cid)!;
+      ct.total++;
+      if (e.grauApoio === "forte")         ct.fortes++;
+      else if (e.grauApoio === "medio")    ct.medios++;
+      else if (e.grauApoio === "indeciso") ct.indecisos++;
+      else if (e.grauApoio === "fraco")    ct.fracos++;
+      if (ts > agora30d)                   ct.recentes++;
+    }
+    const key   = `${e.bairro}||${e.cidade}`;
+    const label = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
+    if (!terrMap.has(key)) terrMap.set(key, { label, total: 0, indecisos: 0, fracos: 0, recentes: 0 });
+    const t = terrMap.get(key)!;
+    t.total++;
+    if (e.grauApoio === "indeciso") t.indecisos++;
+    if (e.grauApoio === "fraco")    t.fracos++;
+    if (ts > agora30d)              t.recentes++;
+  }
+
+  const coordList  = Array.from(coordMap.values()).sort((a, b) => b.total - a.total);
+  const terrList   = Array.from(terrMap.values()).sort((a, b) => b.total - a.total);
+  const crescList  = [...terrList].filter(t => t.recentes > 0).sort((a, b) => b.recentes - a.recentes);
+  const indecList  = [...terrList].filter(t => t.indecisos > 0).sort((a, b) => (b.indecisos / b.total) - (a.indecisos / a.total));
+  const fracosList = [...terrList].filter(t => t.fracos > 0).sort((a, b) => (b.fracos / b.total) - (a.fracos / a.total));
+
+  // ── jsPDF setup ───────────────────────────────────────────────────────────
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
   const pw = doc.internal.pageSize.getWidth();
   const ph = doc.internal.pageSize.getHeight();
+  const gNome = gabineteNome || titulo;
+  const total = eleitores.length;
+  const dataGeracao = new Date().toLocaleString("pt-BR");
+  const dataSimples = new Date().toLocaleDateString("pt-BR");
 
-  const fortes = eleitores.filter((e) => e.grauApoio === "forte").length;
-  const medios = eleitores.filter((e) => e.grauApoio === "medio").length;
-  const fracos = eleitores.filter((e) => e.grauApoio === "fraco").length;
-  const indecisos = eleitores.filter((e) => e.grauApoio === "indeciso").length;
+  function pageHeader(title: string, subtitle?: string) {
+    doc.setFillColor(prim.r, prim.g, prim.b);
+    doc.rect(0, 0, pw, 26, "F");
+    doc.setFillColor(drk.r, drk.g, drk.b);
+    doc.rect(0, 22, pw, 4, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "bold");
+    doc.text(title, 14, 15);
+    if (subtitle) {
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(subtitle, pw - 14, 15, { align: "right" });
+    }
+  }
 
-  // TOPO — Faixa do partido
-  doc.setFillColor(prim.r, prim.g, prim.b);
-  doc.rect(0, 0, pw, 38, "F");
-  doc.setFillColor(drk.r, drk.g, drk.b);
-  doc.rect(0, 33, pw, 5, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(22);
-  doc.setFont("helvetica", "bold");
-  doc.text("RELATÓRIO EXECUTIVO", pw / 2, 18, { align: "center" });
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text(`${c.nome.toUpperCase()}  •  ${gabineteNome || titulo}`, pw / 2, 28, { align: "center" });
-
-  // SUBTÍTULO — Info do gabinete
-  let y = 48;
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
-  if (politicoNome) { doc.text(`Político: ${politicoNome}`, 14, y); y += 5; }
-  if (cargo) { doc.text(`Cargo: ${cargo}`, 14, y); y += 5; }
-  doc.text(`Total de eleitores: ${eleitores.length}`, 14, y); y += 5;
-  if (crescimento) doc.text(`Crescimento recente: ${crescimento}`, 14, y);
-  doc.setFontSize(7.5);
-  doc.setTextColor(150, 150, 150);
-  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pw - 14, 48, { align: "right" });
-  doc.text("Eleitores 2026 — Plataforma de Gestão Política", pw - 14, 53, { align: "right" });
-
-  // LINHA SEPARADORA
-  y = 68;
-  doc.setDrawColor(prim.r, prim.g, prim.b);
-  doc.setLineWidth(0.5);
-  doc.line(14, y, pw - 14, y);
-  y += 8;
-
-  // CARDS DE INDICADORES (grid 2x3)
-  const cards = [
-    { label: "Total", value: eleitores.length.toString(), color: prim },
-    { label: "Fortes", value: fortes.toString(), color: hexToRgb("059669") },
-    { label: "Médios", value: medios.toString(), color: hexToRgb("D97706") },
-    { label: "Fracos", value: fracos.toString(), color: hexToRgb("DC2626") },
-    { label: "Indecisos", value: indecisos.toString(), color: hexToRgb("3B82F6") },
-    { label: "Meta", value: metaProgresso || "-", color: hexToRgb("7C3AED") },
-  ];
-
-  const cardW = (pw - 42) / 3;
-  const cardH = 16;
-  cards.forEach((card, i) => {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const cx = 14 + col * (cardW + 7);
-    const cy = y + row * (cardH + 5);
-    doc.setFillColor(248, 250, 252);
-    doc.setDrawColor(220, 220, 220);
-    doc.roundedRect(cx, cy, cardW, cardH, 2, 2, "FD");
-    doc.setFillColor(card.color.r, card.color.g, card.color.b);
-    doc.rect(cx, cy, 3, cardH, "F");
-    doc.setTextColor(80, 80, 80);
+  function pageFooter(pageNum: number) {
+    const fy = ph - 9;
+    doc.setDrawColor(215, 215, 215);
+    doc.setLineWidth(0.2);
+    doc.line(14, fy - 1, pw - 14, fy - 1);
     doc.setFontSize(7);
     doc.setFont("helvetica", "normal");
-    doc.text(card.label, cx + 7, cy + 6);
-    doc.setTextColor(40, 40, 40);
-    doc.setFontSize(14);
+    doc.setTextColor(170, 170, 170);
+    doc.text("Eleitores 2026 — Plataforma de Gestão Política", 14, fy + 4);
+    doc.text(`${pageNum} / 6`, pw - 14, fy + 4, { align: "right" });
+  }
+
+  // ════════════════════════════════════════════
+  // PAGE 1 — CAPA
+  // ════════════════════════════════════════════
+
+  // Derive dominant city & state for territory line
+  const cidFreqC = new Map<string, number>();
+  const estFreqC = new Map<string, number>();
+  for (const e of eleitores) {
+    cidFreqC.set(e.cidade, (cidFreqC.get(e.cidade) || 0) + 1);
+    estFreqC.set(e.estado, (estFreqC.get(e.estado) || 0) + 1);
+  }
+  const capaCidade = eleitores.length > 0 ? ([...cidFreqC.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "").toUpperCase() : "";
+  const capaEstado = eleitores.length > 0 ? ([...estFreqC.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "").toUpperCase() : "";
+  const territorioLine = [capaCidade, capaEstado].filter(Boolean).join(" · ");
+
+  const MESES_PT = ["JANEIRO","FEVEREIRO","MARÇO","ABRIL","MAIO","JUNHO","JULHO","AGOSTO","SETEMBRO","OUTUBRO","NOVEMBRO","DEZEMBRO"];
+  const capaMesAno = `${MESES_PT[new Date().getMonth()]} ${new Date().getFullYear()}`;
+
+  const capaTop = Math.round(ph * 0.58);
+
+  // Full colored background
+  doc.setFillColor(prim.r, prim.g, prim.b);
+  doc.rect(0, 0, pw, capaTop, "F");
+  doc.setFillColor(drk.r, drk.g, drk.b);
+  doc.rect(0, capaTop - 10, pw, 10, "F");
+
+  // ── Header identifier: GABINETE [NOME] ────────────────────────────────────
+  doc.setTextColor(255, 255, 255);
+  const capaIdentif = politicoNome
+    ? `GABINETE ${politicoNome.toUpperCase()}`
+    : `GABINETE ${gNome.toUpperCase()}`;
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text(capaIdentif, pw / 2, 15, { align: "center" });
+  doc.setDrawColor(255, 255, 255);
+  doc.setLineWidth(0.2);
+  doc.line(pw / 2 - 35, 17.5, pw / 2 + 35, 17.5);
+
+  // ── Main title ─────────────────────────────────────────────────────────────
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  const titleCapaLines = doc.splitTextToSize("RELATÓRIO EXECUTIVO TERRITORIAL", pw - 36) as string[];
+  const titleCapaY = 35;
+  doc.text(titleCapaLines, pw / 2, titleCapaY, { align: "center", lineHeightFactor: 1.3 });
+  const afterTitleCapa = titleCapaY + titleCapaLines.length * 10;
+
+  // ── Territory: CIDADE · ESTADO ─────────────────────────────────────────────
+  if (territorioLine) {
+    doc.setFontSize(13);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(255, 255, 255);
+    doc.text(territorioLine, pw / 2, afterTitleCapa + 10, { align: "center" });
+  }
+
+  // ── Month / Year ───────────────────────────────────────────────────────────
+  const capaDateY = afterTitleCapa + (territorioLine ? 20 : 12);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(215, 222, 238);
+  doc.text(capaMesAno, pw / 2, capaDateY, { align: "center" });
+
+  // ── Thin divider ───────────────────────────────────────────────────────────
+  const subDivY = capaDateY + 8;
+  doc.setDrawColor(195, 208, 230);
+  doc.setLineWidth(0.15);
+  doc.line(pw / 2 - 48, subDivY, pw / 2 + 48, subDivY);
+
+  // ── Frase executiva (italic) ───────────────────────────────────────────────
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "italic");
+  doc.setTextColor(205, 218, 238);
+  const subtitleText = "Panorama da base eleitoral, desempenho territorial e inteligência regional.";
+  const subtitleLines = doc.splitTextToSize(subtitleText, pw - 50) as string[];
+  doc.text(subtitleLines, pw / 2, subDivY + 8, { align: "center", lineHeightFactor: 1.4 });
+  const afterSubtitle = subDivY + 8 + subtitleLines.length * 6.5;
+
+  // ── Político & cargo ───────────────────────────────────────────────────────
+  if (politicoNome) {
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(255, 255, 255);
+    doc.text(politicoNome, pw / 2, afterSubtitle + 10, { align: "center" });
+  }
+  if (cargo) {
+    doc.setFontSize(8.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(198, 210, 230);
+    doc.text(cargo, pw / 2, afterSubtitle + (politicoNome ? 18 : 10), { align: "center" });
+  }
+
+  // ── White section: total + stat cards ─────────────────────────────────────
+  doc.setTextColor(75, 80, 90);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text("Total de eleitores cadastrados", pw / 2, capaTop + 13, { align: "center" });
+  doc.setFontSize(40);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(prim.r, prim.g, prim.b);
+  doc.text(total.toString(), pw / 2, capaTop + 30, { align: "center" });
+
+  const qsItems = [
+    { label: "Fortes",    val: `${fortes}`,    color: hexToRgb("059669") },
+    { label: "Indecisos", val: `${indecisos}`, color: hexToRgb("3B82F6") },
+    { label: "Fracos",    val: `${fracos}`,    color: hexToRgb("DC2626") },
+    { label: "Recentes",  val: `+${recentes}`, color: hexToRgb("7C3AED") },
+  ];
+  const qsW = (pw - 28 - 9) / 4;
+  const qsY = capaTop + 40;
+  let qsX = 14;
+  qsItems.forEach(q => {
+    doc.setFillColor(247, 249, 252);
+    doc.setDrawColor(215, 220, 228);
+    doc.roundedRect(qsX, qsY, qsW, 20, 2, 2, "FD");
+    doc.setTextColor(140, 145, 150);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text(q.label, qsX + qsW / 2, qsY + 7, { align: "center" });
+    doc.setFontSize(13);
     doc.setFont("helvetica", "bold");
-    doc.text(card.value, cx + 7, cy + 14);
+    doc.setTextColor(q.color.r, q.color.g, q.color.b);
+    doc.text(q.val, qsX + qsW / 2, qsY + 15.5, { align: "center" });
+    qsX += qsW + 3;
   });
 
-  y += 2 * (cardH + 5) + 5;
-
-  // TOP CIDADES (se houver)
-  if (topCidades && topCidades.length > 0) {
-    doc.setDrawColor(200, 200, 200);
-    doc.line(14, y, pw - 14, y);
-    y += 6;
-    doc.setTextColor(prim.r, prim.g, prim.b);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text("CIDADES COM MAIOR PENETRAÇÃO", 14, y);
-    y += 6;
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 100, 100);
-    doc.text("Cidade", 14, y);
-    doc.text("Eleitores", cardW + 14, y, { align: "center" });
-    doc.text("%", cardW * 2 + 14, y, { align: "center" });
-    y += 3;
-    topCidades.slice(0, 4).forEach((cidade, i) => {
-      const pct = Math.round((cidade.total / eleitores.length) * 100);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(60, 60, 60);
-      doc.text(cidade.cidade, 14, y + i * 5);
-      doc.text(cidade.total.toString(), cardW + 14, y + i * 5, { align: "center" });
-      doc.text(`${pct}%`, cardW * 2 + 14, y + i * 5, { align: "center" });
-    });
-    y += 5 * Math.min(topCidades.length, 4) + 5;
-  }
-
-  // TOP COLABORADORES (se houver)
-  if (topColaboradores && topColaboradores.length > 0) {
-    doc.setDrawColor(200, 200, 200);
-    doc.line(14, y, pw - 14, y);
-    y += 6;
-    doc.setTextColor(prim.r, prim.g, prim.b);
-    doc.setFontSize(9);
-    doc.setFont("helvetica", "bold");
-    doc.text("COLABORADORES DESTAQUE", 14, y);
-    y += 6;
-    doc.setFontSize(7.5);
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(100, 100, 100);
-    doc.text("Nome", 14, y);
-    doc.text("Cadastros", cardW + 14, y, { align: "center" });
-    doc.text("Desempenho", cardW * 2 + 14, y, { align: "center" });
-    y += 3;
-    const maxTotal = Math.max(...topColaboradores.map((c) => c.total), 1);
-    topColaboradores.slice(0, 4).forEach((col, i) => {
-      const pct = Math.round((col.total / (maxTotal > 0 ? maxTotal : 1)) * 100);
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(60, 60, 60);
-      doc.text(col.nome, 14, y + i * 5);
-      doc.text(col.total.toString(), cardW + 14, y + i * 5, { align: "center" });
-      doc.text(`${pct}%`, cardW * 2 + 14, y + i * 5, { align: "center" });
-    });
-    y += 5 * Math.min(topColaboradores.length, 4) + 5;
-  }
-
-  // RODAPÉ
-  const rodapeY = ph - 15;
-  doc.setDrawColor(prim.r, prim.g, prim.b);
-  doc.line(14, rodapeY - 2, pw - 14, rodapeY - 2);
-  doc.setFontSize(7);
-  doc.setTextColor(160, 160, 160);
+  doc.setFontSize(7.5);
   doc.setFont("helvetica", "normal");
-  doc.text("Eleitores 2026 — Plataforma de Gestão Política", 14, rodapeY + 3);
-  doc.text(`Gerado em: ${new Date().toLocaleString("pt-BR")}`, pw - 14, rodapeY + 3, { align: "right" });
+  doc.setTextColor(170, 175, 180);
+  doc.text(`Gerado em: ${dataGeracao}`, pw / 2, qsY + 28, { align: "center" });
+
+  doc.setFillColor(prim.r, prim.g, prim.b);
+  doc.rect(0, ph - 10, pw, 10, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(6.5);
+  doc.text("Eleitores 2026 — Plataforma de Gestão Política", pw / 2, ph - 3, { align: "center" });
+
+  // ════════════════════════════════════════════
+  // PAGE 2 — RESUMO EXECUTIVO (8 KPI cards)
+  // ════════════════════════════════════════════
+  doc.addPage();
+  pageHeader("RESUMO EXECUTIVO", `${gNome}  ·  ${dataSimples}`);
+
+  const kpis = [
+    { label: "Total de Eleitores", value: total,           sub: "base completa",         color: prim },
+    { label: "Apoio Forte",        value: fortes,          sub: `${total > 0 ? Math.round((fortes/total)*100) : 0}% da base`,  color: hexToRgb("059669") },
+    { label: "Apoio Médio",        value: medios,          sub: `${total > 0 ? Math.round((medios/total)*100) : 0}% da base`,  color: hexToRgb("D97706") },
+    { label: "Indecisos",          value: indecisos,       sub: "potencial a converter", color: hexToRgb("3B82F6") },
+    { label: "Rejeição",           value: fracos,          sub: `${total > 0 ? Math.round((fracos/total)*100) : 0}% da base`,  color: hexToRgb("DC2626") },
+    { label: "Crescimento 30d",    value: recentes,        sub: "novos cadastros",       color: hexToRgb("7C3AED") },
+    { label: "Coordenadores",      value: coordList.length,sub: "equipes ativas",        color: hexToRgb("F97316") },
+    { label: "Territórios",        value: terrList.length, sub: "áreas cobertas",        color: hexToRgb("0284C7") },
+  ];
+
+  const cW = (pw - 28 - 3 * 5) / 4;
+  const cH = 38;
+  const cX0 = 14, cY0 = 36, cGX = 5, cGY = 8;
+
+  kpis.forEach((kpi, i) => {
+    const col = i % 4;
+    const row = Math.floor(i / 4);
+    const cx = cX0 + col * (cW + cGX);
+    const cy = cY0 + row * (cH + cGY);
+
+    doc.setFillColor(247, 249, 252);
+    doc.setDrawColor(210, 215, 225);
+    doc.roundedRect(cx, cy, cW, cH, 2, 2, "FD");
+    doc.setFillColor(kpi.color.r, kpi.color.g, kpi.color.b);
+    doc.rect(cx, cy, 3.5, cH, "F");
+
+    doc.setTextColor(140, 145, 150);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text(kpi.label.toUpperCase(), cx + 7, cy + 10);
+
+    doc.setTextColor(kpi.color.r, kpi.color.g, kpi.color.b);
+    doc.setFontSize(26);
+    doc.setFont("helvetica", "bold");
+    doc.text(kpi.value.toString(), cx + 7, cy + 29);
+
+    doc.setTextColor(170, 175, 182);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "normal");
+    doc.text(kpi.sub, cx + 7, cy + 35);
+  });
+
+  pageFooter(2);
+
+  // ════════════════════════════════════════════
+  // PAGE 3 — DISTRIBUIÇÃO TERRITORIAL
+  // ════════════════════════════════════════════
+  doc.addPage();
+  pageHeader("DISTRIBUIÇÃO TERRITORIAL", `${terrList.length} territórios · ${total} eleitores`);
+
+  let y3 = 36;
+  const barX3 = 116, barW3max = 62;
+  const maxTotal3 = terrList.length > 0 ? terrList[0].total : 1;
+
+  doc.setFillColor(232, 235, 242);
+  doc.rect(14, y3, pw - 28, 8, "F");
+  doc.setTextColor(75, 80, 92);
+  doc.setFontSize(7.5);
+  doc.setFont("helvetica", "bold");
+  doc.text("Território", 16, y3 + 5.5);
+  doc.text("Total", 109, y3 + 5.5, { align: "right" });
+  doc.text("Volume", barX3 + barW3max / 2, y3 + 5.5, { align: "center" });
+  doc.text("%", pw - 14, y3 + 5.5, { align: "right" });
+  y3 += 9;
+
+  terrList.slice(0, 22).forEach((t, i) => {
+    if (y3 > ph - 22) return;
+    if (i % 2 === 1) { doc.setFillColor(247, 248, 252); doc.rect(14, y3, pw - 28, 9, "F"); }
+    const pctBar = Math.max(1, Math.round((t.total / maxTotal3) * barW3max));
+    const pct3 = total > 0 ? Math.round((t.total / total) * 100) : 0;
+    const hasCresc = t.recentes > 0;
+
+    doc.setTextColor(48, 54, 68);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", hasCresc ? "bold" : "normal");
+    doc.text(t.label, 16, y3 + 6.2);
+    if (hasCresc) {
+      doc.setFillColor(16, 185, 129);
+      doc.rect(111, y3 + 3.2, 3, 3, "F");
+    }
+    doc.setFont("helvetica", "normal");
+    doc.text(t.total.toString(), 109, y3 + 6.2, { align: "right" });
+
+    doc.setFillColor(210, 220, 235);
+    doc.rect(barX3, y3 + 2, barW3max, 5, "F");
+    doc.setFillColor(prim.r, prim.g, prim.b);
+    doc.rect(barX3, y3 + 2, pctBar, 5, "F");
+
+    doc.setTextColor(55, 60, 72);
+    doc.text(`${pct3}%`, pw - 14, y3 + 6.2, { align: "right" });
+    y3 += 9;
+  });
+
+  if (crescList.length > 0 && y3 < ph - 26) {
+    y3 += 5;
+    doc.setFillColor(236, 253, 245);
+    doc.setDrawColor(160, 215, 190);
+    doc.roundedRect(14, y3, pw - 28, 14, 2, 2, "FD");
+    doc.setTextColor(6, 95, 70);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    const crescMsg = `+ Maior crescimento: ${crescList[0].label} — +${crescList[0].recentes} novos cadastros nos últimos 30 dias`;
+    doc.text(doc.splitTextToSize(crescMsg, pw - 42), 18, y3 + 9);
+  }
+
+  pageFooter(3);
+
+  // ════════════════════════════════════════════
+  // PAGE 4 — RANKING DA EQUIPE
+  // ════════════════════════════════════════════
+  doc.addPage();
+  const coordLabel = coordList.length !== 1 ? `${coordList.length} coordenadores` : "1 coordenador";
+  pageHeader("RANKING DA EQUIPE", coordLabel);
+
+  const CARD_H   = 22;
+  const RANK_X   = 31;
+  const RANK_BAR_MAX_W = pw - 44;
+  const maxTotal4  = coordList.length > 0 ? coordList[0].total : 1;
+  const green4     = hexToRgb("059669");
+  const badgeColors4 = [hexToRgb("D97706"), hexToRgb("64748B"), hexToRgb("92400E")];
+
+  // Pre-compute destaque so we know its height before the loop
+  const top4 = coordList.length > 0 ? coordList[0] : null;
+  const pctFTop4 = top4 && top4.total > 0 ? Math.round((top4.fortes / top4.total) * 100) : 0;
+  const destaqueText4 = top4
+    ? `${top4.nome} lidera a equipe com ${top4.total} eleitores cadastrados e ${pctFTop4}% de base forte.`
+    : "";
+  const destaqueLines4 = top4 ? (doc.splitTextToSize(destaqueText4, pw - 52) as string[]) : [] as string[];
+  const destaqueH4 = Math.max(18, destaqueLines4.length * 5 + 14);
+
+  let y4 = 34;
+  let destaqueRendered = false;
+
+  coordList.slice(0, 9).forEach((coord, i) => {
+    // Insert destaque block inline after the 3rd card (before 4th)
+    if (i === 3 && !destaqueRendered && top4 && y4 < ph - 50) {
+      doc.setFillColor(drk.r, drk.g, drk.b);
+      doc.rect(14, y4, pw - 28, 6, "F");
+      doc.setFillColor(prim.r, prim.g, prim.b);
+      doc.rect(14, y4 + 6, pw - 28, destaqueH4 - 6, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(6.5);
+      doc.setFont("helvetica", "bold");
+      doc.text("COORDENADOR DESTAQUE", 20, y4 + 4.5);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text(destaqueLines4, 20, y4 + 12);
+      y4 += destaqueH4 + 4;
+      destaqueRendered = true;
+    }
+
+    if (y4 + CARD_H > ph - 18) return;
+
+    const isTop1 = i === 0;
+
+    // Card background
+    if (isTop1) {
+      doc.setFillColor(255, 250, 240);
+      doc.rect(14, y4, pw - 28, CARD_H, "F");
+      doc.setDrawColor(251, 191, 36);
+      doc.setLineWidth(0.4);
+      doc.line(14, y4 + CARD_H, pw - 14, y4 + CARD_H);
+      doc.setLineWidth(0.2);
+    } else if (i % 2 === 1) {
+      doc.setFillColor(248, 249, 252);
+      doc.rect(14, y4, pw - 28, CARD_H, "F");
+    }
+
+    // Badge circle
+    const bc = i < 3 ? badgeColors4[i] : hexToRgb("94A3B8");
+    doc.setFillColor(bc.r, bc.g, bc.b);
+    doc.circle(21, y4 + 8, 5.5, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.text(`#${i + 1}`, 21, y4 + 10, { align: "center" });
+
+    // Name
+    doc.setFontSize(isTop1 ? 10 : 9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(isTop1 ? 120 : 35, isTop1 ? 53 : 40, isTop1 ? 15 : 55);
+    doc.text(coord.nome, RANK_X, y4 + 9);
+
+    // % forte — right side, color-coded
+    const pctForte = coord.total > 0 ? Math.round((coord.fortes / coord.total) * 100) : 0;
+    const pctColor = pctForte >= 50 ? green4 : pctForte >= 30 ? hexToRgb("D97706") : hexToRgb("DC2626");
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(pctColor.r, pctColor.g, pctColor.b);
+    doc.text(`${pctForte}% forte`, pw - 14, y4 + 9, { align: "right" });
+
+    // Stats line
+    const recentWord = coord.recentes === 1 ? "novo" : "novos";
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(110, 115, 125);
+    doc.text(`${coord.total} eleitores   ${coord.fortes} fortes   +${coord.recentes} ${recentWord}`, RANK_X, y4 + 15.5);
+
+    // Bar: length = proportional to total, green = fortes portion
+    const bwTotal = Math.max(2, Math.round((coord.total / maxTotal4) * RANK_BAR_MAX_W));
+    const bwForte = coord.total > 0 ? Math.max(0, Math.round((coord.fortes / coord.total) * bwTotal)) : 0;
+
+    doc.setFillColor(215, 225, 238);
+    doc.rect(RANK_X, y4 + 19, RANK_BAR_MAX_W, 2.5, "F");
+    doc.setFillColor(green4.r, green4.g, green4.b);
+    doc.rect(RANK_X, y4 + 19, bwForte, 2.5, "F");
+    doc.setFillColor(prim.r, prim.g, prim.b);
+    doc.rect(RANK_X + bwForte, y4 + 19, Math.max(0, bwTotal - bwForte), 2.5, "F");
+
+    y4 += CARD_H + 1;
+  });
+
+  // Fallback: render destaque after all cards if fewer than 3 coordinators
+  if (!destaqueRendered && top4 && y4 < ph - 40) {
+    y4 += 4;
+    doc.setFillColor(drk.r, drk.g, drk.b);
+    doc.rect(14, y4, pw - 28, 6, "F");
+    doc.setFillColor(prim.r, prim.g, prim.b);
+    doc.rect(14, y4 + 6, pw - 28, destaqueH4 - 6, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(6.5);
+    doc.setFont("helvetica", "bold");
+    doc.text("COORDENADOR DESTAQUE", 20, y4 + 4.5);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.text(destaqueLines4, 20, y4 + 12);
+  }
+
+  if (coordList.length === 0) {
+    doc.setTextColor(160, 165, 175);
+    doc.setFontSize(9);
+    doc.text("Nenhum coordenador com eleitores vinculados.", 16, y4 + 10);
+  }
+
+  pageFooter(4);
+
+  // ════════════════════════════════════════════
+  // PAGE 5 — ANÁLISE ESTRATÉGICA
+  // ════════════════════════════════════════════
+  doc.addPage();
+  pageHeader("ANÁLISE ESTRATÉGICA", "oportunidades · áreas de atenção");
+
+  let y5 = 36;
+  const iBarX = pw - 14 - 70 - 22;
+  const iBarW = 70;
+
+  // ── Oportunidades ─────────────────────────────────────────────────────────
+  doc.setFillColor(hexToRgb("1D4ED8").r, hexToRgb("1D4ED8").g, hexToRgb("1D4ED8").b);
+  doc.rect(14, y5, pw - 28, 9, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.text(`OPORTUNIDADES — ${indecisos} INDECISOS A CONVERTER`, 18, y5 + 6);
+  y5 += 10;
+
+  if (indecList.length > 0) {
+    const maxIndc = indecList[0].indecisos;
+    indecList.slice(0, 8).forEach((t, i) => {
+      if (y5 > ph / 2 - 4) return;
+      if (i % 2 === 1) { doc.setFillColor(235, 241, 255); doc.rect(14, y5, pw - 28, 9, "F"); }
+      const bw5 = Math.max(1, Math.round((t.indecisos / maxIndc) * iBarW));
+      const pct5 = Math.round((t.indecisos / t.total) * 100);
+
+      doc.setTextColor(25, 45, 85);
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(t.label, 16, y5 + 6.2);
+
+      doc.setFillColor(219, 234, 254);
+      doc.rect(iBarX, y5 + 2, iBarW, 5, "F");
+      doc.setFillColor(37, 99, 235);
+      doc.rect(iBarX, y5 + 2, bw5, 5, "F");
+
+      doc.setTextColor(30, 48, 90);
+      doc.text(`${t.indecisos} (${pct5}%)`, pw - 14, y5 + 6.2, { align: "right" });
+      y5 += 9;
+    });
+  } else {
+    doc.setTextColor(160, 165, 175);
+    doc.setFontSize(8);
+    doc.text("Nenhum indeciso registrado na base.", 18, y5 + 8);
+    y5 += 14;
+  }
+
+  // ── Atenção ───────────────────────────────────────────────────────────────
+  y5 = Math.max(y5 + 8, Math.round(ph / 2) + 4);
+  const fBarX = pw - 14 - 70 - 22;
+  const fBarW = 70;
+
+  doc.setFillColor(hexToRgb("991B1B").r, hexToRgb("991B1B").g, hexToRgb("991B1B").b);
+  doc.rect(14, y5, pw - 28, 9, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(8.5);
+  doc.setFont("helvetica", "bold");
+  doc.text(`ATENÇÃO — ${fracos} ELEITORES COM REJEIÇÃO`, 18, y5 + 6);
+  y5 += 10;
+
+  if (fracosList.length > 0) {
+    const maxFracos = fracosList[0].fracos;
+    fracosList.slice(0, 8).forEach((t, i) => {
+      if (y5 > ph - 18) return;
+      if (i % 2 === 1) { doc.setFillColor(255, 238, 238); doc.rect(14, y5, pw - 28, 9, "F"); }
+      const bw5 = Math.max(1, Math.round((t.fracos / maxFracos) * fBarW));
+      const pct5 = Math.round((t.fracos / t.total) * 100);
+
+      doc.setTextColor(80, 18, 18);
+      doc.setFontSize(7.5);
+      doc.setFont("helvetica", "normal");
+      doc.text(t.label, 16, y5 + 6.2);
+
+      doc.setFillColor(254, 226, 226);
+      doc.rect(fBarX, y5 + 2, fBarW, 5, "F");
+      doc.setFillColor(220, 38, 38);
+      doc.rect(fBarX, y5 + 2, bw5, 5, "F");
+
+      doc.setTextColor(80, 18, 18);
+      doc.text(`${t.fracos} (${pct5}%)`, pw - 14, y5 + 6.2, { align: "right" });
+      y5 += 9;
+    });
+  } else {
+    doc.setTextColor(160, 165, 175);
+    doc.setFontSize(8);
+    doc.text("Nenhuma rejeição registrada na base.", 18, y5 + 8);
+  }
+
+  pageFooter(5);
+
+  // ════════════════════════════════════════════
+  // PAGE 6 — ANÁLISE NARRATIVA
+  // ════════════════════════════════════════════
+  doc.addPage();
+  pageHeader("ANÁLISE NARRATIVA", "gerado automaticamente");
+
+  const frases: string[] = [];
+  if (total > 0) {
+    const pctF6 = Math.round((fortes / total) * 100);
+    frases.push(`A base eleitoral conta com ${total} eleitores cadastrados, dos quais ${pctF6}% (${fortes}) demonstram apoio forte à campanha.`);
+  }
+  if (crescList.length > 0) {
+    frases.push(`${crescList[0].label} lidera o crescimento regional com +${crescList[0].recentes} novos apoiadores registrados nos últimos 30 dias.`);
+  }
+  if (recentes > 0 && total > 0) {
+    const traction = recentes > total * 0.1 ? "forte" : "moderada";
+    frases.push(`O crescimento total da base no período foi de +${recentes} eleitores, indicando ${traction} tração operacional.`);
+  }
+  if (coordList.length > 0 && total > 0) {
+    const pctCoord = Math.round((coordList[0].total / total) * 100);
+    frases.push(`${coordList[0].nome} lidera a equipe com ${coordList[0].total} cadastros (${pctCoord}% da base total).`);
+  }
+  if (indecList.length > 0) {
+    const pctIndc = Math.round((indecList[0].indecisos / indecList[0].total) * 100);
+    frases.push(`Principal oportunidade: ${indecList[0].label} com ${indecList[0].indecisos} indecisos (${pctIndc}% do território) a converter.`);
+  }
+  if (fracosList.length > 0 && (fracosList[0].fracos / fracosList[0].total) >= 0.2) {
+    const pctRej = Math.round((fracosList[0].fracos / fracosList[0].total) * 100);
+    frases.push(`${fracosList[0].label} requer atenção — índice de rejeição de ${pctRej}% indica necessidade de ação de campo.`);
+  }
+  if (terrList.length > 0 && total > 0) {
+    const pctTerr = Math.round((terrList[0].total / total) * 100);
+    frases.push(`Cobertura territorial: ${terrList.length} ${terrList.length === 1 ? "território" : "territórios"}, com maior concentração em ${terrList[0].label} (${terrList[0].total} eleitores — ${pctTerr}% da base).`);
+  }
+
+  let y6 = 38;
+  frases.forEach((frase, i) => {
+    const lines = doc.splitTextToSize(frase, pw - 50);
+    const boxH = lines.length * 5.5 + 12;
+    if (y6 + boxH > ph - 38) return;
+
+    const bg6 = hexToRgb(i % 2 === 0 ? "F8FAFC" : "EEF2FF");
+    doc.setFillColor(bg6.r, bg6.g, bg6.b);
+    doc.setDrawColor(212, 217, 228);
+    doc.roundedRect(14, y6, pw - 28, boxH, 2, 2, "FD");
+
+    doc.setFillColor(prim.r, prim.g, prim.b);
+    doc.circle(24, y6 + 7.5, 4.5, "F");
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(7.5);
+    doc.setFont("helvetica", "bold");
+    doc.text((i + 1).toString(), 24, y6 + 9.8, { align: "center" });
+
+    doc.setTextColor(40, 50, 68);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text(lines, 33, y6 + 9);
+    y6 += boxH + 5;
+  });
+
+  if (frases.length === 0) {
+    doc.setTextColor(165, 170, 180);
+    doc.setFontSize(9);
+    doc.text("Dados insuficientes para gerar análise narrativa.", 16, y6 + 10);
+  }
+
+  const sigY = ph - 30;
+  doc.setFillColor(prim.r, prim.g, prim.b);
+  doc.rect(14, sigY, pw - 28, 20, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(11);
+  doc.setFont("helvetica", "bold");
+  doc.text("Eleitores 2026", 20, sigY + 9);
+  doc.setFontSize(8);
+  doc.setFont("helvetica", "normal");
+  doc.text("Plataforma de Gestão Política e Inteligência Eleitoral", 20, sigY + 16);
+  doc.text(`Gerado em ${dataGeracao}`, pw - 18, sigY + 9, { align: "right" });
+  doc.setFontSize(7.5);
+  doc.text(gNome, pw - 18, sigY + 16, { align: "right" });
+
+  pageFooter(6);
 
   doc.save(`executivo-${c.nome.toLowerCase().replace(/\s/g, "-")}.pdf`);
+}
+
+// ==================== EXCEL EXECUTIVO — MÚLTIPLAS ABAS ====================
+export function exportExcelExecutivo(
+  eleitores: Eleitor[],
+  titulo: string,
+  coordStats: { nome: string; total: number; fortes: number; indecisos: number; fracos: number }[],
+  terrStats: { label: string; total: number }[],
+) {
+  const wb = XLSX.utils.book_new();
+
+  const fortes    = eleitores.filter((e) => e.grauApoio === "forte").length;
+  const indecisos = eleitores.filter((e) => e.grauApoio === "indeciso").length;
+  const fracos    = eleitores.filter((e) => e.grauApoio === "fraco").length;
+  const medios    = eleitores.filter((e) => e.grauApoio === "medio").length;
+
+  // Aba 1 — Resumo
+  const resumoData = [
+    [`RESUMO EXECUTIVO — ${titulo}`],
+    [`Gerado em: ${new Date().toLocaleString("pt-BR")}`],
+    [],
+    ["Indicador", "Valor"],
+    ["Total de Eleitores", eleitores.length],
+    ["Fortes", fortes],
+    ["Médios", medios],
+    ["Indecisos", indecisos],
+    ["Fracos", fracos],
+    ["% Fortes", eleitores.length > 0 ? `${Math.round((fortes / eleitores.length) * 100)}%` : "—"],
+    ["% Indecisos", eleitores.length > 0 ? `${Math.round((indecisos / eleitores.length) * 100)}%` : "—"],
+    ["Coordenadores ativos", coordStats.length],
+    ["Territórios mapeados", terrStats.length],
+  ];
+  const wsResumo = XLSX.utils.aoa_to_sheet(resumoData);
+  wsResumo["!cols"] = [{ wch: 28 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, wsResumo, "Resumo");
+
+  // Aba 2 — Eleitores
+  const elHeader = ["Nome", "Telefone", "Estado", "Cidade", "Bairro", "Grau de Apoio", "Coordenador", "Colaborador", "Data Cadastro"];
+  const elRows = eleitores.map((e) => [
+    e.nomeCompleto, e.telefone || "-", e.estado, e.cidade, e.bairro || "-",
+    e.grauApoio, e.coordenadorNome || "-", e.colaboradorNome, dataStr(e),
+  ]);
+  const wsEl = XLSX.utils.aoa_to_sheet([elHeader, ...elRows]);
+  wsEl["!cols"] = [{ wch: 28 }, { wch: 16 }, { wch: 8 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 22 }, { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, wsEl, "Eleitores");
+
+  // Aba 3 — Coordenadores
+  const cHeader = ["Coordenador", "Total", "Fortes", "Indecisos", "Fracos", "% Fortes"];
+  const cRows = coordStats.map((c) => [
+    c.nome, c.total, c.fortes, c.indecisos, c.fracos,
+    c.total > 0 ? `${Math.round((c.fortes / c.total) * 100)}%` : "—",
+  ]);
+  const wsCoord = XLSX.utils.aoa_to_sheet([cHeader, ...cRows]);
+  wsCoord["!cols"] = [{ wch: 26 }, { wch: 10 }, { wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }];
+  XLSX.utils.book_append_sheet(wb, wsCoord, "Coordenadores");
+
+  // Aba 4 — Territórios
+  const tHeader = ["Território", "Total"];
+  const tRows = terrStats.map((t) => [t.label, t.total]);
+  const wsTerr = XLSX.utils.aoa_to_sheet([tHeader, ...tRows]);
+  wsTerr["!cols"] = [{ wch: 30 }, { wch: 10 }];
+  XLSX.utils.book_append_sheet(wb, wsTerr, "Territórios");
+
+  XLSX.writeFile(wb, `base-territorial-${new Date().toISOString().split("T")[0]}.xlsx`);
 }

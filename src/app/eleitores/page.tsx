@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
 import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
-import { UserPlus, Trash2, Loader2, Pencil } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Pencil, ChevronDown, Printer } from "lucide-react";
 import { EditarEleitorModal } from "@/components/forms/EditarEleitorModal";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -92,6 +92,8 @@ export default function EleitoresPage() {
   const [todosAssessores, setTodosAssessores] = useState<AppUser[]>([]);
   const [todosCoordenadores, setTodosCoordenadores] = useState<AppUser[]>([]);
   const [todosColaboradores, setTodosColaboradores] = useState<AppUser[]>([]);
+  const [grauPill, setGrauPill] = useState<"" | "forte" | "medio" | "fraco" | "indeciso" | "recente">("");
+  const [expandirForm, setExpandirForm] = useState(false);
 
   useEffect(() => { loadEleitores(); loadUsuarios(); }, [userData]);
 
@@ -175,8 +177,8 @@ export default function EleitoresPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!userData) return;
-    if (!form.nomeCompleto || !form.grauApoio) {
-      toast.error("Preencha o nome e o grau de apoio");
+    if (!form.nomeCompleto || !form.grauApoio || !form.cidade || !form.bairro) {
+      toast.error("Preencha nome, cidade, bairro e grau de apoio");
       return;
     }
     setSaving(true);
@@ -245,6 +247,28 @@ export default function EleitoresPage() {
     }
     return lista;
   }, [eleitores, filtros, todosAssessores]);
+
+  const eleitoresExibidos = useMemo(() => {
+    if (!grauPill) return eleitoresFiltrados;
+    if (grauPill === "recente") return eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 7 * 86400000);
+    return eleitoresFiltrados.filter((e) => e.grauApoio === grauPill);
+  }, [eleitoresFiltrados, grauPill]);
+
+  const resumoCoordenadores = useMemo(() => {
+    if (!userData || (!isAssessor(userData) && !isSuperOrMaster(userData))) return [];
+    if (eleitoresFiltrados.length === 0) return [];
+    const agora30d = Date.now() - 30 * 86400000;
+    const mapa: Record<string, { nome: string; total: number; fortes: number; indecisos: number; recentes: number }> = {};
+    for (const e of eleitoresFiltrados) {
+      const chave = e.coordenadorId || e.coordenadorNome || "__sem__";
+      if (!mapa[chave]) mapa[chave] = { nome: e.coordenadorNome || "Sem coordenador", total: 0, fortes: 0, indecisos: 0, recentes: 0 };
+      mapa[chave].total++;
+      if (e.grauApoio === "forte") mapa[chave].fortes++;
+      if (e.grauApoio === "indeciso") mapa[chave].indecisos++;
+      if (parseDate(e.criadoEm).getTime() > agora30d) mapa[chave].recentes++;
+    }
+    return Object.values(mapa).sort((a, b) => b.total - a.total);
+  }, [eleitoresFiltrados, userData]);
 
   // Deputado federal: visão analítica executiva — sem formulário operacional
   if (userData && isPolitico(userData)) {
@@ -483,27 +507,37 @@ export default function EleitoresPage() {
           <h1 className="text-2xl font-bold text-white">Cadastro de Eleitores</h1>
           <p className="text-white/50 text-sm mt-1">Cadastro rápido e simplificado para equipes de rua</p>
         </div>
+        {userData && (isCoordenador(userData) || isColaborador(userData) || isAssessor(userData)) && (
+          <button
+            onClick={() => {
+              const p = new URLSearchParams({
+                nome: userData.nome || "",
+                cargo: userData.role || "",
+                cidade: userData.cidadePrincipal || "",
+                bairro: (userData as any).bairro || "",
+                campanhaId: userData.campanhaId || userData.gabineteId || "",
+              });
+              window.open(`/imprimir/ficha?${p.toString()}`, "_blank");
+            }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 text-sm transition-all shrink-0"
+            title="Imprimir Ficha de Campo"
+          >
+            <Printer size={16} />
+            <span className="hidden sm:inline">Ficha de Campo</span>
+          </button>
+        )}
         <BuscaGlobal userData={userData} />
       </div>
-      <GlassCard className="p-4 md:p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      <GlassCard className="p-4 md:p-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Campos essenciais */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Input label="Nome Completo *" value={form.nomeCompleto} onChange={(e) => setForm({ ...form, nomeCompleto: e.target.value })} placeholder="Nome do eleitor" />
-            <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value as any, documento: "" })} options={tipoDocOptions} />
-            <Input label={docLabel} value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder={`Número do ${docLabel}`} maxLength={14} />
-            <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
-            <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
-            <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
-            <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
-            <Select label="Complemento" value={form.complemento} onChange={(e) => setForm({ ...form, complemento: e.target.value })} options={[{ value: "", label: "Selecione..." }, { value: "Casa", label: "Casa" }, { value: "Apartamento", label: "Apartamento" }, { value: "Sala Comercial", label: "Sala Comercial" }, { value: "Kitnet", label: "Kitnet" }, { value: "Cobertura", label: "Cobertura" }, { value: "Flat", label: "Flat" }, { value: "Loft", label: "Loft" }, { value: "Condomínio", label: "Condomínio" }, { value: "Sítio", label: "Sítio" }, { value: "Chácara", label: "Chácara" }, { value: "Fazenda", label: "Fazenda" }, { value: "__outro__", label: "Outro (digitar)" }]} />
-            {form.complemento === "__outro__" && (
-              <Input label="Digite o complemento" value={""} onChange={(e) => setForm({ ...form, complemento: e.target.value })} placeholder="Ex: Fundos, 2º andar..." />
-            )}
             <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
-            <Select label="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value, bairro: "" })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
+            <Select label="Cidade *" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value, bairro: "" })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
             {isOperacional ? (
               <div>
-                <label className="block text-sm font-medium text-white/70 mb-1.5">Bairro</label>
+                <label className="block text-sm font-medium text-white/70 mb-1.5">Bairro *</label>
                 <input
                   list="bairros-datalist"
                   value={form.bairro}
@@ -518,36 +552,64 @@ export default function EleitoresPage() {
                 </datalist>
               </div>
             ) : (
-              <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
+              <Input label="Bairro *" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
             )}
             <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => setForm({ ...form, grauApoio: e.target.value })} options={grauOptions} />
-            <Select label="Intenção de Voto" value={form.voto} onChange={(e) => setForm({ ...form, voto: e.target.value, candidatoId: "" })} options={opcoesVoto} />
-            {form.voto === "sim" && candidatos.length > 0 && (
-              <Select label="Candidato" value={form.candidatoId} onChange={(e) => setForm({ ...form, candidatoId: e.target.value })} options={candidatos.map((c) => ({ value: c.id!, label: `${c.nome} (${c.partido})` }))} />
-            )}
-            {form.voto === "sim" && candidatos.length === 0 && (
-              <p className="text-sm text-amber-400 flex items-center gap-2 self-end pb-2">Cadastre candidatos primeiro na página Candidatos</p>
-            )}
-            {isOperacional && (
-              <Select label="Motivo Principal" value={form.motivoPrincipal} onChange={(e) => setForm({ ...form, motivoPrincipal: e.target.value })} options={MOTIVOS_PRINCIPAIS} />
-            )}
-            {isOperacional ? (
-              <div className="md:col-span-2 lg:col-span-3">
-                <label className="block text-sm font-medium text-white/70 mb-1.5">Observações</label>
-                <textarea
-                  value={form.observacoes}
-                  onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                  placeholder="Detalhes adicionais (opcional)"
-                  rows={2}
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
-                />
-              </div>
-            ) : (
-              <div className="md:col-span-2 lg:col-span-1">
-                <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
-              </div>
-            )}
           </div>
+
+          {/* Toggle complementar */}
+          <button
+            type="button"
+            onClick={() => setExpandirForm(!expandirForm)}
+            className="flex items-center gap-1.5 text-xs text-white/35 hover:text-white/65 transition-colors"
+          >
+            <ChevronDown size={13} className={`transition-transform duration-200 ${expandirForm ? "rotate-180" : ""}`} />
+            {expandirForm ? "Ocultar informações complementares" : "Adicionar informações complementares"}
+            {!expandirForm && <span className="text-white/20 ml-1">— Telefone · Documento · Endereço…</span>}
+          </button>
+
+          {/* Campos complementares */}
+          {expandirForm && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-white/[0.05]">
+              <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value as any, documento: "" })} options={tipoDocOptions} />
+              <Input label={docLabel} value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder={`Número do ${docLabel}`} maxLength={14} />
+              <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
+              <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
+              <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
+              <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
+              <Select label="Complemento" value={form.complemento} onChange={(e) => setForm({ ...form, complemento: e.target.value })} options={[{ value: "", label: "Selecione..." }, { value: "Casa", label: "Casa" }, { value: "Apartamento", label: "Apartamento" }, { value: "Sala Comercial", label: "Sala Comercial" }, { value: "Kitnet", label: "Kitnet" }, { value: "Cobertura", label: "Cobertura" }, { value: "Flat", label: "Flat" }, { value: "Loft", label: "Loft" }, { value: "Condomínio", label: "Condomínio" }, { value: "Sítio", label: "Sítio" }, { value: "Chácara", label: "Chácara" }, { value: "Fazenda", label: "Fazenda" }, { value: "__outro__", label: "Outro (digitar)" }]} />
+              {form.complemento === "__outro__" && (
+                <Input label="Digite o complemento" value={""} onChange={(e) => setForm({ ...form, complemento: e.target.value })} placeholder="Ex: Fundos, 2º andar..." />
+              )}
+              <Select label="Intenção de Voto" value={form.voto} onChange={(e) => setForm({ ...form, voto: e.target.value, candidatoId: "" })} options={opcoesVoto} />
+              {form.voto === "sim" && candidatos.length > 0 && (
+                <Select label="Candidato" value={form.candidatoId} onChange={(e) => setForm({ ...form, candidatoId: e.target.value })} options={candidatos.map((c) => ({ value: c.id!, label: `${c.nome} (${c.partido})` }))} />
+              )}
+              {form.voto === "sim" && candidatos.length === 0 && (
+                <p className="text-sm text-amber-400 flex items-center gap-2 self-end pb-2">Cadastre candidatos primeiro na página Candidatos</p>
+              )}
+              {isOperacional && (
+                <Select label="Motivo Principal" value={form.motivoPrincipal} onChange={(e) => setForm({ ...form, motivoPrincipal: e.target.value })} options={MOTIVOS_PRINCIPAIS} />
+              )}
+              {isOperacional ? (
+                <div className="md:col-span-2 lg:col-span-3">
+                  <label className="block text-sm font-medium text-white/70 mb-1.5">Observações</label>
+                  <textarea
+                    value={form.observacoes}
+                    onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+                    placeholder="Detalhes adicionais (opcional)"
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
+                  />
+                </div>
+              ) : (
+                <div className="md:col-span-2 lg:col-span-1">
+                  <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <Button type="submit" loading={saving} className="w-full md:w-auto">
               <UserPlus size={18} />{saving ? "Salvando..." : "Cadastrar Eleitor"}
@@ -564,8 +626,73 @@ export default function EleitoresPage() {
         colaboradores={todosColaboradores}
         onFilter={setFiltros}
       />
+      {/* Resumo por coordenador — assessor e super/admin */}
+      {resumoCoordenadores.length > 0 && (
+        <GlassCard className="p-4">
+          <p className="text-[11px] text-white/25 uppercase tracking-wide mb-3">Desempenho por Coordenador</p>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="text-white/25 border-b border-white/[0.05] text-[11px]">
+                  <th className="text-left py-2 px-2 font-medium">Coordenador</th>
+                  <th className="text-right py-2 px-2 font-medium">Eleitores</th>
+                  <th className="text-right py-2 px-2 font-medium">Fortes</th>
+                  <th className="text-right py-2 px-2 font-medium">Indecisos</th>
+                  <th className="text-right py-2 px-2 font-medium">30 dias</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumoCoordenadores.map((c) => (
+                  <tr key={c.nome} className="border-b border-white/[0.03] text-xs">
+                    <td className="py-2.5 px-2 text-white/70 font-medium">{c.nome}</td>
+                    <td className="py-2.5 px-2 text-white/60 text-right">{c.total}</td>
+                    <td className="py-2.5 px-2 text-emerald-400 text-right">{c.fortes}</td>
+                    <td className="py-2.5 px-2 text-blue-400 text-right">{c.indecisos}</td>
+                    <td className="py-2.5 px-2 text-right">
+                      <span className={c.recentes > 0 ? "text-emerald-400" : "text-white/25"}>
+                        {c.recentes > 0 ? `+${c.recentes}` : "—"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+      )}
+      {/* Pills de qualidade */}
+      {eleitoresFiltrados.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-[11px] text-white/20 pr-1 tracking-wide uppercase">Leitura</span>
+          {(["", "forte", "medio", "indeciso", "fraco", "recente"] as const).map((key) => {
+            const labels: Record<string, string> = { "": "Todos", forte: "Fortes", medio: "Médios", indeciso: "Indecisos", fraco: "Fracos", recente: "Recentes" };
+            const count = key === "" ? eleitoresFiltrados.length
+              : key === "recente" ? eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 7 * 86400000).length
+              : eleitoresFiltrados.filter((e) => e.grauApoio === key).length;
+            const ativoClass = key === "" ? "bg-white/10 text-white border-white/20"
+              : key === "forte"    ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+              : key === "medio"    ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+              : key === "indeciso" ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+              : key === "fraco"    ? "bg-red-500/15 text-red-400 border-red-500/30"
+              : "bg-violet-500/15 text-violet-400 border-violet-500/30";
+            return (
+              <button
+                key={key || "todos"}
+                onClick={() => setGrauPill(grauPill === key ? "" : key)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-all border ${
+                  grauPill === key ? ativoClass : "text-white/30 border-white/[0.07] hover:text-white/55 hover:border-white/20"
+                }`}
+              >
+                {labels[key]} <span className="opacity-60 ml-0.5">·{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="flex items-center gap-3">
-        <span className="text-sm text-white/40">{eleitoresFiltrados.length} registros</span>
+        <span className="text-sm text-white/40">
+          {eleitoresExibidos.length} registros{grauPill ? ` de ${eleitoresFiltrados.length}` : ""}
+        </span>
       </div>
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-emerald-500" /></div>
@@ -577,7 +704,7 @@ export default function EleitoresPage() {
                 <th className="text-left py-3 px-2 font-medium">Nome</th>
                 <th className="text-left py-3 px-2 font-medium">Documento</th>
                 <th className="text-left py-3 px-2 font-medium">Telefone</th>
-                <th className="text-left py-3 px-2 font-medium">Cidade/Estado</th>
+                <th className="text-left py-3 px-2 font-medium">Localidade</th>
                 <th className="text-left py-3 px-2 font-medium">Grau</th>
                 <th className="text-left py-3 px-2 font-medium">Colaborador</th>
                 <th className="text-left py-3 px-2 font-medium">Data</th>
@@ -585,12 +712,12 @@ export default function EleitoresPage() {
               </tr>
             </thead>
             <tbody>
-              {eleitoresFiltrados.map((eleitor) => (
+              {eleitoresExibidos.map((eleitor) => (
                 <tr key={eleitor.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                   <td className="py-3 px-2 text-white/80">{eleitor.nomeCompleto}</td>
                   <td className="py-3 px-2 text-white/60 text-xs">{eleitor.tipoDocumento?.toUpperCase()}: {eleitor.documento}</td>
                   <td className="py-3 px-2 text-white/60">{eleitor.telefone || "-"}</td>
-                  <td className="py-3 px-2 text-white/60">{eleitor.cidade}/{eleitor.estado}</td>
+                  <td className="py-3 px-2 text-white/60">{eleitor.bairro ? `${eleitor.bairro} · ${eleitor.cidade}` : eleitor.cidade}</td>
                   <td className="py-3 px-2"><Badge variant={eleitor.grauApoio === "forte" ? "success" : eleitor.grauApoio === "medio" ? "warning" : eleitor.grauApoio === "fraco" ? "danger" : "info"}>{eleitor.grauApoio}</Badge></td>
                   <td className="py-3 px-2 text-white/60">{eleitor.colaboradorNome}</td>
                   <td className="py-3 px-2 text-white/40 text-xs">{formatDate(eleitor.criadoEm)}</td>
@@ -610,7 +737,7 @@ export default function EleitoresPage() {
                   )}
                 </tr>
               ))}
-              {eleitoresFiltrados.length === 0 && <tr><td colSpan={8} className="py-4"><EmptyState icon={filtros.texto ? "🔍" : "📋"} title={filtros.texto ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado"} description={filtros.texto ? "Tente buscar por nome ou cidade diferente" : "Colaboradores ainda não cadastraram eleitores"} /></td></tr>}
+              {eleitoresExibidos.length === 0 && <tr><td colSpan={8} className="py-4"><EmptyState icon={filtros.texto || grauPill ? "🔍" : "📋"} title={filtros.texto || grauPill ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado"} description={filtros.texto || grauPill ? "Tente ajustar os filtros" : "Colaboradores ainda não cadastraram eleitores"} /></td></tr>}
             </tbody>
           </table>
         </div>

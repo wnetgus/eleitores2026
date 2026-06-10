@@ -17,6 +17,22 @@ import { TrendingUp, Target, Zap, Flag, Save, Users } from "lucide-react";
 import toast from "react-hot-toast";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
+const STATUS_CONFIG = {
+  excelente: { label: "Excelente", color: "text-emerald-400", bg: "bg-emerald-500/15", border: "border-emerald-500/30", bar: "bg-emerald-500" },
+  no_ritmo:  { label: "No Ritmo",  color: "text-blue-400",    bg: "bg-blue-500/15",    border: "border-blue-500/30",    bar: "bg-blue-500"    },
+  atencao:   { label: "Atenção",   color: "text-amber-400",   bg: "bg-amber-500/15",   border: "border-amber-500/30",   bar: "bg-amber-500"   },
+  critico:   { label: "Crítico",   color: "text-red-400",     bg: "bg-red-500/15",     border: "border-red-500/30",     bar: "bg-red-500"     },
+  sem_meta:  { label: "Sem Meta",  color: "text-white/30",    bg: "bg-white/5",        border: "border-white/10",       bar: "bg-white/20"    },
+} as const;
+
+function getCoordStatus(prog: number, metaTotal: number): keyof typeof STATUS_CONFIG {
+  if (metaTotal === 0) return "sem_meta";
+  if (prog >= 100) return "excelente";
+  if (prog >= 80) return "no_ritmo";
+  if (prog >= 50) return "atencao";
+  return "critico";
+}
+
 export default function MetasPage() {
   const { userData } = useAuth();
   const router = useRouter();
@@ -27,11 +43,13 @@ export default function MetasPage() {
   const [formMeta, setFormMeta] = useState({ colaboradorId: "", valor: "" });
   const [loading, setLoading] = useState(true);
   const [savingMeta, setSavingMeta] = useState(false);
+  const [grauPill, setGrauPill] = useState<"" | "forte" | "medio" | "fraco" | "indeciso">("");
   const [metaPadraoEquipe, setMetaPadraoEquipe] = useState(0);
   const [valorPadrao, setValorPadrao] = useState("");
   const [salvandoPadrao, setSalvandoPadrao] = useState(false);
   // mapa de coordenadores do assessor: { coordId → { nome, metaPadrao } }
   const [coordInfoMap, setCoordInfoMap] = useState<Record<string, { nome: string; metaPadrao: number }>>({});
+  const [perfPill, setPerfPill] = useState<"" | "excelente" | "no_ritmo" | "atencao" | "critico">("");
 
   const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
 
@@ -237,6 +255,36 @@ export default function MetasPage() {
   ).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const maxExpansao = cidadesExpansao[0]?.[1] || 1;
 
+  // Coordinator-level performance stats — computed in memory for assessor view
+  const coordStats: {
+    coordId: string; nome: string; total: number; metaTotal: number;
+    prog: number; diasSemAtividade: number; numColabs: number; rank: number;
+  }[] = !isAssessor(userData) ? [] : Object.entries(coordInfoMap)
+    .map(([coordId, ci]) => {
+      const colabs = colaboradores.filter((c) => c.coordenadorId === coordId);
+      const total = eleitores.filter((e) => e.coordenadorId === coordId).length;
+      const metaTotal = colabs.reduce((sum, c) => sum + resolverMeta(c.uid).valor, 0);
+      const prog = metaTotal > 0 ? Math.round((total / metaTotal) * 100) : 0;
+      const lastTs = eleitores
+        .filter((e) => e.coordenadorId === coordId)
+        .map((e) => parseDate(e.criadoEm).getTime())
+        .reduce((max, t) => Math.max(max, t), 0);
+      const diasSemAtividade = lastTs > 0
+        ? Math.floor((Date.now() - lastTs) / (1000 * 60 * 60 * 24))
+        : 999;
+      return { coordId, nome: ci.nome, total, metaTotal, prog, diasSemAtividade, numColabs: colabs.length, rank: 0 };
+    })
+    .sort((a, b) => b.prog - a.prog)
+    .map((c, idx) => ({ ...c, rank: idx + 1 }));
+
+  const liderCoord = coordStats[0] ?? null;
+  const abaixo50Count = coordStats.filter((c) => c.metaTotal > 0 && c.prog < 50).length;
+  const inativosCount = coordStats.filter((c) => c.diasSemAtividade >= 15).length;
+  const allNoMeta = coordStats.length > 0 && coordStats.every((c) => c.metaTotal === 0);
+  const coordStatsFiltrados = perfPill === ""
+    ? coordStats
+    : coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === perfPill);
+
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8" style={{ color: roleInfo.text.replace("text-", "") } as React.CSSProperties} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
   return (
@@ -394,7 +442,82 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {/* BULK PANEL — assessor */}
+      {/* BRIEFING DE PERFORMANCE — assessor */}
+      {isAssessor(userData) && coordStats.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={18} className="text-purple-400" />
+            <h3 className="text-white font-semibold">Resumo da Operação</h3>
+          </div>
+
+          {allNoMeta ? (
+            <p className="text-sm text-white/40 italic">
+              Defina a meta padrão abaixo para ativar o ranking de performance da equipe.
+            </p>
+          ) : (
+            <div className="space-y-1.5 mb-4">
+              {liderCoord && liderCoord.metaTotal > 0 && (
+                <p className="text-sm text-white/70">
+                  <span className="text-white font-medium">{liderCoord.nome.split(" ")[0]}</span>{" "}
+                  lidera a equipe com{" "}
+                  <span className={`font-semibold ${STATUS_CONFIG[getCoordStatus(liderCoord.prog, liderCoord.metaTotal)].color}`}>
+                    {liderCoord.prog}%
+                  </span>{" "}
+                  da meta atingida.
+                </p>
+              )}
+              {abaixo50Count > 0 && (
+                <p className="text-sm text-white/70">
+                  <span className="text-amber-400 font-medium">
+                    {abaixo50Count} {abaixo50Count === 1 ? "coordenador está" : "coordenadores estão"}
+                  </span>{" "}
+                  abaixo de 50% da meta.
+                </p>
+              )}
+              {inativosCount > 0 && (
+                <p className="text-sm text-white/70">
+                  <span className="text-red-400 font-medium">
+                    {inativosCount} {inativosCount === 1 ? "coordenador está" : "coordenadores estão"}
+                  </span>{" "}
+                  sem atividade nos últimos 15 dias.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Alertas compactos */}
+          {!allNoMeta && (abaixo50Count > 0 || inativosCount > 0 || (liderCoord && liderCoord.metaTotal > 0)) && (
+            <div className="space-y-1.5 border-t border-white/[0.05] pt-3">
+              {abaixo50Count > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                  <span className="text-xs text-white/45">
+                    {abaixo50Count} {abaixo50Count === 1 ? "coordenador abaixo" : "coordenadores abaixo"} de 50% da meta
+                  </span>
+                </div>
+              )}
+              {inativosCount > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+                  <span className="text-xs text-white/45">
+                    {inativosCount} {inativosCount === 1 ? "coordenador" : "coordenadores"} sem atividade nos últimos 15 dias
+                  </span>
+                </div>
+              )}
+              {liderCoord && liderCoord.metaTotal > 0 && (
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="text-xs text-white/45">
+                    {liderCoord.nome.split(" ")[0]} lidera a operação com {liderCoord.prog}% da meta
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+        </GlassCard>
+      )}
+
+      {/* META PADRÃO DA ASSESSORIA — mantida intacta */}
       {isAssessor(userData) && colaboradores.length > 0 && (
         <GlassCard className="p-5">
           <div className="flex items-center gap-2 mb-2">
@@ -428,7 +551,7 @@ export default function MetasPage() {
           </div>
 
           {metaPadraoEquipe > 0 && (
-            <p className="text-xs text-white/40 mb-4">
+            <p className="text-xs text-white/40">
               Meta padrão ativa: <span className="text-purple-400 font-medium">{metaPadraoEquipe} cadastros</span>
               {" · "}
               {colaboradores.filter((c) => metas[c.uid] > 0).length > 0
@@ -439,41 +562,101 @@ export default function MetasPage() {
               )}
             </p>
           )}
+        </GlassCard>
+      )}
 
+      {/* RANKING DE COORDENADORES — assessor */}
+      {isAssessor(userData) && coordStats.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Target size={18} className="text-purple-400" />
+            <h3 className="text-white font-semibold">Ranking de Entrega</h3>
+            <span className="text-xs text-white/30 ml-1">{coordStats.length} coordenadores</span>
+          </div>
+
+          {/* Filter pills */}
+          <div className="flex items-center gap-1.5 flex-wrap mb-4">
+            {([
+              { key: ""           as const, label: "Todos",      count: coordStats.length },
+              { key: "excelente"  as const, label: "Excelentes", count: coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === "excelente").length },
+              { key: "no_ritmo"   as const, label: "No Ritmo",   count: coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === "no_ritmo").length },
+              { key: "atencao"    as const, label: "Atenção",    count: coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === "atencao").length },
+              { key: "critico"    as const, label: "Críticos",   count: coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === "critico").length },
+            ] as const).map(({ key, label, count }) =>
+              (key === "" || count > 0) ? (
+                <button
+                  key={key}
+                  onClick={() => setPerfPill(perfPill === key ? "" : key)}
+                  className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all border ${
+                    perfPill === key
+                      ? key === ""         ? "bg-white/10 text-white border-white/20"
+                      : key === "excelente" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30"
+                      : key === "no_ritmo"  ? "bg-blue-500/15 text-blue-400 border-blue-500/30"
+                      : key === "atencao"   ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
+                      : "bg-red-500/15 text-red-400 border-red-500/30"
+                      : "text-white/30 border-white/[0.07] hover:text-white/55 hover:border-white/20"
+                  }`}
+                >
+                  {label} <span className="opacity-60">·{count}</span>
+                </button>
+              ) : null
+            )}
+          </div>
+
+          {/* Coordinator ranking cards */}
           <div className="space-y-2">
-            {colaboradores.map((c) => {
-              const { valor, tipo, origem } = resolverMeta(c.uid);
-              const total = eleitores.filter((e) => e.colaboradorId === c.uid).length;
-              const prog = valor > 0 ? Math.min(100, Math.round((total / valor) * 100)) : 0;
+            {coordStatsFiltrados.length === 0 && (
+              <p className="text-sm text-white/30 italic text-center py-4">Nenhum coordenador neste filtro</p>
+            )}
+            {coordStatsFiltrados.map((coord) => {
+              const status = getCoordStatus(coord.prog, coord.metaTotal);
+              const sc = STATUS_CONFIG[status];
               return (
-                <div key={c.uid} className="flex items-center gap-3 p-2.5 bg-white/[0.03] rounded-xl">
+                <div key={coord.coordId} className="flex items-center gap-3 p-3 bg-white/[0.03] rounded-xl border border-white/[0.04]">
+                  {/* Rank badge */}
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-bold ${
+                    coord.rank <= 3 ? "bg-purple-500/20 text-purple-300" : "bg-white/5 text-white/35"
+                  }`}>
+                    #{coord.rank}
+                  </div>
+
+                  {/* Center: name + status badge + bar */}
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-white/80 truncate">{c.nome}</span>
-                      {tipo === "individual" && (
-                        <span className="text-[10px] text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full">Override</span>
-                      )}
-                      {tipo === "padrao" && origem === "coord" && (
-                        <span className="text-[10px] text-purple-400/80 bg-purple-500/10 px-1.5 py-0.5 rounded-full">
-                          {coordInfoMap[c.coordenadorId || ""]?.nome?.split(" ")[0] || "Coord."}
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-medium text-white/90 truncate">{coord.nome}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${sc.bg} ${sc.color} ${sc.border}`}>
+                        {sc.label}
+                      </span>
+                      {coord.diasSemAtividade >= 15 && coord.diasSemAtividade < 999 && (
+                        <span className="text-[10px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded-full">
+                          {coord.diasSemAtividade}d sem atividade
                         </span>
                       )}
-                      {tipo === "padrao" && origem === "assessor" && (
-                        <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão</span>
+                      {coord.diasSemAtividade === 999 && coord.total === 0 && (
+                        <span className="text-[10px] text-white/20 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">
+                          sem atividade
+                        </span>
                       )}
                     </div>
-                  </div>
-                  {valor > 0 ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-white/40">{total}/{valor}</span>
-                      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden hidden sm:block">
-                        <div className={`h-full rounded-full ${prog >= 100 ? "bg-emerald-500" : "bg-amber-400"}`} style={{ width: `${prog}%` }} />
+                    {coord.metaTotal > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${sc.bar}`} style={{ width: `${Math.min(100, coord.prog)}%` }} />
+                        </div>
+                        <span className="text-xs text-white/30 shrink-0">{coord.total}/{coord.metaTotal}</span>
                       </div>
-                      <span className={`text-xs font-bold w-8 text-right ${prog >= 100 ? "text-emerald-400" : "text-amber-400"}`}>{prog}%</span>
+                    ) : (
+                      <span className="text-xs text-white/20">{coord.total} cadastros · sem meta definida</span>
+                    )}
+                  </div>
+
+                  {/* Right: % + colabs count */}
+                  <div className="shrink-0 text-right min-w-[3.5rem]">
+                    <div className={`text-lg font-bold leading-tight ${coord.metaTotal > 0 ? sc.color : "text-white/20"}`}>
+                      {coord.metaTotal > 0 ? `${coord.prog}%` : "—"}
                     </div>
-                  ) : (
-                    <span className="text-xs text-white/20 shrink-0">sem meta</span>
-                  )}
+                    <div className="text-[10px] text-white/25">{coord.numColabs} colab.</div>
+                  </div>
                 </div>
               );
             })}
@@ -579,24 +762,55 @@ export default function MetasPage() {
         )
       ) : (
         <GlassCard className="p-5">
-          <h3 className="text-white font-semibold mb-4">
-            {isColaborador(userData) ? "Meus Cadastros" : "Cadastros"}
-          </h3>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <h3 className="text-white font-semibold">
+              {isColaborador(userData) ? "Meus Cadastros" : "Cadastros"}
+            </h3>
+            {eleitores.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {([
+                  { key: "",         label: "Todos",     count: eleitores.length },
+                  { key: "forte",    label: "Fortes",    count: eleitores.filter((e) => e.grauApoio === "forte").length },
+                  { key: "medio",    label: "Médios",    count: eleitores.filter((e) => e.grauApoio === "medio").length },
+                  { key: "indeciso", label: "Indecisos", count: eleitores.filter((e) => e.grauApoio === "indeciso").length },
+                  { key: "fraco",    label: "Fracos",    count: eleitores.filter((e) => e.grauApoio === "fraco").length },
+                ] as const).map(({ key, label, count }) => {
+                  const ativoClass =
+                    key === "" ? "bg-white/10 text-white border-white/20" :
+                    key === "forte" ? "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" :
+                    key === "medio" ? "bg-amber-500/15 text-amber-400 border-amber-500/30" :
+                    key === "indeciso" ? "bg-blue-500/15 text-blue-400 border-blue-500/30" :
+                    "bg-red-500/15 text-red-400 border-red-500/30";
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => setGrauPill(grauPill === key ? "" : key)}
+                      className={`px-2.5 py-0.5 rounded-full text-xs font-medium transition-all border ${
+                        grauPill === key ? ativoClass : "text-white/30 border-white/[0.07] hover:text-white/55 hover:border-white/20"
+                      }`}
+                    >
+                      {label} <span className="opacity-60">·{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <div className="overflow-x-auto max-h-80 overflow-y-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-white/40 border-b border-white/[0.06]">
                   <th className="text-left py-2 px-2 font-medium">Nome</th>
-                  <th className="text-left py-2 px-2 font-medium">Cidade</th>
+                  <th className="text-left py-2 px-2 font-medium">Localidade</th>
                   <th className="text-left py-2 px-2 font-medium">Grau</th>
                   <th className="text-left py-2 px-2 font-medium">Data</th>
                 </tr>
               </thead>
               <tbody>
-                {eleitores.map((e) => (
+                {(grauPill ? eleitores.filter((e) => e.grauApoio === grauPill) : eleitores).map((e) => (
                   <tr key={e.id} className="border-b border-white/[0.03]">
                     <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td>
-                    <td className="py-2 px-2 text-white/50">{e.cidade}</td>
+                    <td className="py-2 px-2 text-white/50">{e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade}</td>
                     <td className="py-2 px-2">
                       <Badge variant={e.grauApoio === "forte" ? "success" : e.grauApoio === "medio" ? "warning" : e.grauApoio === "fraco" ? "danger" : "info"}>{e.grauApoio}</Badge>
                     </td>

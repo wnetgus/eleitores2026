@@ -667,7 +667,25 @@ export default function MapaPoliticoPage() {
   // ── render view para prefeito/vereador/assessor ───────────────────────────────
 
   function renderViewHierarquica(g: Gabinete) {
-    const { assessores, coordenadores, colaboradores: colabs } = getPessoas(g.id);
+    const { assessores: todosAssessores, coordenadores: todosCoords, colaboradores: todosColabs } = getPessoas(g.id);
+
+    // Assessor enxerga apenas sua própria cadeia (seus coords e militantes)
+    const eAssessor = isAssessor(userData);
+    const coordenadores = eAssessor
+      ? todosCoords.filter((c) => c.assessorId === userData?.uid)
+      : todosCoords;
+    const coordIds = new Set(coordenadores.map((c) => c.uid));
+    const colabs = eAssessor
+      ? todosColabs.filter((col) => col.coordenadorId && coordIds.has(col.coordenadorId))
+      : todosColabs;
+    // Assessor não exibe outros assessores (pares)
+    const assessores = eAssessor ? [] : todosAssessores;
+
+    // Contexto territorial do assessor (cidades sob responsabilidade)
+    const cidadesAssessor: string[] = eAssessor && userData
+      ? ((userData as any).cidades ?? (userData.cidadePrincipal ? [userData.cidadePrincipal] : []))
+      : [];
+
     return (
       <div className="space-y-3">
         {parente2 && (
@@ -682,31 +700,54 @@ export default function MapaPoliticoPage() {
             <p className="text-white/70 text-xs truncate">{parente.cargo} {parente.nome}</p>
           </div>
         )}
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-white/[0.03] border border-emerald-500/30 ml-8">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0" style={{ background: g.corPrincipal || "#059669" }}>{g.nome.charAt(0)}</div>
-          <div><p className="text-white font-medium text-sm">{g.nome}</p><p className="text-xs text-white/40">{g.cargo}{g.politicoPartido ? ` • ${g.politicoPartido}` : ""}</p></div>
+        <div className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-emerald-500/30 ml-8">
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0 mt-0.5" style={{ background: g.corPrincipal || "#059669" }}>{g.nome.charAt(0)}</div>
+          <div className="flex-1 min-w-0">
+            <p className="text-white font-medium text-sm">{g.nome}</p>
+            <p className="text-xs text-white/40">{g.cargo}{g.politicoPartido ? ` • ${g.politicoPartido}` : ""}</p>
+            {/* Território do assessor logado */}
+            {eAssessor && cidadesAssessor.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {cidadesAssessor.map((c) => (
+                  <span key={c} className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-purple-500/15 text-purple-300/80 text-[10px] border border-purple-500/20">
+                    <MapPin size={9} className="shrink-0" />{c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         <div className="ml-12 space-y-3">
           {assessores.length > 0 && <div><p className="text-xs font-medium text-purple-400 mb-1">Assessores</p><div className="space-y-1">{assessores.map((a) => <CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor" contexto={`Assessor(a) • ${g.cargo} ${g.nome}`} />)}</div></div>}
           {coordenadores.length > 0 && (
-            <div><p className="text-xs font-medium text-blue-400 mb-1">Coordenadores ({coordenadores.length})</p>
+            <div>
+              <p className="text-xs font-medium text-blue-400 mb-1">
+                Coordenadores ({coordenadores.length})
+                {eAssessor && <span className="text-white/30 font-normal"> · seu território</span>}
+              </p>
               <div className="space-y-1">
                 {coordenadores.map((c) => {
-                  const cols = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid);
+                  const cols = eAssessor
+                    ? usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid)
+                    : usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid);
                   return (
                     <div key={c.uid}>
                       <button onClick={() => toggleExpand(`coord_h_${c.uid}`)} className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm hover:bg-white/[0.04] text-left transition-all">
                         <span className="text-white/30">{expanded[`coord_h_${c.uid}`] ? <ChevronDown size={14} /> : <ChevronRight size={14} />}</span>
                         <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white text-xs font-bold shrink-0">{c.nome.charAt(0)}</div>
                         <span className="text-white/80 flex-1 truncate text-sm">{c.nome}</span>
+                        {c.cidadePrincipal && <span className="text-white/25 text-[10px] shrink-0 hidden sm:block">{c.cidadePrincipal}</span>}
                         <span className="text-white/40 text-xs shrink-0">{cols.length} militantes</span>
                       </button>
-                      {expanded[`coord_h_${c.uid}`] && <div className="ml-8 mt-1 space-y-1">{cols.map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome}`} />)}</div>}
+                      {expanded[`coord_h_${c.uid}`] && <div className="ml-8 mt-1 space-y-1">{cols.map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • Coord. ${c.nome}`} />)}{cols.length === 0 && <p className="text-xs text-white/30 italic pl-2">Nenhum militante</p>}</div>}
                     </div>
                   );
                 })}
               </div>
             </div>
+          )}
+          {eAssessor && coordenadores.length === 0 && (
+            <p className="text-xs text-white/30 italic">Nenhum coordenador vinculado a você ainda</p>
           )}
           {colabs.filter(c => !c.coordenadorId).length > 0 && <div><p className="text-xs font-medium text-emerald-400 mb-1">Militantes diretos</p>{colabs.filter(c => !c.coordenadorId).map((col) => <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador" contexto={`Militante • ${g.nome}`} />)}</div>}
         </div>

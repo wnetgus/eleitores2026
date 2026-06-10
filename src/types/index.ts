@@ -18,6 +18,7 @@ export interface AppUser {
   assessorId?: string;
   estado?: string;
   cidadePrincipal?: string;
+  cidades?: string[];
   regiao?: string;
   criadoEm: Date;
   ultimaAtividade?: Date;

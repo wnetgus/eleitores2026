@@ -281,7 +281,7 @@ export default function CoordenadoresPage() {
                         <div className="flex items-center gap-1 mt-0.5">
                           <MapPin size={11} className="text-white/20 shrink-0" />
                           <p className="text-[11px] text-white/35 truncate">
-                            {c.cidadePrincipal || c.cidade}{c.estado ? ` · ${c.estado}` : ""}{c.regiao ? ` — ${c.regiao}` : ""}
+                            {(c.bairro || c.regiao) ? `${c.bairro || c.regiao} · ` : ""}{c.cidadePrincipal || c.cidade}
                           </p>
                         </div>
                       )}
@@ -295,7 +295,7 @@ export default function CoordenadoresPage() {
                     <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 text-xs text-white/50"><MapPin size={12} />{c.cidadePrincipal || "N/I"} {c.regiao ? `• ${c.regiao}` : ""}</div>
+                <div className="flex items-center gap-2 text-xs text-white/50"><MapPin size={12} />{(c.bairro || c.regiao) ? `${c.bairro || c.regiao} · ` : ""}{c.cidadePrincipal || c.cidade || "N/I"}</div>
                 <div className="flex items-center gap-2 text-xs">
                   <Users size={12} className="text-white/30" />
                   <span className={qtdColab === 0 ? "text-amber-400/70" : "text-white/50"}>{qtdColab} colaborador{qtdColab !== 1 ? "es" : ""}</span>
