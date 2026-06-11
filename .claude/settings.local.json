@@ -28,7 +28,27 @@
       "PowerShell(\\(Get-Content \"c:\\\\Users\\\\Weyne\\\\VS CODE Projetos\\\\Eleitores2026\\\\src\\\\lib\\\\estados-cidades.ts\" | Measure-Object -Line\\).Lines)",
       "Bash(npm run *)",
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(node scripts/_check-manifest.mjs)",
+      "Bash(Remove-Item scripts\\\\_check-manifest.mjs)",
+      "Bash(node scripts/_consultar-logins.mjs)",
+      "Bash(node scripts/criar-auth-coords-mobs.mjs)",
+      "Bash(node scripts/_cadeia-hierarquica.mjs)",
+      "Bash(node scripts/limpar-cenario-fake.mjs)",
+      "Bash(node scripts/_check-auth-extras.mjs)",
+      "Bash(node scripts/limpar-cenario-fake.mjs --confirm)",
+      "Bash(node scripts/_limpar-auth-extras.mjs)",
+      "Bash(node scripts/_limpar-residuos.mjs)",
+      "Bash(node scripts/seed-cenario-v3.mjs)",
+      "Bash(node -e \"const x=require\\('xlsx'\\); console.log\\('SheetJS version:', x.version\\)\")",
+      "Bash(node -e \"const x=require\\('exceljs'\\); console.log\\('ExcelJS version:', x.version || require\\('./node_modules/exceljs/package.json'\\).version\\)\")",
+      "Bash(node -e \"try { const ExcelJS = require\\('exceljs'\\); const wb = new ExcelJS.Workbook\\(\\); const ws = wb.addWorksheet\\('Test'\\); ws.addRow\\(['hello']\\); wb.xlsx.writeBuffer\\(\\).then\\(b => console.log\\('ExcelJS browser-compat OK, buffer size:', b.byteLength\\)\\); } catch\\(e\\) { console.log\\('ERROR:', e.message\\); }\")",
+      "Bash(node -e \"try{require\\('jspdf-autotable'\\);console.log\\('jspdf-autotable: DISPONÍVEL'\\)}catch\\(e\\){console.log\\('jspdf-autotable: NÃO INSTALADO'\\)}\")",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const deps={...p.dependencies,...p.devDependencies}; console.log\\('xlsx:',deps.xlsx,'jspdf:',deps.jspdf,'exceljs:',deps.exceljs,'jspdf-autotable:',deps['jspdf-autotable']||'não instalado'\\)\")",
+      "Bash(node -e \"const ExcelJS=require\\('exceljs'\\); const wb=new ExcelJS.Workbook\\(\\); const ws=wb.addWorksheet\\('T'\\); ws.addConditionalFormatting\\({ref:'C3:C10', rules:[{type:'dataBar',minLength:0,maxLength:100,gradient:true,color:{argb:'FF3B82F6'}}]}\\); console.log\\('Conditional formatting + dataBar: SUPORTADO'\\)\")",
+      "Bash(node -e \"const ExcelJS = require\\('exceljs'\\); console.log\\(ExcelJS.version || require\\('./node_modules/exceljs/package.json'\\).version\\)\")",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/jspdf/package.json'\\).version\\)\")",
+      "Bash(echo \"exit:$?\")"
     ]
   }
 }

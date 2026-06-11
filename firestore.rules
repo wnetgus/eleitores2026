@@ -60,7 +60,14 @@ service cloud.firestore {
           resource.data.get("gabineteId", "") == myCampanha()
         ))
       );
-      allow delete: if isAuth() && isAdmin();
+      allow delete: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") == "assessor" &&
+          resource.data.get("status", "") in ["pendente", "aprovado"] &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
     }
 
     // ─── eleitores (joia da coroa) ─────────────────────────────────────────────

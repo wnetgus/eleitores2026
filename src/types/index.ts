@@ -3,7 +3,7 @@ export type TipoDocumento = "titulo" | "cpf" | "rg";
 export type NivelPolitico = "municipal" | "estadual" | "federal";
 export type CicloEleitoral = "municipal_2028" | "estadual_federal_2026";
 
-export type ColaboradorStatus = "ativo" | "pendente" | "recusado";
+export type ColaboradorStatus = "ativo" | "pendente" | "aprovado" | "recusado";
 
 export interface AppUser {
   uid: string;

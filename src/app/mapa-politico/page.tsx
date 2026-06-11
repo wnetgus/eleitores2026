@@ -547,7 +547,7 @@ export default function MapaPoliticoPage() {
   function getPessoas(gabineteId?: string) {
     const assessores = usuarios.filter((u) => u.role === "assessor" && (u.gabineteId === gabineteId || u.campanhaId === gabineteId));
     const coordenadores = usuarios.filter((u) => u.role === "coordenador" && (u.campanhaId === gabineteId || u.gabineteId === gabineteId));
-    const colaboradores = usuarios.filter((u) => u.role === "colaborador");
+    const colaboradores = usuarios.filter((u) => u.role === "colaborador" && (!u.status || u.status === "ativo"));
     const colabsNoGab = colaboradores.filter((c) => eleitores.some((e) => e.colaboradorId === c.uid && e.campanhaId === gabineteId));
     const bases = gabinetes.filter((g) => g.parentGabineteId === gabineteId && g.ativo);
     return { assessores, coordenadores, colaboradores: colabsNoGab, bases };

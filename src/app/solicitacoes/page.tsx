@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -133,6 +133,9 @@ export default function SolicitacoesPage() {
         status: "ativo",
         ativo: true,
       });
+
+      // Passo 4: remove documento pendente agora que o perfil real foi criado
+      await deleteDoc(doc(db, "usuarios", s.uid));
 
       await registrarAtividade({
         acao: "aprovou_colaborador", usuarioId: userData!.uid, usuarioNome: userData!.nome,

@@ -231,7 +231,7 @@ export default function DashboardPage() {
 
   // Calcular alertas e panorama para Super Admin
   const alertas: { tipo: "alerta" | "info" | "erro"; mensagem: string; acao?: string; link?: string }[] = [];
-  const totalColaboradores = usuarios.filter((u) => u.role === "colaborador" && u.status !== "recusado").length;
+  const totalColaboradores = usuarios.filter((u) => u.role === "colaborador" && u.status !== "recusado" && u.status !== "aprovado").length;
   const colaboradoresPendentes = usuarios.filter((u) => u.role === "colaborador" && u.status === "pendente").length;
   const colaboradoresAtivos = usuarios.filter((u) => u.role === "colaborador" && (u.status === "ativo" || !u.status)).length;
 
