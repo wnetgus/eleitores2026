@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { AppUser, UserRole, Atividade, Gabinete } from "@/types";
@@ -65,8 +64,7 @@ export default function ConfiguracoesPage() {
     if (form.password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
     setSaving(true);
     try {
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
-      await setDoc(doc(db, "usuarios", cred.user.uid), {
+      await createAuthUser(form.email, form.password, {
         email: form.email, nome: form.nome, role: form.role,
         gabineteId: form.gabineteId || undefined,
         campanhaId: form.gabineteId || undefined,

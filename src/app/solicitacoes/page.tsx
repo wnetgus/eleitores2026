@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
@@ -127,14 +126,10 @@ export default function SolicitacoesPage() {
       // Passo 1: assessor ainda autenticado — marca pendente como aprovado
       await updateDoc(doc(db, "usuarios", s.uid), { status: "aprovado" });
 
-      // Passo 2: cria conta Auth — auth.currentUser troca para o novo usuário
-      const cred = await createUserWithEmailAndPassword(auth, s.email, "111111");
-
-      // Passo 3: novo usuário cria o próprio perfil no UID real (request.auth.uid == uid)
+      // Passo 2+3: cria conta Auth e perfil via app secundário (sessão principal preservada)
       const { uid: _oldUid, status: _st, solicitadoPor: _sp, solicitadoPorNome: _spn, ...dadosBase } = s as any;
-      await setDoc(doc(db, "usuarios", cred.user.uid), {
+      await createAuthUser(s.email, "111111", {
         ...dadosBase,
-        uid: cred.user.uid,
         status: "ativo",
         ativo: true,
       });

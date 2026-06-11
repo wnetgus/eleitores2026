@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, query, orderBy, where, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eleitor, AppUser, Gabinete, UserRole, ROLE_CONFIG } from "@/types";
@@ -197,8 +196,7 @@ export default function ColaboradoresPage() {
         dados.campanhaId = gabineteIdParam;
         dados.status = "ativo";
         dados.ativo = true;
-        const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
-        await setDoc(doc(db, "usuarios", cred.user.uid), dados);
+        await createAuthUser(form.email, form.password, dados);
         await registrarAtividade({
           acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome} via contexto`,
@@ -208,8 +206,7 @@ export default function ColaboradoresPage() {
         if (form.coordenadorId) dados.coordenadorId = form.coordenadorId;
         dados.status = "ativo";
         dados.ativo = true;
-        const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
-        await setDoc(doc(db, "usuarios", cred.user.uid), dados);
+        await createAuthUser(form.email, form.password, dados);
         await registrarAtividade({
           acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome}`,

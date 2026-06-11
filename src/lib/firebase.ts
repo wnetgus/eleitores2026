@@ -1,6 +1,12 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, browserSessionPersistence, setPersistence } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import {
+  getAuth,
+  browserSessionPersistence,
+  setPersistence,
+  inMemoryPersistence,
+  createUserWithEmailAndPassword,
+} from "firebase/auth";
+import { getFirestore, doc, setDoc } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -23,6 +29,29 @@ if (typeof window !== "undefined" &&
     window.location.protocol === "http:" &&
     window.location.hostname !== "localhost") {
   setPersistence(auth, browserSessionPersistence).catch(() => {});
+}
+
+// Creates a Firebase Auth account and writes the user document without switching the
+// current session. Uses a secondary Firebase App with in-memory persistence so the
+// main app's onAuthStateChanged is never triggered by the new account.
+export async function createAuthUser(
+  email: string,
+  password: string,
+  dados: Record<string, any>
+): Promise<string> {
+  const secondaryApp =
+    getApps().find((a) => a.name === "secondary") ??
+    initializeApp(firebaseConfig, "secondary");
+  const secondaryAuth = getAuth(secondaryApp);
+  const secondaryDb = getFirestore(secondaryApp);
+  await setPersistence(secondaryAuth, inMemoryPersistence);
+  const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+  await setDoc(doc(secondaryDb, "usuarios", cred.user.uid), {
+    ...dados,
+    uid: cred.user.uid,
+  });
+  await secondaryAuth.signOut();
+  return cred.user.uid;
 }
 
 export { app, auth, db };

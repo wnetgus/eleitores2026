@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { collection, getDocs, query, orderBy, where, addDoc, serverTimestamp, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Gabinete, ROLE_CONFIG } from "@/types";
@@ -171,15 +169,13 @@ export default function GabinetesPage() {
       const gabineteId = await addDoc(collection(db, "campanhas"), dadosGabinete);
 
       // Criar conta do POLÍTICO (visão executiva)
-      const credPolitico = await createUserWithEmailAndPassword(auth, form.politicoEmail, form.politicoSenha);
-      await setDoc(doc(db, "usuarios", credPolitico.user.uid), {
+      await createAuthUser(form.politicoEmail, form.politicoSenha, {
         email: form.politicoEmail, nome: form.politicoNome, role: "politico",
         gabineteId: gabineteId.id, ativo: true, criadoEm: new Date(), criadoPor: userData?.uid,
       });
 
       // Criar conta do ASSESSOR PRINCIPAL (operacional)
-      const credAssessor = await createUserWithEmailAndPassword(auth, form.assessorEmail, form.assessorSenha);
-      await setDoc(doc(db, "usuarios", credAssessor.user.uid), {
+      await createAuthUser(form.assessorEmail, form.assessorSenha, {
         email: form.assessorEmail, nome: form.assessorNome, role: "assessor",
         gabineteId: gabineteId.id, ativo: true, criadoEm: new Date(), criadoPor: userData?.uid,
       });

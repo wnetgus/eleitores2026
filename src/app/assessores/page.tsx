@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from "react";
 import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "@/lib/firebase";
+import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { AppUser, Gabinete, Eleitor, ROLE_CONFIG } from "@/types";
@@ -179,7 +178,6 @@ export default function AssessoresPage() {
     setSaving(true);
     try {
       const gabineteId = isSuperOrMaster(userData) ? form.gabineteVinculoId : (userData?.gabineteId || userData?.campanhaId || "");
-      const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
       const dados: Record<string, any> = {
         email: form.email, nome: form.nome, role: "assessor",
         gabineteId, campanhaId: gabineteId,
@@ -187,7 +185,7 @@ export default function AssessoresPage() {
       };
       if (form.cidades.length > 0) dados.cidades = form.cidades;
       if (form.cidades.length > 0) dados.cidadePrincipal = form.cidades[0];
-      await setDoc(doc(db, "usuarios", cred.user.uid), dados);
+      await createAuthUser(form.email, form.password, dados);
       await registrarAtividade({ acao: "criar_assessor", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Criou assessor ${form.nome}${form.cidades.length > 0 ? ` — território: ${form.cidades.join(", ")}` : ""}` });
       toast.success("Assessor criado!");
       setForm({ email: "", password: "", nome: "", gabineteVinculoId: "", cidades: [] });
