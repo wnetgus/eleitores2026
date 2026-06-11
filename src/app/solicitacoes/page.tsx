@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, setDoc } from "firebase/firestore";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 import { auth, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -124,12 +124,21 @@ export default function SolicitacoesPage() {
     setProcessingId(s.uid);
     setSolicitacoes((prev) => prev.filter((x) => x.uid !== s.uid));
     try {
+      // Passo 1: assessor ainda autenticado — marca pendente como aprovado
+      await updateDoc(doc(db, "usuarios", s.uid), { status: "aprovado" });
+
+      // Passo 2: cria conta Auth — auth.currentUser troca para o novo usuário
       const cred = await createUserWithEmailAndPassword(auth, s.email, "111111");
-      await updateDoc(doc(db, "usuarios", s.uid), {
+
+      // Passo 3: novo usuário cria o próprio perfil no UID real (request.auth.uid == uid)
+      const { uid: _oldUid, status: _st, solicitadoPor: _sp, solicitadoPorNome: _spn, ...dadosBase } = s as any;
+      await setDoc(doc(db, "usuarios", cred.user.uid), {
+        ...dadosBase,
         uid: cred.user.uid,
         status: "ativo",
         ativo: true,
       });
+
       await registrarAtividade({
         acao: "aprovou_colaborador", usuarioId: userData!.uid, usuarioNome: userData!.nome,
         usuarioRole: userData!.role, detalhes: `Aprovou colaborador ${s.nome} (solicitado por ${s.solicitadoPorNome || "N/I"})`,
