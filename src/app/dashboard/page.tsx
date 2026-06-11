@@ -396,6 +396,9 @@ export default function DashboardPage() {
         const assessorNomeMap = usuarios
           .filter((u) => u.role === "assessor")
           .reduce<Record<string, string>>((acc, u) => { acc[u.uid] = u.nome; return acc; }, {});
+        const assessorCidadeMap = usuarios
+          .filter((u) => u.role === "assessor" && u.cidadePrincipal)
+          .reduce<Record<string, string>>((acc, u) => { acc[u.uid] = u.cidadePrincipal!; return acc; }, {});
         const stats = eleitoresFiltrados.reduce<Record<string, { nome: string; total: number; fortes: number; territorios: Record<string, number> }>>((acc, e) => {
           const assessorId = e.coordenadorId ? coordToAssessorId[e.coordenadorId] : undefined;
           if (!assessorId) return acc;
@@ -414,10 +417,11 @@ export default function DashboardPage() {
             fortes: s.fortes,
             pctForte: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
             topTerr: Object.entries(s.territorios).sort((a, b) => b[1] - a[1])[0]?.[0] || "-",
+            cidadePrincipal: assessorCidadeMap[id] ?? null,
           }))
           .sort((a, b) => b.total - a.total);
       })()
-    : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string }[];
+    : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string; cidadePrincipal: string | null }[];
 
   const maxAssessorTotal = assessorRanking[0]?.total || 1;
 
@@ -1404,7 +1408,14 @@ export default function DashboardPage() {
                               <div className="flex items-start justify-between gap-2 mb-1">
                                 <div className="min-w-0">
                                   <p className="text-sm font-semibold text-white truncate">{a.nome}</p>
-                                  <p className="text-xs text-white/40 truncate">{a.topTerr}</p>
+                                  {a.cidadePrincipal ? (
+                                    <p className="flex items-center gap-1 text-xs text-white/50 mt-0.5 truncate">
+                                      <MapPin size={10} className="shrink-0 text-white/30" />
+                                      {a.cidadePrincipal}
+                                    </p>
+                                  ) : (
+                                    <p className="text-xs text-white/40 truncate">{a.topTerr}</p>
+                                  )}
                                 </div>
                                 <div className="text-right shrink-0">
                                   <p className="text-sm font-bold text-white">{a.total}</p>

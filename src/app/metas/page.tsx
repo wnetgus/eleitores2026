@@ -63,6 +63,7 @@ export default function MetasPage() {
   const [perfPill, setPerfPill] = useState<"" | "excelente" | "no_ritmo" | "atencao" | "critico">("");
   const [politicoCoordAssessorMap, setPoliticoCoordAssessorMap] = useState<Record<string, string>>({});
   const [politicoAssessorNomes, setPoliticoAssessorNomes] = useState<Record<string, string>>({});
+  const [politicoAssessorCidades, setPoliticoAssessorCidades] = useState<Record<string, string>>({});
 
   const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
 
@@ -129,9 +130,14 @@ export default function MetasPage() {
             const cm: Record<string, string> = {};
             coordSnap.docs.forEach((d) => { const dt = d.data(); if (dt.assessorId) cm[d.id] = dt.assessorId; });
             const am: Record<string, string> = {};
-            assessorSnap.docs.forEach((d) => { am[d.id] = d.data().nome || "Assessor"; });
+            const ac: Record<string, string> = {};
+            assessorSnap.docs.forEach((d) => {
+              am[d.id] = d.data().nome || "Assessor";
+              if (d.data().cidadePrincipal) ac[d.id] = d.data().cidadePrincipal;
+            });
             setPoliticoCoordAssessorMap(cm);
             setPoliticoAssessorNomes(am);
+            setPoliticoAssessorCidades(ac);
           }
         }
       }
@@ -398,11 +404,12 @@ export default function MetasPage() {
           id, nome: s.nome, total: s.total, fortes: s.fortes,
           pctForte: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
           topTerr: Object.entries(s.territorios).sort((a, b) => b[1] - a[1])[0]?.[0] || "-",
+          cidadePrincipal: politicoAssessorCidades[id] ?? null,
           metaTotal, prog,
         };
       })
       .sort((a, b) => b.total - a.total);
-  })() : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string; metaTotal: number; prog: number }[];
+  })() : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string; cidadePrincipal: string | null; metaTotal: number; prog: number }[];
 
   const maxAssessorTotal = assessorRanking[0]?.total || 1;
 
@@ -548,7 +555,14 @@ export default function MetasPage() {
                                 {sc.label}
                               </span>
                             </div>
-                            <p className="text-xs text-white/40 mt-0.5 truncate">{a.topTerr}</p>
+                            {a.cidadePrincipal ? (
+                              <p className="flex items-center gap-1 text-xs text-white/50 mt-0.5 truncate">
+                                <MapPin size={10} className="shrink-0 text-white/30" />
+                                {a.cidadePrincipal}
+                              </p>
+                            ) : (
+                              <p className="text-xs text-white/40 mt-0.5 truncate">{a.topTerr}</p>
+                            )}
                           </div>
                           <div className="text-right shrink-0">
                             <p className="text-sm font-bold text-white">{a.total}</p>
