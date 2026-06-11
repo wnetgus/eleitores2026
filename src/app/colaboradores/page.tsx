@@ -158,6 +158,7 @@ export default function ColaboradoresPage() {
     if (!userData) return;
     if (!form.email || !form.nome) { toast.error("Preencha nome e email", { duration: 4000 }); return; }
     if (!isCoordenador(userData) && (!form.password || form.password.length < 6)) { toast.error("Senha deve ter no mínimo 6 caracteres", { duration: 4000 }); return; }
+    if (isAssessor(userData) && !form.coordenadorId) { toast.error("Selecione um Coordenador Responsável", { duration: 4000 }); return; }
     if (isSuperOrMaster(userData) && !gabineteIdParam && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o colaborador", { duration: 4000 }); return; }
     setSaving(true);
     try {
@@ -204,6 +205,7 @@ export default function ColaboradoresPage() {
         });
         toast.success("Colaborador criado!", { duration: 4000 });
       } else {
+        if (form.coordenadorId) dados.coordenadorId = form.coordenadorId;
         dados.status = "ativo";
         dados.ativo = true;
         const cred = await createUserWithEmailAndPassword(auth, form.email, form.password);
@@ -385,9 +387,9 @@ export default function ColaboradoresPage() {
                 options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
               />
             )}
-            {gabineteContexto && coordenadoresDisponiveis.length > 0 && (
+            {(isAssessor(userData) || gabineteContexto) && coordenadoresDisponiveis.length > 0 && (
               <Select
-                label="Coordenador responsável"
+                label="Coordenador Responsável *"
                 value={form.coordenadorId}
                 onChange={(e) => setForm({ ...form, coordenadorId: e.target.value })}
                 options={[{ value: "", label: "Selecione o coordenador..." }, ...coordenadoresDisponiveis.map((c) => ({ value: c.uid, label: c.nome }))]}
@@ -411,8 +413,13 @@ export default function ColaboradoresPage() {
               <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
             </div>
           </div>
+          {isAssessor(userData) && coordenadoresDisponiveis.length === 0 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-sm text-amber-400">⚠ Cadastre ao menos um Coordenador antes de criar Mobilizadores.</p>
+            </div>
+          )}
           <div className="flex items-center gap-3">
-            <Button type="submit" loading={saving}><UserPlus size={18} />{saving ? "Salvando..." : "Criar Colaborador"}</Button>
+            <Button type="submit" loading={saving} disabled={isAssessor(userData) && coordenadoresDisponiveis.length === 0}><UserPlus size={18} />{saving ? "Salvando..." : "Criar Colaborador"}</Button>
             {buscandoCep && <span className="text-sm text-white/40 animate-pulse">Buscando CEP...</span>}
             {isCoordenador(userData) && <span className="text-xs text-amber-400/70">O colaborador ficará pendente até o assessor aprovar</span>}
           </div>
@@ -609,14 +616,14 @@ export default function ColaboradoresPage() {
               {c.status === "recusado" && c.recusaMotivo && (
                 <p className="text-xs text-red-400/70 mt-1">Motivo: {c.recusaMotivo === "incompleto" ? "Cadastro incompleto" : c.recusaMotivo === "inconsistente" ? "Dados inconsistentes" : c.recusaMotivo === "duplicado" ? "Cadastro duplicado" : c.recusaMotivo === "invalido" ? "Informações inválidas" : c.recusaMotivo === "regiao" ? "Região não definida" : c.recusaMotivo === "perfil" ? "Perfil não aprovado" : c.recusaMotivo === "correcao" ? "Necessita correção" : c.recusaMotivo === "alinhamento" ? "Aguardando alinhamento" : c.recusaMotivo === "reprovado" ? "Reprovado pela coordenação" : c.recusaMotivo}</p>
               )}
-              {c.coordenadorId && coordMapFull[c.coordenadorId] && (
-                <p className="text-[10px] text-white/35 mt-1.5 truncate">
-                  <span className="text-white/25">Coord:</span> <span className="text-white/50">{coordMapFull[c.coordenadorId].nome}</span>
-                  {coordMapFull[c.coordenadorId].assessorId && assessorNomeMap[coordMapFull[c.coordenadorId].assessorId!] && (
-                    <> &nbsp;·&nbsp; <span className="text-white/25">Assessoria:</span> <span className="text-white/50">{assessorNomeMap[coordMapFull[c.coordenadorId].assessorId!]}</span></>
-                  )}
+              {c.coordenadorId && coordMapFull[c.coordenadorId] ? (
+                <p className="flex items-center gap-1.5 text-xs text-white/60 mt-1.5 truncate">
+                  <span className="text-white/35">Coordenador:</span>
+                  <span className="text-white/80 font-medium truncate">{coordMapFull[c.coordenadorId].nome}</span>
                 </p>
-              )}
+              ) : isAssessor(userData) ? (
+                <p className="text-xs text-amber-400/60 mt-1.5">Sem coordenador</p>
+              ) : null}
               {(c.bairro || c.cidade) && (
                 <p className="flex items-center gap-1 text-[10px] text-white/30 mt-1 truncate">
                   <MapPin size={9} className="shrink-0 text-white/20" />
