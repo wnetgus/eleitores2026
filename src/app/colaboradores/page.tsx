@@ -105,7 +105,9 @@ export default function ColaboradoresPage() {
       }
 
       const eConstraints: any[] = [orderBy("criadoEm", "desc")];
-      if (!isSuperOrMaster(userData)) {
+      if (isCoordenador(userData)) {
+        eConstraints.unshift(where("coordenadorId", "==", userData!.uid));
+      } else if (!isSuperOrMaster(userData)) {
         const campanhaId = userData?.campanhaId || userData?.gabineteId;
         if (campanhaId) eConstraints.unshift(where("campanhaId", "==", campanhaId));
       }
@@ -293,6 +295,14 @@ export default function ColaboradoresPage() {
     return map;
   }, [colaboradoresFiltrados]);
 
+  const bairroByColab = useMemo(() => {
+    const map: Record<string, string> = {};
+    colaboradores.forEach((c) => {
+      if (c.bairro || c.cidade) map[c.uid] = [c.bairro, c.cidade].filter(Boolean).join(" · ");
+    });
+    return map;
+  }, [colaboradores]);
+
   if (!userData || !canViewColaboradores(userData)) return null;
   const podeGerenciar = canManageColaboradores(userData);
   const config = getRoleConfig(userData);
@@ -305,6 +315,24 @@ export default function ColaboradoresPage() {
   }, {});
   const rankingArray = Object.values(ranking).sort((a, b) => b.total - a.total);
   const top3 = rankingArray.slice(0, 3);
+
+  const colaboradoresAtivos = colaboradores.filter((c) => c.status !== "pendente" && c.status !== "recusado");
+  const saudeAtivosCount = colaboradoresAtivos.filter((c) => {
+    const s = saudeMap[c.uid];
+    return s && (s.status === "ativo" || s.status === "iniciando" || s.status === "atencao");
+  }).length;
+  const colabsSemAtividadeCount = Object.values(saudeMap).filter(
+    (s) => s.status === "inativo" || s.status === "sem_atividade"
+  ).length;
+  const cadastros7d = eleitores.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 7 * 86400000).length;
+  const topTerritorio = (() => {
+    if (eleitores.length === 0) return null;
+    const map: Record<string, number> = {};
+    eleitores.forEach((e) => { const k = e.bairro || e.cidade; if (k) map[k] = (map[k] || 0) + 1; });
+    const sorted = Object.entries(map).sort((a, b) => b[1] - a[1]);
+    if (sorted.length === 0) return null;
+    return { nome: sorted[0][0], pct: Math.round((sorted[0][1] / eleitores.length) * 100) };
+  })();
 
   const selectedEleitores = selectedColaborador ? eleitores.filter((e) => e.colaboradorId === selectedColaborador) : [];
   const diasMap = selectedEleitores.reduce<Record<string, number>>((acc, e) => {
@@ -392,11 +420,61 @@ export default function ColaboradoresPage() {
       </GlassCard>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <StatCard title="Total Colaboradores" value={colaboradores.length} icon={<Users size={20} />} delay={0} />
-        <StatCard title="Total Cadastros" value={eleitores.length} icon={<TrendingUp size={20} />} delay={100} />
-        <StatCard title="Média p/ Colaborador" value={colaboradores.length > 0 ? Math.round(eleitores.length / colaboradores.length) : 0} icon={<Calendar size={20} />} delay={200} />
-      </div>
+      {isCoordenador(userData) ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard title="Colaboradores" value={colaboradoresAtivos.length} icon={<Users size={20} />} delay={0} />
+          <StatCard title="Total Cadastros" value={eleitores.length} icon={<TrendingUp size={20} />} delay={100} />
+          <StatCard title="Equipe Ativa" value={`${saudeAtivosCount}/${colaboradoresAtivos.length}`} icon={<Zap size={20} />} delay={200} />
+          <StatCard title="Cadastros (7d)" value={cadastros7d} icon={<Calendar size={20} />} delay={300} />
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard title="Total Colaboradores" value={colaboradores.length} icon={<Users size={20} />} delay={0} />
+          <StatCard title="Total Cadastros" value={eleitores.length} icon={<TrendingUp size={20} />} delay={100} />
+          <StatCard title="Média p/ Colaborador" value={colaboradores.length > 0 ? Math.round(eleitores.length / colaboradores.length) : 0} icon={<Calendar size={20} />} delay={200} />
+        </div>
+      )}
+
+      {isCoordenador(userData) && (
+        <GlassCard className="p-5 border-blue-500/10">
+          <div className="flex items-center gap-2 mb-3">
+            <Zap size={15} className="text-blue-400" />
+            <span className="text-xs text-blue-400 font-semibold uppercase tracking-wider">Resumo da Equipe</span>
+          </div>
+          <div className="space-y-2">
+            {rankingArray.length > 0 && eleitores.length > 0 && (
+              <p className="text-sm text-white/80">
+                🥇 <span className="text-white font-medium">{rankingArray[0].nome.split(" ")[0]}</span> lidera a equipe com{" "}
+                <span className="text-white font-medium">{rankingArray[0].total}</span> cadastros.
+              </p>
+            )}
+            {colabsSemAtividadeCount > 0 && (
+              <p className="text-sm text-amber-400/80">
+                ⚠ {colabsSemAtividadeCount} colaborador{colabsSemAtividadeCount > 1 ? "es" : ""} sem atividade há mais de 10 dias.
+              </p>
+            )}
+            {topTerritorio && (
+              <p className="text-sm text-white/60">
+                📍 <span className="text-white/80">{topTerritorio.nome}</span> concentra{" "}
+                <span className="text-white/80">{topTerritorio.pct}%</span> da produção da equipe.
+              </p>
+            )}
+            {cadastros7d === 0 && eleitores.length > 0 && (
+              <p className="text-sm text-red-400/80">
+                ⚠ Nenhum cadastro registrado nos últimos 7 dias.
+              </p>
+            )}
+            {cadastros7d > 0 && colabsSemAtividadeCount === 0 && (
+              <p className="text-sm text-emerald-400/80">
+                ✅ Equipe em ritmo ativo — {cadastros7d} cadastro{cadastros7d !== 1 ? "s" : ""} nos últimos 7 dias.
+              </p>
+            )}
+            {eleitores.length === 0 && (
+              <p className="text-sm text-white/40">Nenhum cadastro ainda. Acione sua equipe.</p>
+            )}
+          </div>
+        </GlassCard>
+      )}
 
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Trophy size={20} className="text-amber-400" /><h3 className="text-white font-semibold">Ranking de Colaboradores</h3></div>
@@ -413,15 +491,36 @@ export default function ColaboradoresPage() {
       </GlassCard>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {top3.map((col, idx) => (
-          <GlassCard key={col.id} className="p-5 cursor-pointer hover:border-white/[0.12] transition-all" onClick={() => setSelectedColaborador(col.id)}>
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold ${idx === 0 ? "bg-amber-500/20 text-amber-400" : idx === 1 ? "bg-gray-400/20 text-gray-300" : "bg-amber-700/20 text-amber-600"}`}>{idx + 1}</div>
-              <div><p className="text-white font-medium">{col.nome}</p><p className="text-xs text-white/40">{col.total} cadastros</p></div>
-            </div>
-            <div className="w-full bg-white/5 rounded-full h-2"><div className="bg-emerald-500 h-2 rounded-full transition-all" style={{ width: `${(col.total / rankingArray[0].total) * 100}%` }} /></div>
-          </GlassCard>
-        ))}
+        {top3.map((col, idx) => {
+          const s = saudeMap[col.id];
+          const territorio = bairroByColab[col.id];
+          return (
+            <GlassCard key={col.id} className="p-5 cursor-pointer hover:border-white/12 transition-all" onClick={() => setSelectedColaborador(col.id)}>
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold shrink-0 ${idx === 0 ? "bg-amber-500/20 text-amber-400" : idx === 1 ? "bg-gray-400/20 text-gray-300" : "bg-amber-700/20 text-amber-600"}`}>{idx + 1}</div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-white font-medium truncate">{col.nome}</p>
+                  <p className="text-xs text-white/40">{col.total} cadastros</p>
+                </div>
+                {s && (
+                  <div className={`flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-lg shrink-0 ${s.bg} ${s.cor}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+                    <span className="font-medium whitespace-nowrap">{s.label}</span>
+                  </div>
+                )}
+              </div>
+              {territorio && (
+                <p className="flex items-center gap-1 text-xs text-white/35 mb-3">
+                  <MapPin size={10} className="shrink-0" />
+                  {territorio}
+                </p>
+              )}
+              <div className="w-full bg-white/5 rounded-full h-2">
+                <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{ width: `${(col.total / rankingArray[0].total) * 100}%` }} />
+              </div>
+            </GlassCard>
+          );
+        })}
       </div>
 
       {selectedColaborador && (
@@ -521,7 +620,15 @@ export default function ColaboradoresPage() {
               {(c.bairro || c.cidade) && (
                 <p className="flex items-center gap-1 text-[10px] text-white/30 mt-1 truncate">
                   <MapPin size={9} className="shrink-0 text-white/20" />
-                  <span>{[c.bairro, c.cidade].filter(Boolean).join(", ")}</span>
+                  <span>{[c.bairro, c.cidade].filter(Boolean).join(" · ")}</span>
+                </p>
+              )}
+              {isCoordenador(userData) && saudeMap[c.uid] && (
+                <p className="text-[10px] text-white/30 mt-1">
+                  Última atividade:{" "}
+                  <span className={saudeMap[c.uid].cor}>
+                    {saudeMap[c.uid].dias === 999 ? "sem registro" : saudeMap[c.uid].dias === 0 ? "hoje" : `${saudeMap[c.uid].dias}d atrás`}
+                  </span>
                 </p>
               )}
               <div className="flex items-center justify-between pt-2 border-t border-white/[0.04] mt-1">

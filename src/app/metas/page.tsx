@@ -13,7 +13,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
-import { TrendingUp, Target, Zap, Flag, Save, Users } from "lucide-react";
+import { TrendingUp, Target, Zap, Flag, Save, Users, MapPin, Crown } from "lucide-react";
 import toast from "react-hot-toast";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -33,6 +33,17 @@ function getCoordStatus(prog: number, metaTotal: number): keyof typeof STATUS_CO
   return "critico";
 }
 
+function fmtAtividade(dias: number): string {
+  if (dias === 999) return "Sem atividade";
+  if (dias === 0) return "Hoje";
+  return `${dias}d atrás`;
+}
+
+type ColabStat = Omit<AppUser, "status"> & {
+  total: number; metaVal: number; metaTipo: "individual" | "padrao" | "sem_meta";
+  prog: number; diasSemAtividade: number; status: keyof typeof STATUS_CONFIG;
+};
+
 export default function MetasPage() {
   const { userData } = useAuth();
   const router = useRouter();
@@ -50,6 +61,8 @@ export default function MetasPage() {
   // mapa de coordenadores do assessor: { coordId → { nome, metaPadrao } }
   const [coordInfoMap, setCoordInfoMap] = useState<Record<string, { nome: string; metaPadrao: number }>>({});
   const [perfPill, setPerfPill] = useState<"" | "excelente" | "no_ritmo" | "atencao" | "critico">("");
+  const [politicoCoordAssessorMap, setPoliticoCoordAssessorMap] = useState<Record<string, string>>({});
+  const [politicoAssessorNomes, setPoliticoAssessorNomes] = useState<Record<string, string>>({});
 
   const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
 
@@ -105,6 +118,22 @@ export default function MetasPage() {
         }
         const uSnap = await getDocs(query(collection(db, "usuarios"), ...uConstraints));
         setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+
+        if (isPolitico(userData!)) {
+          const gabIdPol = userData!.campanhaId || userData!.gabineteId;
+          if (gabIdPol) {
+            const [coordSnap, assessorSnap] = await Promise.all([
+              getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", gabIdPol))),
+              getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", gabIdPol))),
+            ]);
+            const cm: Record<string, string> = {};
+            coordSnap.docs.forEach((d) => { const dt = d.data(); if (dt.assessorId) cm[d.id] = dt.assessorId; });
+            const am: Record<string, string> = {};
+            assessorSnap.docs.forEach((d) => { am[d.id] = d.data().nome || "Assessor"; });
+            setPoliticoCoordAssessorMap(cm);
+            setPoliticoAssessorNomes(am);
+          }
+        }
       }
 
       const gabIdForMetas = userData!.gabineteId || userData!.campanhaId;
@@ -255,6 +284,67 @@ export default function MetasPage() {
   ).sort((a, b) => b[1] - a[1]).slice(0, 10);
   const maxExpansao = cidadesExpansao[0]?.[1] || 1;
 
+  const colabBriefing: string[] = (() => {
+    if (!isColaborador(userData)) return [];
+    const total = eleitores.length;
+    const frases: string[] = [];
+    const fortesCt = eleitores.filter((e) => e.grauApoio === "forte").length;
+    const faltam = minhaMeta > 0 ? Math.max(0, minhaMeta - total) : 0;
+    if (total > 0) {
+      frases.push(`✅ Você realizou ${total} ${total === 1 ? "cadastro" : "cadastros"}.`);
+    } else {
+      frases.push("📋 Nenhum cadastro realizado ainda.");
+    }
+    if (minhaMeta > 0) {
+      if (faltam === 0) frases.push("🎯 Meta atingida! Continue cadastrando para superar o objetivo.");
+      else frases.push(`🎯 Faltam ${faltam} para atingir sua meta.`);
+    }
+    if (total > 0) {
+      const pctForte = Math.round((fortesCt / total) * 100);
+      frases.push(`💪 ${pctForte}% da sua base é forte.`);
+      const bairrosUnicos = [...new Set(eleitores.map((e) => e.bairro).filter(Boolean))];
+      const cidadesUnicas = [...new Set(eleitores.map((e) => e.cidade).filter(Boolean))];
+      if (bairrosUnicos.length === 1 && cidadesUnicas.length === 1) {
+        frases.push(`📍 Todos os seus cadastros estão em ${bairrosUnicos[0]} · ${cidadesUnicas[0]}.`);
+      } else if (cidadesUnicas.length === 1) {
+        frases.push(`📍 Todos os seus cadastros estão em ${cidadesUnicas[0]}.`);
+      }
+    }
+    if (cadastrosHoje === 0) {
+      if (total > 0) frases.push("⚠ Nenhum cadastro realizado hoje.");
+    } else {
+      frases.push(`✅ ${cadastrosHoje} ${cadastrosHoje === 1 ? "cadastro realizado" : "cadastros realizados"} hoje.`);
+    }
+    return frases;
+  })();
+
+  const colabStats: ColabStat[] = isCoordenador(userData)
+    ? colaboradores.map((c): ColabStat => {
+        const { valor: metaVal, tipo: metaTipo } = resolverMeta(c.uid);
+        const meus = eleitores.filter((e) => e.colaboradorId === c.uid);
+        const total = meus.length;
+        const prog = metaVal > 0 ? Math.round((total / metaVal) * 100) : 0;
+        const lastTs = meus.reduce((max, e) => Math.max(max, parseDate(e.criadoEm).getTime()), 0);
+        const diasSemAtividade = lastTs > 0 ? Math.floor((Date.now() - lastTs) / 86400000) : 999;
+        return { ...c, total, metaVal, metaTipo, prog, diasSemAtividade, status: getCoordStatus(prog, metaVal) };
+      }).sort((a, b) => b.prog - a.prog)
+    : [];
+
+  const coordBriefing: string[] = (() => {
+    if (!isCoordenador(userData) || colabStats.length === 0) return [];
+    const frases: string[] = [];
+    const lider = colabStats[0];
+    if (lider.metaVal > 0) frases.push(`🥇 ${lider.nome.split(" ")[0]} lidera com ${lider.prog}% da meta.`);
+    const abaixo50 = colabStats.filter((c) => c.metaVal > 0 && c.prog < 50);
+    if (abaixo50.length === 1) frases.push(`⚠ ${abaixo50[0].nome.split(" ")[0]} está abaixo de 50%.`);
+    else if (abaixo50.length > 1) frases.push(`⚠ ${abaixo50.length} colaboradores estão abaixo de 50%.`);
+    const topTerr = userData.bairro && userData.cidade ? `${userData.bairro} · ${userData.cidade}` : userData.cidade || "";
+    if (topTerr) frases.push(`📍 ${topTerr} acumula ${eleitores.length} cadastros.`);
+    if (cadastrosHoje === 0) frases.push(`⚠ Nenhum cadastro realizado hoje.`);
+    else frases.push(`✅ ${cadastrosHoje} ${cadastrosHoje === 1 ? "cadastro" : "cadastros"} realizado${cadastrosHoje === 1 ? "" : "s"} hoje.`);
+    return frases;
+  })();
+
   // Coordinator-level performance stats — computed in memory for assessor view
   const coordStats: {
     coordId: string; nome: string; total: number; metaTotal: number;
@@ -285,6 +375,67 @@ export default function MetasPage() {
     ? coordStats
     : coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === perfPill);
 
+  const assessorRanking = isPolitico(userData) ? (() => {
+    const stats = eleitores.reduce<Record<string, { nome: string; total: number; fortes: number; territorios: Record<string, number> }>>((acc, e) => {
+      const aId = e.coordenadorId ? politicoCoordAssessorMap[e.coordenadorId] : undefined;
+      if (!aId) return acc;
+      if (!acc[aId]) acc[aId] = { nome: politicoAssessorNomes[aId] || "Assessor", total: 0, fortes: 0, territorios: {} };
+      acc[aId].total++;
+      if (e.grauApoio === "forte") acc[aId].fortes++;
+      const key = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
+      acc[aId].territorios[key] = (acc[aId].territorios[key] || 0) + 1;
+      return acc;
+    }, {});
+    return Object.entries(stats)
+      .map(([id, s]) => {
+        const myCoordIds = Object.entries(politicoCoordAssessorMap)
+          .filter(([, aId]) => aId === id)
+          .map(([coordId]) => coordId);
+        const myColabs = colaboradores.filter((c) => c.coordenadorId && myCoordIds.includes(c.coordenadorId));
+        const metaTotal = myColabs.reduce((sum, c) => sum + (metas[c.uid] || 0), 0);
+        const prog = metaTotal > 0 ? Math.round((s.total / metaTotal) * 100) : 0;
+        return {
+          id, nome: s.nome, total: s.total, fortes: s.fortes,
+          pctForte: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
+          topTerr: Object.entries(s.territorios).sort((a, b) => b[1] - a[1])[0]?.[0] || "-",
+          metaTotal, prog,
+        };
+      })
+      .sort((a, b) => b.total - a.total);
+  })() : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string; metaTotal: number; prog: number }[];
+
+  const maxAssessorTotal = assessorRanking[0]?.total || 1;
+
+  const politicoBriefing: string[] = isPolitico(userData) ? (() => {
+    const frases: string[] = [];
+    const lider = assessorRanking[0];
+    if (lider) frases.push(`🥇 ${lider.nome.split(" ")[0]} lidera a operação com ${lider.total} ${lider.total === 1 ? "cadastro" : "cadastros"}.`);
+    if (assessorRanking.length > 1) {
+      const ultimo = assessorRanking[assessorRanking.length - 1];
+      const diff = (lider?.total || 0) - ultimo.total;
+      if (diff > 0) frases.push(`⚠ ${ultimo.nome.split(" ")[0]} está ${diff} ${diff === 1 ? "registro" : "registros"} atrás do líder.`);
+    }
+    if (cidadesExpansao[0] && eleitores.length > 0) {
+      const pctCidade = Math.round((cidadesExpansao[0][1] / eleitores.length) * 100);
+      frases.push(`📍 ${cidadesExpansao[0][0]} concentra ${pctCidade}% da base atual.`);
+    }
+    if (cidadesExpansao.length > 1) {
+      frases.push(`🎯 ${cidadesExpansao[cidadesExpansao.length - 1][0]} apresenta a melhor oportunidade de expansão.`);
+    }
+    const comMeta = assessorRanking.filter((a) => a.metaTotal > 0);
+    if (comMeta.length > 0) {
+      const atingiram = comMeta.filter((a) => a.prog >= 100).length;
+      if (atingiram > 0) frases.push(`🎯 ${atingiram} ${atingiram === 1 ? "assessoria já atingiu sua meta." : "assessorias já atingiram suas metas."}`);
+      const abaixo50 = comMeta.filter((a) => a.prog < 50).length;
+      if (abaixo50 > 0) frases.push(`⚠ ${abaixo50} ${abaixo50 === 1 ? "assessoria está abaixo de 50%." : "assessorias estão abaixo de 50%."}`);
+    }
+    return frases;
+  })() : [];
+
+  const numTerritorios = isPolitico(userData)
+    ? new Set(eleitores.map((e) => (e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade))).size
+    : 0;
+
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8" style={{ color: roleInfo.text.replace("text-", "") } as React.CSSProperties} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
   return (
@@ -297,8 +448,8 @@ export default function MetasPage() {
         </div>
       </div>
 
-      {/* Metas por Gabinete (para político/deputado) */}
-      {(isSuperOrMaster(userData) || isPolitico(userData)) && (
+      {/* Metas por Gabinete (super/admin) */}
+      {isSuperOrMaster(userData) && (
         <GlassCard className="p-5">
           <div className="flex items-center gap-2 mb-4"><Flag size={18} className="text-amber-400" /><h3 className="text-white font-semibold">Metas por Estrutura</h3></div>
           <div className="space-y-2">
@@ -320,21 +471,207 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {isColaborador(userData) && minhaMeta > 0 && (
-        <GlassCard className="p-5">
-          <div className="flex items-center gap-3 mb-3">
-            <Flag size={20} className="text-emerald-400" />
-            <h3 className="text-white font-semibold">Minha Meta</h3>
-            {tipoMinhaMeta === "padrao" && (
-              <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão da equipe</span>
+      {/* ═══ PERFIL POLÍTICO — CENTRAL DE GESTÃO ESTRATÉGICA ═══ */}
+      {isPolitico(userData) && (
+        <>
+          {/* P1 — BRIEFING ESTRATÉGICO */}
+          {politicoBriefing.length > 0 && (
+            <GlassCard className="p-5 border-violet-500/10">
+              <div className="flex items-center gap-2 mb-4">
+                <Zap size={16} className="text-violet-400" />
+                <h3 className="text-white font-semibold">Briefing Estratégico</h3>
+              </div>
+              <div className="space-y-1.5">
+                {politicoBriefing.map((frase, i) => (
+                  <p key={i} className="text-sm text-white/70 leading-relaxed">{frase}</p>
+                ))}
+              </div>
+            </GlassCard>
+          )}
+
+          {/* P5 — KPIs GERENCIAIS */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <GlassCard className="p-5 text-center">
+              <Users size={24} className="mx-auto mb-2 text-violet-400" />
+              <p className="text-3xl font-bold text-white">{Object.keys(politicoAssessorNomes).length || assessorRanking.length}</p>
+              <p className="text-xs text-white/40">Assessorias</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Target size={24} className="mx-auto mb-2 text-blue-400" />
+              <p className="text-3xl font-bold text-white">{numTerritorios}</p>
+              <p className="text-xs text-white/40">Territórios</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <MapPin size={24} className="mx-auto mb-2 text-emerald-400" />
+              <p className="text-3xl font-bold text-white">{cidadesExpansao.length}</p>
+              <p className="text-xs text-white/40">Cidades</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <TrendingUp size={24} className="mx-auto mb-2 text-emerald-400" />
+              <p className="text-3xl font-bold text-white">{eleitores.length}</p>
+              <p className="text-xs text-white/40">Eleitores</p>
+            </GlassCard>
+          </div>
+
+          {/* P2 + P3 + P4 — RANKING DAS ASSESSORIAS */}
+          <GlassCard className="p-5">
+            <div className="flex items-center gap-2 mb-5">
+              <Crown size={16} className="text-violet-400" />
+              <h3 className="text-white font-semibold">Ranking das Assessorias</h3>
+              {assessorRanking.length > 0 && (
+                <span className="text-xs text-white/30 ml-1">{assessorRanking.length} assessorias</span>
+              )}
+            </div>
+
+            {assessorRanking.length === 0 ? (
+              <div className="py-4 text-center">
+                <p className="text-sm text-white/30 italic">Nenhuma assessoria com cadastros registrados ainda.</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {assessorRanking.map((a, idx) => {
+                  const medals = ["🥇", "🥈", "🥉"];
+                  const rank = idx < 3 ? medals[idx] : `${idx + 1}º`;
+                  const pct = Math.round((a.total / maxAssessorTotal) * 100);
+                  const corForte = a.pctForte >= 50 ? "text-emerald-400" : a.pctForte >= 30 ? "text-amber-400" : "text-red-400";
+                  const statusKey = a.metaTotal > 0 ? getCoordStatus(a.prog, a.metaTotal) : "sem_meta";
+                  const sc = STATUS_CONFIG[statusKey];
+                  return (
+                    <div key={a.id} className="flex items-start gap-3">
+                      <span className="text-lg w-8 shrink-0 text-center mt-0.5">{rank}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1.5">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="text-sm font-semibold text-white">{a.nome}</p>
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${sc.bg} ${sc.color} ${sc.border}`}>
+                                {sc.label}
+                              </span>
+                            </div>
+                            <p className="text-xs text-white/40 mt-0.5 truncate">{a.topTerr}</p>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-sm font-bold text-white">{a.total}</p>
+                            <p className={`text-xs ${corForte}`}>{a.pctForte}% fortes</p>
+                          </div>
+                        </div>
+                        {a.metaTotal > 0 ? (
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs">
+                              <span className="text-white/30">{a.total}/{a.metaTotal}</span>
+                              <span className={`font-bold ${sc.color}`}>{Math.min(a.prog, 100)}%</span>
+                            </div>
+                            <div className="w-full bg-white/[0.04] rounded-full h-1.5">
+                              <div className={`h-1.5 rounded-full ${sc.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="w-full bg-white/[0.04] rounded-full h-1.5">
+                            <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
+
+            {assessorRanking.every((a) => a.metaTotal === 0) && (
+              <p className="text-xs text-white/20 mt-5 pt-4 border-t border-white/[0.05] italic">
+                Defina metas para acompanhar a evolução da estrutura.
+              </p>
+            )}
+          </GlassCard>
+        </>
+      )}
+
+      {/* CARD PRINCIPAL DE META — colaborador */}
+      {isColaborador(userData) && (() => {
+        const status = getCoordStatus(progressoMeta, minhaMeta);
+        const sc = STATUS_CONFIG[status];
+        const faltam = minhaMeta > 0 ? Math.max(0, minhaMeta - eleitores.length) : 0;
+        return (
+          <GlassCard className={`p-6 border ${sc.border}`}>
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sc.bg}`}>
+                  <Target size={20} className={sc.color} />
+                </div>
+                <div>
+                  <h3 className="text-white font-semibold">Minha Meta</h3>
+                  {minhaMeta > 0 && tipoMinhaMeta === "padrao" && (
+                    <span className="text-[10px] text-white/30">Padrão da equipe</span>
+                  )}
+                </div>
+              </div>
+              {minhaMeta > 0 && (
+                <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${sc.bg} ${sc.color} ${sc.border}`}>
+                  {sc.label}
+                </span>
+              )}
+            </div>
+            {minhaMeta > 0 ? (
+              <>
+                <div className="flex items-baseline gap-2 mb-1">
+                  <span className={`text-5xl font-bold ${sc.color}`}>{eleitores.length}</span>
+                  <span className="text-2xl text-white/30">/ {minhaMeta}</span>
+                </div>
+                <p className="text-sm text-white/40 mb-5">
+                  {faltam > 0 ? `Faltam ${faltam} cadastros` : "Meta atingida!"}
+                </p>
+                <div className="space-y-2">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-white/40">Progresso</span>
+                    <span className={`font-bold ${sc.color}`}>{progressoMeta}%</span>
+                  </div>
+                  <div className="w-full h-4 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${sc.bar}`}
+                      style={{ width: `${Math.min(progressoMeta, 100)}%` }}
+                    />
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-4 py-2">
+                <span className="text-4xl text-white/15">—</span>
+                <div>
+                  <p className="text-white/50 font-medium">Meta não definida</p>
+                  <p className="text-xs text-white/25 mt-0.5">Aguarde seu coordenador definir uma meta para a equipe</p>
+                </div>
+              </div>
+            )}
+          </GlassCard>
+        );
+      })()}
+
+      {/* BRIEFING DA PRODUÇÃO — colaborador */}
+      {isColaborador(userData) && colabBriefing.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={18} className="text-emerald-400" />
+            <h3 className="text-white font-semibold">Resumo da Produção</h3>
           </div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-white/60">{eleitores.length} de {minhaMeta} cadastros</span>
-            <span className={`text-sm font-bold ${progressoMeta >= 100 ? "text-emerald-400" : "text-amber-400"}`}>{progressoMeta}%</span>
+          <div className="space-y-1.5">
+            {colabBriefing.map((frase, i) => (
+              <p key={i} className="text-sm text-white/70 leading-relaxed">{frase}</p>
+            ))}
           </div>
-          <div className="w-full h-3 bg-white/10 rounded-full overflow-hidden">
-            <div className={`h-full rounded-full transition-all duration-500 ${progressoMeta >= 100 ? "bg-emerald-500" : "bg-emerald-400"}`} style={{ width: `${Math.min(progressoMeta, 100)}%` }} />
+        </GlassCard>
+      )}
+
+      {/* RESUMO DA EQUIPE — coordenador */}
+      {isCoordenador(userData) && coordBriefing.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <TrendingUp size={18} className="text-blue-400" />
+            <h3 className="text-white font-semibold">Resumo da Equipe</h3>
+          </div>
+          <div className="space-y-1.5">
+            {coordBriefing.map((frase, i) => (
+              <p key={i} className="text-sm text-white/70 leading-relaxed">{frase}</p>
+            ))}
           </div>
         </GlassCard>
       )}
@@ -388,53 +725,112 @@ export default function MetasPage() {
           <div className="space-y-2">
             {colaboradores.map((c) => {
               const { valor, tipo } = resolverMeta(c.uid);
-              const total = eleitores.filter((e) => e.colaboradorId === c.uid).length;
-              const prog = valor > 0 ? Math.min(100, Math.round((total / valor) * 100)) : 0;
+              const stat = colabStats.find((s) => s.uid === c.uid);
+              const total = stat?.total ?? eleitores.filter((e) => e.colaboradorId === c.uid).length;
+              const prog = valor > 0 ? Math.round((total / valor) * 100) : 0;
+              const dias = stat?.diasSemAtividade ?? 999;
+              const ativCor = dias <= 5 ? "text-emerald-400" : dias <= 10 ? "text-amber-400" : dias <= 20 ? "text-orange-400" : "text-red-400";
               return (
-                <div key={c.uid} className="flex items-center gap-3 p-2.5 bg-white/[0.03] rounded-xl">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm text-white/80 truncate">{c.nome}</span>
-                      {tipo === "padrao" && (
-                        <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão</span>
-                      )}
-                      {tipo === "individual" && (
-                        <span className="text-[10px] text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full">Override</span>
-                      )}
-                      {tipo === "individual" && (
-                        <button
-                          onClick={async () => {
-                            const gabIdReset = userData?.gabineteId || userData?.campanhaId;
-                            const resetQuery = gabIdReset
-                              ? query(collection(db, "metas"), where("colaboradorId", "==", c.uid), where("gabineteId", "==", gabIdReset))
-                              : query(collection(db, "metas"), where("colaboradorId", "==", c.uid));
-                            const snap = await getDocs2(resetQuery);
-                            if (!snap.empty) {
-                              const { deleteDoc, doc: fsDoc } = await import("firebase/firestore");
-                              await deleteDoc(fsDoc(db, "metas", snap.docs[0].id));
-                              setMetas((prev) => { const n = { ...prev }; delete n[c.uid]; return n; });
-                              toast.success(`Override de ${c.nome.split(" ")[0]} removido → voltou ao padrão`);
-                            }
-                          }}
-                          className="text-[10px] text-white/20 hover:text-red-400 transition-colors ml-1"
-                          title="Remover override e voltar ao padrão"
-                        >
-                          ↩ resetar
-                        </button>
+                <div key={c.uid} className="p-3 bg-white/[0.03] rounded-xl border border-white/[0.04]">
+                  <div className="flex items-start gap-2 justify-between">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        <span className="text-sm font-medium text-white/90 truncate">{c.nome}</span>
+                        {tipo === "padrao" && (
+                          <span className="text-[10px] text-white/30 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/10">Padrão</span>
+                        )}
+                        {tipo === "individual" && (
+                          <span className="text-[10px] text-blue-400/80 bg-blue-500/10 px-1.5 py-0.5 rounded-full">Override</span>
+                        )}
+                        {tipo === "individual" && (
+                          <button
+                            onClick={async () => {
+                              const gabIdReset = userData?.gabineteId || userData?.campanhaId;
+                              const resetQuery = gabIdReset
+                                ? query(collection(db, "metas"), where("colaboradorId", "==", c.uid), where("gabineteId", "==", gabIdReset))
+                                : query(collection(db, "metas"), where("colaboradorId", "==", c.uid));
+                              const snap = await getDocs2(resetQuery);
+                              if (!snap.empty) {
+                                const { deleteDoc, doc: fsDoc } = await import("firebase/firestore");
+                                await deleteDoc(fsDoc(db, "metas", snap.docs[0].id));
+                                setMetas((prev) => { const n = { ...prev }; delete n[c.uid]; return n; });
+                                toast.success(`Override de ${c.nome.split(" ")[0]} removido → voltou ao padrão`);
+                              }
+                            }}
+                            className="text-[10px] text-white/20 hover:text-red-400 transition-colors ml-1"
+                            title="Remover override e voltar ao padrão"
+                          >
+                            ↩ resetar
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xs text-white/50">
+                          {total} cadastros{valor > 0 ? ` · Meta: ${valor}` : ""}
+                        </span>
+                        <span className={`text-xs ${ativCor}`}>{fmtAtividade(dias)}</span>
+                      </div>
+                      {valor > 0 && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full ${prog >= 100 ? "bg-emerald-500" : prog >= 80 ? "bg-blue-500" : prog >= 50 ? "bg-amber-500" : "bg-red-500"}`}
+                              style={{ width: `${Math.min(100, prog)}%` }}
+                            />
+                          </div>
+                          <span className={`text-xs font-bold w-10 text-right shrink-0 ${prog >= 100 ? "text-emerald-400" : prog >= 80 ? "text-blue-400" : prog >= 50 ? "text-amber-400" : "text-red-400"}`}>
+                            {prog}%
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>
-                  {valor > 0 ? (
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-white/40">{total}/{valor}</span>
-                      <div className="w-16 h-1.5 bg-white/10 rounded-full overflow-hidden hidden sm:block">
-                        <div className={`h-full rounded-full ${prog >= 100 ? "bg-emerald-500" : "bg-amber-400"}`} style={{ width: `${prog}%` }} />
-                      </div>
-                      <span className={`text-xs font-bold w-8 text-right ${prog >= 100 ? "text-emerald-400" : "text-amber-400"}`}>{prog}%</span>
+                </div>
+              );
+            })}
+          </div>
+        </GlassCard>
+      )}
+
+      {/* RANKING DE PERFORMANCE — coordenador */}
+      {isCoordenador(userData) && colabStats.length > 0 && (
+        <GlassCard className="p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Target size={18} className="text-blue-400" />
+            <h3 className="text-white font-semibold">Ranking de Performance</h3>
+            <span className="text-xs text-white/30 ml-1">{colabStats.length} colaboradores</span>
+          </div>
+          <div className="space-y-2">
+            {colabStats.map((c, idx) => {
+              const medals = ["🥇", "🥈", "🥉"];
+              const medal = idx < 3 ? medals[idx] : `#${idx + 1}`;
+              const sc = STATUS_CONFIG[c.status];
+              return (
+                <div key={c.uid} className="flex items-center gap-3 p-3 bg-white/[0.03] rounded-xl border border-white/[0.04]">
+                  <div className="w-8 text-base text-center shrink-0">{medal}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1 flex-wrap">
+                      <span className="text-sm font-medium text-white/90 truncate">{c.nome}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${sc.bg} ${sc.color} ${sc.border}`}>
+                        {sc.label}
+                      </span>
                     </div>
-                  ) : (
-                    <span className="text-xs text-white/20 shrink-0">sem meta</span>
-                  )}
+                    {c.metaVal > 0 ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${sc.bar}`} style={{ width: `${Math.min(100, c.prog)}%` }} />
+                        </div>
+                        <span className="text-xs text-white/30 shrink-0">{c.total}/{c.metaVal}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-white/20">{c.total} cadastros · sem meta</span>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right min-w-[3rem]">
+                    <div className={`text-lg font-bold leading-tight ${c.metaVal > 0 ? sc.color : "text-white/20"}`}>
+                      {c.metaVal > 0 ? `${c.prog}%` : "—"}
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -703,23 +1099,91 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <GlassCard className="p-5 text-center">
-          <Target size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
-          <p className="text-3xl font-bold text-white">{eleitores.length}</p>
-          <p className="text-xs text-white/40">Total de Cadastros</p>
-        </GlassCard>
-        <GlassCard className="p-5 text-center">
-          <Zap size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
-          <p className="text-3xl font-bold text-white">{cadastrosHoje}</p>
-          <p className="text-xs text-white/40">Cadastros Hoje</p>
-        </GlassCard>
-        <GlassCard className="p-5 text-center">
-          <TrendingUp size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
-          <p className="text-3xl font-bold text-white">{mediaDia}</p>
-          <p className="text-xs text-white/40">Média por Dia</p>
-        </GlassCard>
-      </div>
+      {isCoordenador(userData) ? (() => {
+        const colabsComMeta = colabStats.filter((c) => c.metaVal > 0);
+        const metaMedia = colabsComMeta.length > 0
+          ? Math.round(colabsComMeta.reduce((sum, c) => sum + c.prog, 0) / colabsComMeta.length)
+          : 0;
+        const acimaDaMeta = colabsComMeta.filter((c) => c.prog >= 100).length;
+        const criticosCount = colabStats.filter((c) => c.status === "critico").length;
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <GlassCard className="p-5 text-center">
+              <Users size={24} className="mx-auto mb-2 text-blue-400" />
+              <p className="text-3xl font-bold text-white">{colabStats.length}</p>
+              <p className="text-xs text-white/40">Colaboradores</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Target size={24} className="mx-auto mb-2 text-emerald-400" />
+              <p className={`text-3xl font-bold ${colabsComMeta.length === 0 ? "text-white/30" : metaMedia >= 80 ? "text-emerald-400" : metaMedia >= 50 ? "text-amber-400" : "text-red-400"}`}>
+                {colabsComMeta.length === 0 ? "—" : `${metaMedia}%`}
+              </p>
+              <p className="text-xs text-white/40">Meta Média</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <TrendingUp size={24} className="mx-auto mb-2 text-emerald-400" />
+              <p className={`text-3xl font-bold ${acimaDaMeta > 0 ? "text-emerald-400" : "text-white/30"}`}>{acimaDaMeta}</p>
+              <p className="text-xs text-white/40">Acima da Meta</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Zap size={24} className="mx-auto mb-2 text-red-400" />
+              <p className={`text-3xl font-bold ${criticosCount > 0 ? "text-red-400" : "text-white/30"}`}>{criticosCount}</p>
+              <p className="text-xs text-white/40">Críticos</p>
+            </GlassCard>
+          </div>
+        );
+      })() : isColaborador(userData) ? (() => {
+        const fortesKpi = eleitores.filter((e) => e.grauApoio === "forte").length;
+        const fracosKpi = eleitores.filter((e) => e.grauApoio === "fraco").length;
+        const faltamKpi = minhaMeta > 0 ? Math.max(0, minhaMeta - eleitores.length) : 0;
+        const scKpi = STATUS_CONFIG[getCoordStatus(progressoMeta, minhaMeta)];
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <GlassCard className="p-5 text-center">
+              <Target size={24} className={`mx-auto mb-2 ${minhaMeta > 0 ? scKpi.color : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${minhaMeta > 0 ? scKpi.color : "text-white/30"}`}>
+                {minhaMeta > 0 ? `${progressoMeta}%` : "—"}
+              </p>
+              <p className="text-xs text-white/40">Meta</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Flag size={24} className={`mx-auto mb-2 ${minhaMeta > 0 ? (faltamKpi > 0 ? "text-amber-400" : "text-emerald-400") : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${minhaMeta > 0 ? (faltamKpi > 0 ? "text-amber-400" : "text-emerald-400") : "text-white/30"}`}>
+                {minhaMeta > 0 ? faltamKpi : "—"}
+              </p>
+              <p className="text-xs text-white/40">Faltam</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <TrendingUp size={24} className={`mx-auto mb-2 ${fortesKpi > 0 ? "text-emerald-400" : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${fortesKpi > 0 ? "text-emerald-400" : "text-white/30"}`}>{fortesKpi}</p>
+              <p className="text-xs text-white/40">Fortes</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Zap size={24} className={`mx-auto mb-2 ${fracosKpi > 0 ? "text-red-400" : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${fracosKpi > 0 ? "text-red-400" : "text-white/30"}`}>{fracosKpi}</p>
+              <p className="text-xs text-white/40">Fracos</p>
+            </GlassCard>
+          </div>
+        );
+      })() : isPolitico(userData) ? null : (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <GlassCard className="p-5 text-center">
+            <Target size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
+            <p className="text-3xl font-bold text-white">{eleitores.length}</p>
+            <p className="text-xs text-white/40">Total de Cadastros</p>
+          </GlassCard>
+          <GlassCard className="p-5 text-center">
+            <Zap size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
+            <p className="text-3xl font-bold text-white">{cadastrosHoje}</p>
+            <p className="text-xs text-white/40">Cadastros Hoje</p>
+          </GlassCard>
+          <GlassCard className="p-5 text-center">
+            <TrendingUp size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
+            <p className="text-3xl font-bold text-white">{mediaDia}</p>
+            <p className="text-xs text-white/40">Média por Dia</p>
+          </GlassCard>
+        </div>
+      )}
 
       {crescimentoData.length > 0 && (
         <GlassCard className="p-5">
@@ -746,17 +1210,28 @@ export default function MetasPage() {
       {isPolitico(userData) ? (
         cidadesExpansao.length > 0 && (
           <GlassCard className="p-5">
-            <h3 className="text-white font-semibold mb-5">Expansão Territorial</h3>
-            <div className="space-y-2.5">
-              {cidadesExpansao.map(([cidade, total]) => (
-                <div key={cidade} className="flex items-center gap-3">
-                  <span className="text-sm text-white/70 w-36 shrink-0 truncate">{cidade}</span>
-                  <div className="flex-1 bg-white/[0.04] rounded-full h-1.5">
-                    <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.round((total / maxExpansao) * 100)}%` }} />
+            <div className="flex items-center gap-2 mb-5">
+              <MapPin size={16} className="text-emerald-400" />
+              <h3 className="text-white font-semibold">Expansão Territorial</h3>
+            </div>
+            <div className="space-y-3">
+              {cidadesExpansao.map(([cidade, total]) => {
+                const pct = eleitores.length > 0 ? Math.round((total / eleitores.length) * 100) : 0;
+                return (
+                  <div key={cidade}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-sm text-white/80 truncate">{cidade}</span>
+                      <div className="flex items-center gap-2 shrink-0 ml-2">
+                        <span className="text-sm text-white/50">{total}</span>
+                        <span className="text-xs text-white/30 w-9 text-right">{pct}%</span>
+                      </div>
+                    </div>
+                    <div className="w-full bg-white/[0.04] rounded-full h-1.5">
+                      <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.round((total / maxExpansao) * 100)}%` }} />
+                    </div>
                   </div>
-                  <span className="text-sm text-white/50 w-8 text-right shrink-0">{total}</span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </GlassCard>
         )

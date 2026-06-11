@@ -12,6 +12,7 @@ import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter,
 import { Select } from "@/components/ui/Select";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ApoiadoresPorCidade } from "@/components/charts/ApoiadoresPorCidade";
+import { ApoiadoresPorBairro } from "@/components/charts/ApoiadoresPorBairro";
 import { CrescimentoDiario } from "@/components/charts/CrescimentoDiario";
 import { RankingColaboradores } from "@/components/charts/RankingColaboradores";
 import { ApoiadoresPorEstado } from "@/components/charts/ApoiadoresPorEstado";
@@ -168,6 +169,35 @@ export default function DashboardPage() {
   const ranking = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => { acc[e.colaboradorNome] = (acc[e.colaboradorNome] || 0) + 1; return acc; }, {});
   const rankingArray = Object.entries(ranking).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
   const cidadesArray = Object.entries(cidadeMap).map(([cidade, total]) => ({ cidade, total })).sort((a, b) => b.total - a.total);
+
+  const bairroMap = isCoordenador(userData)
+    ? eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => {
+        const key = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {})
+    : {};
+  const topBairro = (Object.entries(bairroMap).sort((a, b) => b[1] - a[1])[0] ?? null) as [string, number] | null;
+  const territorioCoordenador = isCoordenador(userData)
+    ? (userData.bairro && userData.cidade
+        ? `${userData.bairro} · ${userData.cidade}`
+        : userData.cidade || userData.cidadePrincipal || "")
+    : "";
+
+  const bairrosArray = isCoordenador(userData)
+    ? Object.entries(
+        eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => {
+          const key = e.bairro || e.cidade;
+          acc[key] = (acc[key] || 0) + 1;
+          return acc;
+        }, {})
+      ).map(([bairro, total]) => ({ bairro, total })).sort((a, b) => b.total - a.total)
+    : [] as { bairro: string; total: number }[];
+
+  const concentracaoBairro = isCoordenador(userData) && eleitoresFiltrados.length > 0 && bairrosArray.length > 0
+    ? Math.round((bairrosArray[0].total / eleitoresFiltrados.length) * 100)
+    : 0;
+  const territorioConcentrado = concentracaoBairro >= 90;
 
   const estados = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => { acc[e.estado] = (acc[e.estado] || 0) + 1; return acc; }, {});
   const estadosArray = Object.entries(estados).map(([estado, total]) => ({ estado, total })).sort((a, b) => b.total - a.total);
@@ -336,6 +366,60 @@ export default function DashboardPage() {
   const maxCrescDelta = crescimentoTerritorial.length > 0
     ? Math.max(...crescimentoTerritorial.map((i) => Math.abs(i.delta)), 1)
     : 1;
+
+  const territorioMap = isPolitico(userData)
+    ? (() => {
+        const agora30d = Date.now() - 30 * 86400000;
+        return Object.entries(
+          eleitoresFiltrados.reduce<Record<string, { total: number; fortes: number; indecisos: number; fracos: number; recentes: number }>>((acc, e) => {
+            const key = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
+            if (!acc[key]) acc[key] = { total: 0, fortes: 0, indecisos: 0, fracos: 0, recentes: 0 };
+            acc[key].total++;
+            if (e.grauApoio === "forte") acc[key].fortes++;
+            if (e.grauApoio === "indeciso") acc[key].indecisos++;
+            if (e.grauApoio === "fraco") acc[key].fracos++;
+            if (parseDate(e.criadoEm).getTime() > agora30d) acc[key].recentes++;
+            return acc;
+          }, {})
+        ).map(([territorio, s]) => ({ territorio, ...s })).sort((a, b) => b.total - a.total);
+      })()
+    : [] as { territorio: string; total: number; fortes: number; indecisos: number; fracos: number; recentes: number }[];
+
+  const topTerritorio = territorioMap[0] ?? null;
+  const maxTerrTotal = territorioMap[0]?.total || 1;
+
+  const assessorRanking = isPolitico(userData)
+    ? (() => {
+        const coordToAssessorId = usuarios
+          .filter((u) => u.role === "coordenador" && u.assessorId)
+          .reduce<Record<string, string>>((acc, u) => { acc[u.uid] = u.assessorId!; return acc; }, {});
+        const assessorNomeMap = usuarios
+          .filter((u) => u.role === "assessor")
+          .reduce<Record<string, string>>((acc, u) => { acc[u.uid] = u.nome; return acc; }, {});
+        const stats = eleitoresFiltrados.reduce<Record<string, { nome: string; total: number; fortes: number; territorios: Record<string, number> }>>((acc, e) => {
+          const assessorId = e.coordenadorId ? coordToAssessorId[e.coordenadorId] : undefined;
+          if (!assessorId) return acc;
+          if (!acc[assessorId]) acc[assessorId] = { nome: assessorNomeMap[assessorId] || "Assessor", total: 0, fortes: 0, territorios: {} };
+          acc[assessorId].total++;
+          if (e.grauApoio === "forte") acc[assessorId].fortes++;
+          const key = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
+          acc[assessorId].territorios[key] = (acc[assessorId].territorios[key] || 0) + 1;
+          return acc;
+        }, {});
+        return Object.entries(stats)
+          .map(([id, s]) => ({
+            id,
+            nome: s.nome,
+            total: s.total,
+            fortes: s.fortes,
+            pctForte: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
+            topTerr: Object.entries(s.territorios).sort((a, b) => b[1] - a[1])[0]?.[0] || "-",
+          }))
+          .sort((a, b) => b.total - a.total);
+      })()
+    : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string }[];
+
+  const maxAssessorTotal = assessorRanking[0]?.total || 1;
 
   const crescimento30dPolitico = isPolitico(userData) ? (() => {
     const agora = Date.now();
@@ -565,7 +649,7 @@ export default function DashboardPage() {
               {ultimos7 > 0
                 ? `Sua base cresceu ${ultimos7} apoiador${ultimos7 !== 1 ? "es" : ""} nos últimos 7 dias.`
                 : "Nenhum cadastro novo nos últimos 7 dias — considere acionar sua equipe."}
-              {topCidade ? ` ${topCidade[0]} é seu território mais forte.` : ""}
+              {topTerritorio ? ` ${topTerritorio.territorio} é seu território mais forte.` : ""}
             </p>
             {municipiosSemAtividade30d > 0 && (
               <p className="text-sm text-amber-400/80">
@@ -594,9 +678,14 @@ export default function DashboardPage() {
                       style={{ width: `${indiceSaudeTerritorial}%` }}
                     />
                   </div>
-                  <span className={`text-lg font-bold ${indiceSaudeTerritorial >= 70 ? "text-emerald-400" : indiceSaudeTerritorial >= 45 ? "text-amber-400" : "text-red-400"}`}>
-                    {indiceSaudeTerritorial}<span className="text-sm font-normal text-white/30">/100</span>
-                  </span>
+                  <div>
+                    <span className={`text-lg font-bold ${indiceSaudeTerritorial >= 70 ? "text-emerald-400" : indiceSaudeTerritorial >= 45 ? "text-amber-400" : "text-red-400"}`}>
+                      {indiceSaudeTerritorial}<span className="text-sm font-normal text-white/30">/100</span>
+                    </span>
+                    <p className={`text-xs font-medium mt-0.5 ${indiceSaudeTerritorial >= 76 ? "text-emerald-400" : indiceSaudeTerritorial >= 51 ? "text-emerald-400" : indiceSaudeTerritorial >= 26 ? "text-amber-400" : "text-red-400"}`}>
+                      {indiceSaudeTerritorial >= 76 ? "Forte" : indiceSaudeTerritorial >= 51 ? "Saudável" : indiceSaudeTerritorial >= 26 ? "Atenção" : "Crítico"}
+                    </p>
+                  </div>
                 </div>
               </div>
               <p className="text-xs text-white/25 ml-auto hidden sm:block">
@@ -607,13 +696,56 @@ export default function DashboardPage() {
         </GlassCard>
       )}
 
+      {/* PRIORIDADES ESTRATÉGICAS — político */}
+      {isPolitico(userData) && eleitoresFiltrados.length >= 5 && territorioMap.length > 0 && (() => {
+        const prioridades: { emoji: string; titulo: string; descricao: string; cor: string }[] = [];
+        if (topTerritorio) {
+          const pctForte = topTerritorio.total > 0 ? Math.round((topTerritorio.fortes / topTerritorio.total) * 100) : 0;
+          prioridades.push({ emoji: "🔥", titulo: topTerritorio.territorio, descricao: `${topTerritorio.total} apoiadores · ${pctForte}% fortes`, cor: "text-emerald-400" });
+        }
+        const terrOrdenadosPorQueda = [...crescimentoTerritorial].sort((a, b) => a.delta - b.delta);
+        if (terrOrdenadosPorQueda.length > 0) {
+          const pior = terrOrdenadosPorQueda[0];
+          const descQueda = pior.delta < 0
+            ? `Queda de ${Math.abs(pior.delta)}% nos últimos 30 dias`
+            : `Menor crescimento: +${pior.delta}% nos últimos 30 dias`;
+          prioridades.push({ emoji: "⚠", titulo: pior.cidade, descricao: descQueda, cor: "text-amber-400" });
+        }
+        const oportunidade = territorioMap
+          .filter((t) => t.total >= 3 && t.indecisos > 0)
+          .sort((a, b) => (b.indecisos / b.total) - (a.indecisos / a.total))[0];
+        if (oportunidade) {
+          prioridades.push({ emoji: "🎯", titulo: oportunidade.territorio, descricao: `${oportunidade.indecisos} indecisos convertíveis`, cor: "text-violet-400" });
+        }
+        if (prioridades.length === 0) return null;
+        return (
+          <GlassCard className="p-5 border-violet-500/10">
+            <div className="flex items-center gap-2 mb-4">
+              <AlertTriangle size={16} className="text-violet-400" />
+              <h3 className="text-white font-semibold">Prioridades Estratégicas</h3>
+            </div>
+            <div className="space-y-3">
+              {prioridades.map((p, i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03]">
+                  <span className="text-xl shrink-0">{p.emoji}</span>
+                  <div className="min-w-0">
+                    <p className={`text-sm font-semibold ${p.cor}`}>{p.titulo}</p>
+                    <p className="text-xs text-white/40 mt-0.5">{p.descricao}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        );
+      })()}
+
       {/* CABEÇALHO: Coordenador */}
       {isCoordenador(userData) && (
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-lg">🎯</div>
           <div>
             <h1 className="text-2xl font-bold text-white">Painel de Supervisão</h1>
-            <p className="text-sm text-blue-400">{userData.nome} • Gerencie sua equipe e produtividade</p>
+            <p className="text-sm text-blue-400">{userData.nome}{territorioCoordenador ? ` • ${territorioCoordenador}` : " • Gerencie sua equipe e produtividade"}</p>
           </div>
         </div>
       )}
@@ -646,7 +778,7 @@ export default function DashboardPage() {
             <p className={`text-xs ${roleInfo.text} mt-0.5`}>
               {isPolitico(userData) && `${eleitores.length} eleitores cadastrados no seu gabinete`}
               {isAssessor(userData) && `${eleitores.length} eleitores • ${meusCoordIds.length} coordenadores • ${usuarios.filter(u => u.role === 'colaborador' && meusCoordIds.includes(u.coordenadorId || '')).length} colaboradores`}
-              {isCoordenador(userData) && `${eleitores.length} eleitores • ${colaboradoresEquipe.filter(u => u.role === 'colaborador').length} colaboradores na equipe`}
+              {isCoordenador(userData) && `${eleitores.length} eleitores • ${colaboradoresEquipe.filter(u => u.role === 'colaborador').length} colaboradores${territorioCoordenador ? ` • ${territorioCoordenador}` : " na equipe"}`}
               {isColaborador(userData) && `${eleitores.length} cadastros realizados`}
               {isSuperOrMaster(userData) && `${eleitores.length} eleitores no total`}
             </p>
@@ -817,18 +949,49 @@ export default function DashboardPage() {
       )}
 
       {/* CARDS DE INDICADORES POR ROLE */}
-      {isColaborador(userData) ? (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <StatCard title="Meus Cadastros" value={eleitoresFiltrados.length} icon={<Users size={20} />} trend={cadastrosHoje.length > 0 ? { value: `+${cadastrosHoje.length} hoje`, positive: true } : undefined} delay={0} />
-          <StatCard title="Cadastros Hoje" value={cadastrosHoje.length} icon={<UserPlus size={20} />} delay={100} />
-          <StatCard title="Minha Meta" value={minhaMeta > 0 ? `${progressoMeta}%` : "⚡"} icon={<Target size={20} />} delay={200} />
-        </div>
-      ) : isCoordenador(userData) ? (
+      {isColaborador(userData) ? (() => {
+        const fortesKpi = eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length;
+        const faltamKpi = minhaMeta > 0 ? Math.max(0, minhaMeta - eleitoresFiltrados.length) : 0;
+        const metaColor = minhaMeta === 0 ? "text-white/30"
+          : progressoMeta >= 100 ? "text-emerald-400"
+          : progressoMeta >= 80 ? "text-blue-400"
+          : progressoMeta >= 50 ? "text-amber-400"
+          : "text-red-400";
+        return (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <GlassCard className="p-5 text-center">
+              <Users size={24} className="mx-auto mb-2 text-emerald-400" />
+              <p className="text-3xl font-bold text-white">{eleitoresFiltrados.length}</p>
+              <p className="text-xs text-white/40">Cadastros</p>
+              {cadastrosHoje.length > 0 && <p className="text-xs text-emerald-400 mt-1">+{cadastrosHoje.length} hoje</p>}
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Target size={24} className={`mx-auto mb-2 ${minhaMeta > 0 ? metaColor : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${minhaMeta > 0 ? metaColor : "text-white/30"}`}>
+                {minhaMeta > 0 ? `${progressoMeta}%` : "—"}
+              </p>
+              <p className="text-xs text-white/40">Meta</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <TrendingUp size={24} className={`mx-auto mb-2 ${minhaMeta > 0 ? (faltamKpi > 0 ? "text-amber-400" : "text-emerald-400") : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${minhaMeta > 0 ? (faltamKpi > 0 ? "text-amber-400" : "text-emerald-400") : "text-white/30"}`}>
+                {minhaMeta > 0 ? faltamKpi : "—"}
+              </p>
+              <p className="text-xs text-white/40">Faltam</p>
+            </GlassCard>
+            <GlassCard className="p-5 text-center">
+              <Medal size={24} className={`mx-auto mb-2 ${fortesKpi > 0 ? "text-emerald-400" : "text-white/30"}`} />
+              <p className={`text-3xl font-bold ${fortesKpi > 0 ? "text-emerald-400" : "text-white/30"}`}>{fortesKpi}</p>
+              <p className="text-xs text-white/40">Fortes</p>
+            </GlassCard>
+          </div>
+        );
+      })() : isCoordenador(userData) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title="Apoiadores da Equipe" value={eleitoresFiltrados.length} icon={<Users size={20} />} trend={cadastrosHoje.length > 0 ? { value: `+${cadastrosHoje.length} hoje`, positive: true } : undefined} delay={0} />
           <StatCard title="Cadastros Hoje" value={cadastrosHoje.length} icon={<UserPlus size={20} />} delay={100} />
           <StatCard title="Colaboradores na Equipe" value={colaboradoresPorCoordenador} icon={<Target size={20} />} delay={200} />
-          <StatCard title="Cidade Mais Forte" value={topCidade ? topCidade[0] : "-"} icon={<MapPin size={20} />} delay={300} />
+          <StatCard title="Meu Território" value={topBairro ? topBairro[0] : territorioCoordenador || "-"} icon={<MapPin size={20} />} delay={300} />
         </div>
       ) : isAssessor(userData) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -841,7 +1004,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title={isPrefeito(userData) ? "Eleitores do Município" : "Total de Eleitores"} value={eleitoresFiltrados.length} icon={<Users size={20} />} trend={cadastrosHoje.length > 0 ? { value: `+${cadastrosHoje.length} hoje`, positive: true } : undefined} delay={0} />
           <StatCard title="Cadastros Hoje" value={cadastrosHoje.length} icon={<UserPlus size={20} />} delay={100} />
-          <StatCard title="Cidade Mais Forte" value={topCidade ? topCidade[0] : "-"} icon={<MapPin size={20} />} delay={200} />
+          <StatCard title={isPolitico(userData) ? "Território Mais Forte" : "Cidade Mais Forte"} value={isPolitico(userData) ? (topTerritorio ? topTerritorio.territorio : "-") : (topCidade ? topCidade[0] : "-")} icon={<MapPin size={20} />} delay={200} />
           <StatCard title={isPolitico(userData) ? "Expansão Territorial" : isPrefeito(userData) ? "Bairros Ativos" : "Penetração Local"} value={isPolitico(userData) ? `${cidadesArray.length} cidades` : isPrefeito(userData) ? `${bairrosDisponiveis.length} bairros` : `${cidadesArray.length} áreas`} icon={<Medal size={20} />} delay={300} />
         </div>
       ) : null}
@@ -891,57 +1054,191 @@ export default function DashboardPage() {
                 <div className="flex flex-wrap gap-x-2 gap-y-0.5 mt-1.5">
                   {saudeAtivos > 0   && <span className="text-xs text-emerald-400">{saudeAtivos} ativos</span>}
                   {saudeAtencao > 0  && <span className="text-xs text-amber-400">{saudeAtencao} atenção</span>}
-                  {saudeParados > 0  && <span className="text-xs text-orange-400">{saudeParados} parados</span>}
-                  {saudeInativos > 0 && <span className="text-xs text-red-400">{saudeInativos} inativos</span>}
+                  {saudeParados > 0  && <span className="text-xs text-orange-400">{saudeParados} {isCoordenador(userData) ? "parado(s) (6–10d)" : "parados"}</span>}
+                  {saudeInativos > 0 && <span className="text-xs text-red-400">{saudeInativos} {isCoordenador(userData) ? "sem atividade (+10d)" : "inativos"}</span>}
                 </div>
               </div>
             )}
+            {isPolitico(userData) && eleitoresFiltrados.length > 0 && (() => {
+              const fortesI = eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length;
+              const mediosI = eleitoresFiltrados.filter((e) => e.grauApoio === "medio").length;
+              const indecisosI = eleitoresFiltrados.filter((e) => e.grauApoio === "indeciso").length;
+              const fracosI = eleitoresFiltrados.filter((e) => e.grauApoio === "fraco").length;
+              return (
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-xs text-white/40 mb-3">Composição da Base</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-emerald-400">💪 Fortes</span>
+                      <span className="text-sm font-bold text-emerald-400">{fortesI}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-amber-400">🟡 Médios</span>
+                      <span className="text-sm font-bold text-amber-400">{mediosI}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-blue-400">🔵 Indecisos</span>
+                      <span className="text-sm font-bold text-blue-400">{indecisosI}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-red-400">🔴 Fracos</span>
+                      <span className="text-sm font-bold text-red-400">{fracosI}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            {isColaborador(userData) && eleitoresFiltrados.length > 0 && (() => {
+              const fortesB = eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length;
+              const mediosB = eleitoresFiltrados.filter((e) => e.grauApoio === "medio").length;
+              const indecisosB = eleitoresFiltrados.filter((e) => e.grauApoio === "indeciso").length;
+              const fracosB = eleitoresFiltrados.filter((e) => e.grauApoio === "fraco").length;
+              return (
+                <div className="p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <p className="text-xs text-white/40 mb-3">Composição da Base</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-emerald-400">💪 Base Forte</span>
+                      <span className="text-sm font-bold text-emerald-400">{fortesB}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-amber-400">🟡 Médios</span>
+                      <span className="text-sm font-bold text-amber-400">{mediosB}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-blue-400">🔵 Indecisos</span>
+                      <span className="text-sm font-bold text-blue-400">{indecisosB}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-red-400">🔴 Fracos</span>
+                      <span className="text-sm font-bold text-red-400">{fracosB}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </GlassCard>
       )}
 
       {isColaborador(userData) ? (
         <>
-          {/* Meta pessoal com progresso circular simplificado */}
-          {minhaMeta > 0 && (
-            <GlassCard className="p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <Target size={18} className="text-emerald-400" />
-                <h3 className="text-white font-semibold">Minha Meta</h3>
-              </div>
-              <div className="flex items-center gap-6">
-                <div className="relative w-24 h-24">
-                  <svg className="w-24 h-24 -rotate-90" viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="42" fill="none" stroke="rgba(255,255,255,0.05)" strokeWidth="8" />
-                    <circle cx="50" cy="50" r="42" fill="none" stroke="#10b981" strokeWidth="8"
-                      strokeDasharray={`${2 * Math.PI * 42}`}
-                      strokeDashoffset={`${2 * Math.PI * 42 * (1 - Math.min(progressoMeta / 100, 1))}`}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-white">{eleitores.length}</span>
-                  </div>
+          {/* RESUMO DA PRODUÇÃO — P3 */}
+          {(() => {
+            const total = eleitoresFiltrados.length;
+            const frases: string[] = [];
+            const fortesR = eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length;
+            const faltamR = minhaMeta > 0 ? Math.max(0, minhaMeta - total) : 0;
+            if (total > 0) {
+              frases.push(`✅ Você realizou ${total} ${total === 1 ? "cadastro" : "cadastros"}.`);
+            } else {
+              frases.push("📋 Nenhum cadastro realizado ainda.");
+            }
+            if (minhaMeta > 0) {
+              if (faltamR === 0) frases.push("🎯 Meta atingida! Continue cadastrando.");
+              else frases.push(`🎯 Faltam ${faltamR} para atingir sua meta.`);
+            }
+            if (total > 0) {
+              const pctForte = Math.round((fortesR / total) * 100);
+              frases.push(`💪 ${pctForte}% da sua base é forte.`);
+              const bairrosU = [...new Set(eleitoresFiltrados.map((e) => e.bairro).filter(Boolean))];
+              const cidadesU = [...new Set(eleitoresFiltrados.map((e) => e.cidade).filter(Boolean))];
+              if (bairrosU.length === 1 && cidadesU.length === 1) {
+                frases.push(`📍 Todos os seus cadastros estão em ${bairrosU[0]} · ${cidadesU[0]}.`);
+              } else if (cidadesU.length === 1) {
+                frases.push(`📍 Todos os seus cadastros estão em ${cidadesU[0]}.`);
+              }
+            }
+            if (cadastrosHoje.length === 0) {
+              if (total > 0) frases.push("⚠ Nenhum cadastro realizado hoje.");
+            } else {
+              frases.push(`✅ ${cadastrosHoje.length} ${cadastrosHoje.length === 1 ? "cadastro realizado" : "cadastros realizados"} hoje.`);
+            }
+            return (
+              <GlassCard className="p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <TrendingUp size={18} className="text-emerald-400" />
+                  <h3 className="text-white font-semibold">Resumo da Produção</h3>
                 </div>
-                <div className="flex-1 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-white/60">Meta: <span className="text-white font-medium">{minhaMeta}</span> cadastros</span>
-                    <span className="text-sm text-emerald-400 font-medium">{progressoMeta}%</span>
-                  </div>
-                  <div className="w-full bg-white/5 rounded-full h-2">
-                    <div className="bg-emerald-500 h-2 rounded-full transition-all" style={{ width: `${Math.min(progressoMeta, 100)}%` }} />
-                  </div>
-                  <div className="flex items-center gap-4 text-xs text-white/40 pt-1">
-                    <span>📊 {eleitores.length} de {minhaMeta}</span>
-                    <span>📅 {cadastrosHoje.length} hoje</span>
-                    <span>📈 +{crescimentoArray.length > 1 ? eleitores.filter(e => parseDate(e.criadoEm).getTime() > Date.now() - 7*24*60*60*1000).length : 0} na semana</span>
-                  </div>
+                <div className="space-y-1.5">
+                  {frases.map((frase, i) => (
+                    <p key={i} className="text-sm text-white/70 leading-relaxed">{frase}</p>
+                  ))}
                 </div>
-              </div>
-            </GlassCard>
-          )}
+              </GlassCard>
+            );
+          })()}
 
-          {/* Últimos cadastros simplificado */}
+          {/* CARD PRINCIPAL DE META — P1 */}
+          {(() => {
+            const STATUS_COLLAB = {
+              excelente: { label: "Meta Atingida", color: "text-emerald-400", bg: "bg-emerald-500/15", border: "border-emerald-500/30", bar: "bg-emerald-500" },
+              no_ritmo:  { label: "No Ritmo",      color: "text-blue-400",    bg: "bg-blue-500/15",    border: "border-blue-500/30",    bar: "bg-blue-500"   },
+              atencao:   { label: "Atenção",        color: "text-amber-400",   bg: "bg-amber-500/15",   border: "border-amber-500/30",   bar: "bg-amber-500"  },
+              critico:   { label: "Crítico",        color: "text-red-400",     bg: "bg-red-500/15",     border: "border-red-500/30",     bar: "bg-red-500"    },
+              sem_meta:  { label: "Sem Meta",       color: "text-white/30",    bg: "bg-white/5",        border: "border-white/10",       bar: "bg-white/20"   },
+            } as const;
+            const getStatus = (prog: number, meta: number): keyof typeof STATUS_COLLAB => {
+              if (meta === 0) return "sem_meta";
+              if (prog >= 100) return "excelente";
+              if (prog >= 80) return "no_ritmo";
+              if (prog >= 50) return "atencao";
+              return "critico";
+            };
+            const status = getStatus(progressoMeta, minhaMeta);
+            const sc = STATUS_COLLAB[status];
+            const faltam = minhaMeta > 0 ? Math.max(0, minhaMeta - eleitoresFiltrados.length) : 0;
+            return (
+              <GlassCard className={`p-6 border ${sc.border}`}>
+                <div className="flex items-center justify-between mb-5">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${sc.bg}`}>
+                      <Target size={20} className={sc.color} />
+                    </div>
+                    <h3 className="text-white font-semibold">Minha Meta</h3>
+                  </div>
+                  {minhaMeta > 0 && (
+                    <span className={`text-xs px-2.5 py-1 rounded-full font-medium border ${sc.bg} ${sc.color} ${sc.border}`}>
+                      {sc.label}
+                    </span>
+                  )}
+                </div>
+                {minhaMeta > 0 ? (
+                  <>
+                    <div className="flex items-baseline gap-2 mb-1">
+                      <span className={`text-5xl font-bold ${sc.color}`}>{eleitoresFiltrados.length}</span>
+                      <span className="text-2xl text-white/30">/ {minhaMeta}</span>
+                    </div>
+                    <p className="text-sm text-white/40 mb-5">
+                      {faltam > 0 ? `Faltam ${faltam} cadastros` : "Meta atingida!"}
+                    </p>
+                    <div className="space-y-2">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-white/40">Progresso</span>
+                        <span className={`font-bold ${sc.color}`}>{progressoMeta}%</span>
+                      </div>
+                      <div className="w-full h-4 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all duration-700 ${sc.bar}`}
+                          style={{ width: `${Math.min(progressoMeta, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-center gap-4 py-2">
+                    <span className="text-4xl text-white/15">—</span>
+                    <div>
+                      <p className="text-white/50 font-medium">Meta não definida</p>
+                      <p className="text-xs text-white/25 mt-0.5">Aguarde seu coordenador definir uma meta para a equipe</p>
+                    </div>
+                  </div>
+                )}
+              </GlassCard>
+            );
+          })()}
+
+          {/* ÚLTIMOS CADASTROS — P4 Localidade */}
           <GlassCard className="p-5">
             <div className="flex items-center gap-2 mb-4">
               <UserPlus size={18} className="text-emerald-400" />
@@ -953,7 +1250,7 @@ export default function DashboardPage() {
                 <thead>
                   <tr className="text-white/40 border-b border-white/[0.06]">
                     <th className="text-left py-3 px-2 font-medium">Nome</th>
-                    <th className="text-left py-3 px-2 font-medium">Cidade</th>
+                    <th className="text-left py-3 px-2 font-medium">Localidade</th>
                     <th className="text-left py-3 px-2 font-medium">Grau</th>
                     <th className="text-left py-3 px-2 font-medium">Data</th>
                   </tr>
@@ -962,7 +1259,7 @@ export default function DashboardPage() {
                   {eleitores.slice(0, 10).map((e) => (
                     <tr key={e.id} className="border-b border-white/[0.03]">
                       <td className="py-3 px-2 text-white/80">{e.nomeCompleto}</td>
-                      <td className="py-3 px-2 text-white/60">{e.cidade}</td>
+                      <td className="py-3 px-2 text-white/60">{e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade}</td>
                       <td className="py-3 px-2">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span>
                       </td>
@@ -981,7 +1278,30 @@ export default function DashboardPage() {
       {isCoordenador(userData) && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {crescimentoArray.length > 0 && <CrescimentoDiario data={crescimentoArray} />}
-          {cidadesArray.length > 0 && <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />}
+          {eleitoresFiltrados.length > 0 && (
+            territorioConcentrado ? (
+              <GlassCard className="p-5 flex flex-col justify-center gap-3">
+                <div className="flex items-center gap-2">
+                  <MapPin size={15} className="text-blue-400" />
+                  <span className="text-xs text-blue-400 font-semibold uppercase tracking-wider">Território Concentrado</span>
+                </div>
+                <div>
+                  <p className="text-3xl font-bold text-white">{concentracaoBairro}%</p>
+                  <p className="text-sm text-white/60 mt-1">
+                    {concentracaoBairro === 100 ? "100% da base está em" : `${concentracaoBairro}% da base está concentrada em`}{" "}
+                    <span className="text-white font-medium">{bairrosArray[0].bairro}</span>.
+                  </p>
+                </div>
+                {bairrosArray.length > 1 && (
+                  <p className="text-xs text-white/30">
+                    {bairrosArray.length - 1} outro{bairrosArray.length - 1 > 1 ? "s" : ""} bairro{bairrosArray.length - 1 > 1 ? "s" : ""} com presença menor.
+                  </p>
+                )}
+              </GlassCard>
+            ) : (
+              bairrosArray.length > 0 && <ApoiadoresPorBairro data={bairrosArray.slice(0, 10)} />
+            )
+          )}
         </div>
       )}
 
@@ -1064,10 +1384,78 @@ export default function DashboardPage() {
         <>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {crescimentoArray.length > 0 && <CrescimentoDiario data={crescimentoArray} />}
-            {isPolitico(userData) && cidadesArray.length > 0 && <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />}
+            {isPolitico(userData)
+              ? (assessorRanking.length > 0 && (
+                  <GlassCard className="p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Users size={16} className="text-violet-400" />
+                      <h3 className="text-white font-semibold">Desempenho das Assessorias</h3>
+                    </div>
+                    <div className="space-y-4">
+                      {assessorRanking.map((a, idx) => {
+                        const medals = ["🥇", "🥈", "🥉"];
+                        const rank = idx < 3 ? medals[idx] : `${idx + 1}º`;
+                        const pct = Math.round((a.total / maxAssessorTotal) * 100);
+                        const corForte = a.pctForte >= 50 ? "text-emerald-400" : a.pctForte >= 30 ? "text-amber-400" : "text-red-400";
+                        return (
+                          <div key={a.id} className="flex items-start gap-3">
+                            <span className="text-base w-8 shrink-0 text-center mt-1">{rank}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <div className="min-w-0">
+                                  <p className="text-sm font-semibold text-white truncate">{a.nome}</p>
+                                  <p className="text-xs text-white/40 truncate">{a.topTerr}</p>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-sm font-bold text-white">{a.total}</p>
+                                  <p className={`text-xs ${corForte}`}>{a.pctForte}% fortes</p>
+                                </div>
+                              </div>
+                              <div className="w-full bg-white/[0.04] rounded-full h-1.5">
+                                <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </GlassCard>
+                ))
+              : null}
             {isPrefeito(userData) && cidadesArray.length > 0 && <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />}
             {isVereador(userData) && cidadesArray.length > 0 && <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />}
-            {estadosArray.length > 0 && <ApoiadoresPorEstado data={estadosArray} />}
+            {isPolitico(userData)
+              ? (territorioMap.length > 0 && (
+                  <GlassCard className="p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Crown size={16} className="text-violet-400" />
+                      <h3 className="text-white font-semibold">Top Territórios</h3>
+                      <span className="text-xs text-white/30 ml-1">{territorioMap.length} territórios</span>
+                    </div>
+                    <div className="space-y-3">
+                      {territorioMap.slice(0, 8).map((t, idx) => {
+                        const medals = ["🥇", "🥈", "🥉"];
+                        const rank = idx < 3 ? medals[idx] : `${idx + 1}º`;
+                        const pct = Math.round((t.total / maxTerrTotal) * 100);
+                        return (
+                          <div key={t.territorio} className="flex items-center gap-3">
+                            <span className="text-base w-8 shrink-0 text-center">{rank}</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-sm text-white/80 truncate">{t.territorio}</span>
+                                <span className="text-sm text-white/50 shrink-0 ml-2">{t.total}</span>
+                              </div>
+                              <div className="w-full bg-white/[0.04] rounded-full h-1.5">
+                                <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </GlassCard>
+                ))
+              : (estadosArray.length > 0 && <ApoiadoresPorEstado data={estadosArray} />)}
             {isPolitico(userData) && crescimentoTerritorial.length > 0 && (
               <GlassCard className="p-5">
                 <div className="flex items-center gap-2 mb-5">

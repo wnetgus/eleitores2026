@@ -139,6 +139,12 @@ export default function EleitoresPage() {
   async function loadEleitores() {
     setLoading(true);
     try {
+      if (isCoordenador(userData)) {
+        const q = query(collection(db, "eleitores"), where("coordenadorId", "==", userData!.uid), orderBy("criadoEm", "desc"));
+        const snap = await getDocs(q);
+        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        return;
+      }
       const campanhaId = isSuperOrMaster(userData) ? undefined : userData?.campanhaId;
       const colaboradorId = isColaborador(userData) ? userData?.uid : undefined;
       const data = await buscarEleitores(campanhaId, colaboradorId);

@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { formatDate, parseDate } from "@/lib/utils";
 import { FileSpreadsheet, FileText, Filter, Search, TrendingUp, MapPin, Zap } from "lucide-react";
-import { isPolitico, isAssessor } from "@/lib/permissions";
+import { isPolitico, isAssessor, isCoordenador } from "@/lib/permissions";
 import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import toast from "react-hot-toast";
 
@@ -32,15 +32,20 @@ export default function RelatoriosPage() {
   const [eleitores, setEleitores] = useState<Eleitor[]>([]);
   const [filtered, setFiltered] = useState<Eleitor[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtros, setFiltros] = useState({ estado: "", cidade: "", bairro: "", grauApoio: "", dataInicio: "", dataFim: "", search: "" });
+  const [filtros, setFiltros] = useState({ estado: "", cidade: "", bairro: "", grauApoio: "", dataInicio: "", dataFim: "", search: "", colaboradorId: "" });
   const [grauPill, setGrauPill] = useState<"" | "forte" | "medio" | "fraco" | "indeciso" | "recente">("");
 
   useEffect(() => {
+    if (!userData) return;
     async function load() {
       try {
         const constraints: any[] = [orderBy("criadoEm", "desc")];
-        const gabId = userData?.campanhaId || userData?.gabineteId;
-        if (gabId) constraints.unshift(where("campanhaId", "==", gabId));
+        if (isCoordenador(userData)) {
+          constraints.unshift(where("coordenadorId", "==", userData!.uid));
+        } else {
+          const gabId = userData?.campanhaId || userData?.gabineteId;
+          if (gabId) constraints.unshift(where("campanhaId", "==", gabId));
+        }
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
@@ -49,7 +54,7 @@ export default function RelatoriosPage() {
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
     load();
-  }, []);
+  }, [userData]);
 
   const cidadesOpcoes = useMemo(() => {
     const base = filtros.estado ? eleitores.filter((e) => e.estado === filtros.estado) : eleitores;
@@ -63,11 +68,45 @@ export default function RelatoriosPage() {
     return [...new Set(base.map((e) => e.bairro).filter(Boolean))].sort();
   }, [eleitores, filtros.estado, filtros.cidade]);
 
+  const colaboradoresOpcoes = useMemo(() => {
+    if (!userData || !isCoordenador(userData)) return [];
+    const seen = new Map<string, string>();
+    for (const e of eleitores) {
+      if (e.colaboradorId && !seen.has(e.colaboradorId)) seen.set(e.colaboradorId, e.colaboradorNome);
+    }
+    return [...seen.entries()].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [eleitores, userData]);
+
+  const bairrosUnicos = useMemo(() => {
+    if (!userData || !isCoordenador(userData)) return [] as string[];
+    return [...new Set(eleitores.map((e) => e.bairro).filter(Boolean))] as string[];
+  }, [eleitores, userData]);
+
+  const coordTerritorioData = useMemo(() => {
+    if (!userData || !isCoordenador(userData) || filtered.length === 0) return null;
+    const agora30d = Date.now() - 30 * 86400000;
+    const bairroMap = filtered.reduce<Record<string, { total: number; fortes: number; recentes: number }>>((acc, e) => {
+      const key = e.bairro || e.cidade;
+      if (!acc[key]) acc[key] = { total: 0, fortes: 0, recentes: 0 };
+      acc[key].total++;
+      if (e.grauApoio === "forte") acc[key].fortes++;
+      if (parseDate(e.criadoEm).getTime() > agora30d) acc[key].recentes++;
+      return acc;
+    }, {});
+    const bairrosArray = Object.entries(bairroMap)
+      .map(([bairro, s]) => ({ bairro, ...s, pct: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0 }))
+      .sort((a, b) => b.total - a.total);
+    const concentracao = bairrosArray.length > 0 ? Math.round((bairrosArray[0].total / filtered.length) * 100) : 0;
+    const topBairro = bairrosArray[0] ?? null;
+    return { bairrosArray, concentrado: concentracao >= 90, topBairro };
+  }, [filtered, userData]);
+
   useEffect(() => {
     let result = [...eleitores];
     if (filtros.estado) result = result.filter((e) => e.estado === filtros.estado);
     if (filtros.cidade) result = result.filter((e) => e.cidade === filtros.cidade);
     if (filtros.bairro) result = result.filter((e) => e.bairro === filtros.bairro);
+    if (filtros.colaboradorId) result = result.filter((e) => e.colaboradorId === filtros.colaboradorId);
     if (filtros.grauApoio) result = result.filter((e) => e.grauApoio === filtros.grauApoio);
     if (filtros.search) { const s = filtros.search.toLowerCase(); result = result.filter((e) => e.nomeCompleto.toLowerCase().includes(s) || e.cidade.toLowerCase().includes(s)); }
     if (filtros.dataInicio) { const inicio = new Date(filtros.dataInicio); result = result.filter((e) => parseDate(e.criadoEm) >= inicio); }
@@ -392,23 +431,44 @@ export default function RelatoriosPage() {
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Filter size={18} className="text-emerald-400" /><h3 className="text-white font-semibold">Filtros</h3></div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {!isAssessor(userData) && (
+          {!isAssessor(userData) && !isCoordenador(userData) && (
             <Select value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value, cidade: "", bairro: "" })} options={estadoOptions} label="Estado" />
           )}
-          <Select
-            label="Cidade"
-            value={filtros.cidade}
-            onChange={(e) => setFiltros({ ...filtros, cidade: e.target.value, bairro: "" })}
-            options={[{ value: "", label: "Todas as cidades" }, ...cidadesOpcoes.map((c) => ({ value: c, label: c }))]}
-            disabled={cidadesOpcoes.length === 0}
-          />
-          <Select
-            label="Bairro"
-            value={filtros.bairro}
-            onChange={(e) => setFiltros({ ...filtros, bairro: e.target.value })}
-            options={[{ value: "", label: "Todos os bairros" }, ...bairrosOpcoes.map((b) => ({ value: b, label: b }))]}
-            disabled={bairrosOpcoes.length === 0}
-          />
+          {!isCoordenador(userData) && (
+            <Select
+              label="Cidade"
+              value={filtros.cidade}
+              onChange={(e) => setFiltros({ ...filtros, cidade: e.target.value, bairro: "" })}
+              options={[{ value: "", label: "Todas as cidades" }, ...cidadesOpcoes.map((c) => ({ value: c, label: c }))]}
+              disabled={cidadesOpcoes.length === 0}
+            />
+          )}
+          {!isCoordenador(userData) && (
+            <Select
+              label="Bairro"
+              value={filtros.bairro}
+              onChange={(e) => setFiltros({ ...filtros, bairro: e.target.value })}
+              options={[{ value: "", label: "Todos os bairros" }, ...bairrosOpcoes.map((b) => ({ value: b, label: b }))]}
+              disabled={bairrosOpcoes.length === 0}
+            />
+          )}
+          {isCoordenador(userData) && bairrosUnicos.length > 1 && (
+            <Select
+              label="Bairro"
+              value={filtros.bairro}
+              onChange={(e) => setFiltros({ ...filtros, bairro: e.target.value })}
+              options={[{ value: "", label: "Todos os bairros" }, ...bairrosUnicos.map((b) => ({ value: b, label: b }))]}
+            />
+          )}
+          {isCoordenador(userData) && (
+            <Select
+              label="Colaborador"
+              value={filtros.colaboradorId}
+              onChange={(e) => setFiltros({ ...filtros, colaboradorId: e.target.value })}
+              options={[{ value: "", label: "Todos" }, ...colaboradoresOpcoes]}
+              disabled={colaboradoresOpcoes.length === 0}
+            />
+          )}
           <Select value={filtros.grauApoio} onChange={(e) => setFiltros({ ...filtros, grauApoio: e.target.value })} options={grauOptions} label="Grau de Apoio" />
           <div><label className="block text-sm font-medium text-white/70 mb-1.5">Data Início</label><input type="date" value={filtros.dataInicio} onChange={(e) => setFiltros({ ...filtros, dataInicio: e.target.value })} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
           <div><label className="block text-sm font-medium text-white/70 mb-1.5">Data Fim</label><input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
@@ -519,8 +579,68 @@ export default function RelatoriosPage() {
         </>
       )}
 
-      {/* VISÃO TERRITORIAL RESUMIDA */}
-      {filtered.length > 0 && (() => {
+      {/* VISÃO TERRITORIAL */}
+      {filtered.length > 0 && isCoordenador(userData) && coordTerritorioData && (
+        coordTerritorioData.concentrado ? (
+          <GlassCard className="p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin size={14} className="text-emerald-400" />
+              <span className="text-sm font-semibold text-white">Meu Território</span>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <div className="flex-1 space-y-2">
+                <p className="text-xl font-bold text-white">
+                  {coordTerritorioData.topBairro!.bairro}
+                  {userData?.cidade ? ` · ${userData.cidade}` : ""}
+                </p>
+                <div className="flex items-center gap-4 flex-wrap">
+                  <span className="text-white/50 text-sm">{filtered.length} eleitores</span>
+                  <span className={`text-sm font-semibold ${coordTerritorioData.topBairro!.pct >= 40 ? "text-emerald-400" : coordTerritorioData.topBairro!.pct >= 20 ? "text-amber-400" : "text-red-400"}`}>
+                    {coordTerritorioData.topBairro!.pct}% fortes
+                  </span>
+                  {coordTerritorioData.topBairro!.recentes > 0 && (
+                    <span className="text-emerald-400/70 text-sm">+{coordTerritorioData.topBairro!.recentes} nos últimos 30d</span>
+                  )}
+                </div>
+              </div>
+              <div className="shrink-0">
+                <div className="w-32 bg-white/[0.04] rounded-full h-2">
+                  <div
+                    className={`h-2 rounded-full ${coordTerritorioData.topBairro!.pct >= 40 ? "bg-emerald-500" : coordTerritorioData.topBairro!.pct >= 20 ? "bg-amber-500" : "bg-red-500"}`}
+                    style={{ width: `${coordTerritorioData.topBairro!.pct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </GlassCard>
+        ) : (
+          <GlassCard className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <MapPin size={14} className="text-emerald-400" />
+              <span className="text-sm font-semibold text-white">Distribuição Territorial</span>
+              <span className="text-xs text-white/30 ml-auto">{coordTerritorioData.bairrosArray.length} bairros</span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+              {coordTerritorioData.bairrosArray.slice(0, 8).map((r) => (
+                <div key={r.bairro} className="p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05] space-y-1.5">
+                  <p className="text-xs text-white/70 font-medium truncate">{r.bairro}</p>
+                  <div className="flex items-center justify-between gap-1">
+                    <span className="text-lg font-bold text-white">{r.total}</span>
+                    <span className={`text-xs font-medium ${r.pct >= 40 ? "text-emerald-400" : r.pct >= 20 ? "text-amber-400" : "text-red-400"}`}>{r.pct}% fortes</span>
+                  </div>
+                  <div className="w-full bg-white/[0.04] rounded-full h-1">
+                    <div className={`h-1 rounded-full ${r.pct >= 40 ? "bg-emerald-500" : r.pct >= 20 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${r.pct}%` }} />
+                  </div>
+                  {r.recentes > 0 && <p className="text-[10px] text-emerald-400/70">+{r.recentes} nos 30d</p>}
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+        )
+      )}
+
+      {/* VISÃO TERRITORIAL — assessor/outros */}
+      {filtered.length > 0 && !isCoordenador(userData) && (() => {
         const resumo = Object.entries(
           filtered.reduce<Record<string, { total: number; fortes: number; recentes: number }>>((acc, e) => {
             if (!acc[e.cidade]) acc[e.cidade] = { total: 0, fortes: 0, recentes: 0 };

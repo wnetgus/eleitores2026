@@ -148,6 +148,40 @@
         { "fieldPath": "campanhaId", "order": "ASCENDING" },
         { "fieldPath": "criadoEm", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "eleitores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "colaboradorId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eleitores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "documento", "order": "ASCENDING" },
+        { "fieldPath": "campanhaId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "metas",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "colaboradorId", "order": "ASCENDING" },
+        { "fieldPath": "gabineteId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "coordenadorId", "order": "ASCENDING" },
+        { "fieldPath": "campanhaId", "order": "ASCENDING" }
+      ]
     }
   ]
 }
