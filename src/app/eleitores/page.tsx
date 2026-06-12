@@ -94,6 +94,8 @@ export default function EleitoresPage() {
   const [todosColaboradores, setTodosColaboradores] = useState<AppUser[]>([]);
   const [grauPill, setGrauPill] = useState<"" | "forte" | "medio" | "fraco" | "indeciso" | "recente">("");
   const [expandirForm, setExpandirForm] = useState(false);
+  const [responsavelCoordenadorId, setResponsavelCoordenadorId] = useState("");
+  const [responsavelColaboradorId, setResponsavelColaboradorId] = useState("");
 
   useEffect(() => { loadEleitores(); loadUsuarios(); }, [userData]);
 
@@ -187,6 +189,10 @@ export default function EleitoresPage() {
       toast.error("Preencha nome, cidade, bairro e grau de apoio");
       return;
     }
+    if ((isAssessor(userData) || isCoordenador(userData)) && !responsavelColaboradorId) {
+      toast.error("Selecione o colaborador responsável");
+      return;
+    }
     setSaving(true);
     try {
       if (form.documento) {
@@ -200,9 +206,9 @@ export default function EleitoresPage() {
         estado: form.estado, cidade: form.cidade, bairro: form.bairro,
         grauApoio: form.grauApoio,
         observacoes: form.observacoes,
-        colaboradorId: isColaborador(userData) ? userData.uid : "",
-        colaboradorNome: isColaborador(userData) ? userData.nome : "",
-        coordenadorId: userData.coordenadorId || "",
+        colaboradorId: isColaborador(userData) ? userData.uid : responsavelColaboradorId,
+        colaboradorNome: isColaborador(userData) ? userData.nome : (todosColaboradores.find((c) => c.uid === responsavelColaboradorId)?.nome || ""),
+        coordenadorId: isCoordenador(userData) ? userData.uid : (isAssessor(userData) || isSuperOrMaster(userData)) ? responsavelCoordenadorId : (userData.coordenadorId || ""),
       };
       if (form.telefone) eleitorData.telefone = form.telefone;
       if (form.cep) eleitorData.cep = form.cep;
@@ -212,7 +218,9 @@ export default function EleitoresPage() {
       if (form.voto) eleitorData.voto = form.voto;
       if (form.candidatoId) eleitorData.candidatoId = form.candidatoId;
       if (form.motivoPrincipal) eleitorData.motivoPrincipal = form.motivoPrincipal;
-      if (userData.role === "coordenador") eleitorData.coordenadorNome = userData.nome;
+      if (isCoordenador(userData)) eleitorData.coordenadorNome = userData.nome;
+      else if ((isAssessor(userData) || isSuperOrMaster(userData)) && responsavelCoordenadorId)
+        eleitorData.coordenadorNome = todosCoordenadores.find((c) => c.uid === responsavelCoordenadorId)?.nome || "";
       await cadastrarEleitor(eleitorData);
       await registrarAtividade({ acao: "cadastro_eleitor", usuarioId: userData.uid, usuarioNome: userData.nome, usuarioRole: userData.role, detalhes: `Cadastrou o eleitor ${form.nomeCompleto}` });
       toast.success("Eleitor cadastrado com sucesso!");
@@ -276,6 +284,19 @@ export default function EleitoresPage() {
     }
     return Object.values(mapa).sort((a, b) => b.total - a.total);
   }, [eleitoresFiltrados, userData]);
+
+  const meusCoordenadroes = useMemo(() => {
+    if (isAssessor(userData)) return todosCoordenadores.filter((c) => c.assessorId === userData!.uid);
+    if (isSuperOrMaster(userData)) return todosCoordenadores;
+    return [];
+  }, [todosCoordenadores, userData]);
+
+  const colaboradoresResponsaveis = useMemo(() => {
+    const ativos = (list: AppUser[]) => list.filter((c) => c.status !== "pendente" && c.status !== "recusado");
+    if (isCoordenador(userData)) return ativos(todosColaboradores);
+    if (responsavelCoordenadorId) return ativos(todosColaboradores.filter((c) => c.coordenadorId === responsavelCoordenadorId));
+    return [];
+  }, [todosColaboradores, responsavelCoordenadorId, userData]);
 
   // Deputado federal: visão analítica executiva — sem formulário operacional
   if (userData && isPolitico(userData)) {
@@ -562,6 +583,23 @@ export default function EleitoresPage() {
               <Input label="Bairro *" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
             )}
             <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => setForm({ ...form, grauApoio: e.target.value })} options={grauOptions} />
+            {(isAssessor(userData) || isSuperOrMaster(userData)) && (
+              <Select
+                label="Coordenador Responsável *"
+                value={responsavelCoordenadorId}
+                onChange={(e) => { setResponsavelCoordenadorId(e.target.value); setResponsavelColaboradorId(""); }}
+                options={[{ value: "", label: "Selecione o coordenador..." }, ...meusCoordenadroes.map((c) => ({ value: c.uid, label: c.nome }))]}
+              />
+            )}
+            {(isAssessor(userData) || isCoordenador(userData) || isSuperOrMaster(userData)) && (
+              <Select
+                label="Colaborador Responsável *"
+                value={responsavelColaboradorId}
+                onChange={(e) => setResponsavelColaboradorId(e.target.value)}
+                options={[{ value: "", label: colaboradoresResponsaveis.length === 0 ? (isCoordenador(userData) ? "Sem colaboradores ativos" : "Selecione um coordenador primeiro...") : "Selecione o colaborador..." }, ...colaboradoresResponsaveis.map((c) => ({ value: c.uid, label: c.nome }))]}
+                disabled={(isAssessor(userData) || isSuperOrMaster(userData)) && !responsavelCoordenadorId}
+              />
+            )}
           </div>
 
           {/* Toggle complementar */}

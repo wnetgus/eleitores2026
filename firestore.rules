@@ -100,8 +100,18 @@ service cloud.firestore {
       );
       allow create: if isAuth() && (
         isAdmin() ||
+        // colaborador cadastra para si mesmo
         (request.resource.data.get("campanhaId", "") == myCampanha() &&
-         request.resource.data.get("colaboradorId", "") == request.auth.uid)
+         request.resource.data.get("colaboradorId", "") == request.auth.uid) ||
+        // coordenador cadastra vinculando a colaborador da sua equipe
+        (me().get("role", "") == "coordenador" &&
+         request.resource.data.get("campanhaId", "") == myCampanha() &&
+         request.resource.data.get("coordenadorId", "") == request.auth.uid &&
+         request.resource.data.get("colaboradorId", "") != "") ||
+        // assessor cadastra vinculando a colaborador da campanha
+        (me().get("role", "") == "assessor" &&
+         request.resource.data.get("campanhaId", "") == myCampanha() &&
+         request.resource.data.get("colaboradorId", "") != "")
       );
       allow update: if isAuth() && (
         isAdmin() ||
