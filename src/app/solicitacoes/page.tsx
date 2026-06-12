@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, setDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -162,7 +162,12 @@ export default function SolicitacoesPage() {
     setRecusaMotivo("");
     setRecusaJustificativa("");
     try {
-      const updateData: Record<string, any> = { status: "recusado", recusaMotivo: motivo, ativo: false };
+      const updateData: Record<string, any> = {
+        status: "recusado", recusaMotivo: motivo, ativo: false,
+        dataRecusa: serverTimestamp(),
+        recusadoPor: userData!.uid,
+        recusadoPorNome: userData!.nome,
+      };
       if (justificativa) updateData.recusaJustificativa = justificativa;
       await updateDoc(doc(db, "usuarios", original.uid), updateData);
       await registrarAtividade({

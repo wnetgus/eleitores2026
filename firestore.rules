@@ -58,7 +58,16 @@ service cloud.firestore {
         (me().get("role", "") == "assessor" && (
           resource.data.get("campanhaId", "") == myCampanha() ||
           resource.data.get("gabineteId", "") == myCampanha()
-        ))
+        )) ||
+        // coordenador corrigindo e reenviando própria solicitação recusada
+        (
+          me().get("role", "") == "coordenador" &&
+          resource.data.get("status", "") == "recusado" &&
+          resource.data.get("coordenadorId", "") == request.auth.uid &&
+          request.resource.data.get("status", "") == "pendente" &&
+          request.resource.data.get("coordenadorId", "") == request.auth.uid &&
+          request.resource.data.get("campanhaId", "") == myCampanha()
+        )
       );
       allow delete: if isAuth() && (
         isAdmin() ||

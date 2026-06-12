@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, getDoc, updateDoc, deleteDoc, deleteField, serverTimestamp } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -50,6 +50,10 @@ export default function ColaboradoresPage() {
   const [excluirModal, setExcluirModal] = useState<AppUser | null>(null);
   const [excluirSaving, setExcluirSaving] = useState(false);
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
+  const [correcaoModal, setCorrecaoModal] = useState<AppUser | null>(null);
+  const [correcaoForm, setCorrecaoForm] = useState({ nome: "", email: "", telefone: "", tipoDocumento: "", documento: "", bairro: "", estado: "", cidade: "", observacoes: "" });
+  const [correcaoCidades, setCorrecaoCidades] = useState<string[]>([]);
+  const [correcaoSaving, setCorrecaoSaving] = useState(false);
 
   useEffect(() => {
     if (userData && !canViewColaboradores(userData)) { router.push(isColaborador(userData) ? "/eleitores" : "/dashboard"); return; }
@@ -245,6 +249,60 @@ export default function ColaboradoresPage() {
       setExcluirModal(null);
       loadData();
     } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
+  }
+
+  function openCorrecao(c: AppUser) {
+    setCorrecaoForm({
+      nome: c.nome || "",
+      email: c.email || "",
+      telefone: c.telefone || "",
+      tipoDocumento: c.tipoDocumento || "",
+      documento: c.documento || "",
+      bairro: c.bairro || "",
+      estado: c.estado || "",
+      cidade: c.cidade || "",
+      observacoes: c.observacoes || "",
+    });
+    if (c.estado) setCorrecaoCidades(getCidades(c.estado));
+    setCorrecaoModal(c);
+  }
+
+  async function handleCorrigir() {
+    if (!correcaoModal) return;
+    setCorrecaoSaving(true);
+    try {
+      await updateDoc(doc(db, "usuarios", correcaoModal.uid), {
+        nome: correcaoForm.nome,
+        email: correcaoForm.email,
+        telefone: correcaoForm.telefone || deleteField(),
+        tipoDocumento: correcaoForm.tipoDocumento || deleteField(),
+        documento: correcaoForm.documento || deleteField(),
+        bairro: correcaoForm.bairro || deleteField(),
+        estado: correcaoForm.estado || deleteField(),
+        cidade: correcaoForm.cidade || deleteField(),
+        observacoes: correcaoForm.observacoes || deleteField(),
+        status: "pendente",
+        ativo: false,
+        recusaMotivo: deleteField(),
+        recusaJustificativa: deleteField(),
+        dataRecusa: deleteField(),
+        recusadoPor: deleteField(),
+        recusadoPorNome: deleteField(),
+        tentativas: (correcaoModal.tentativas ?? 0) + 1,
+        reenviadoEm: serverTimestamp(),
+      });
+      await registrarAtividade({
+        acao: "reenviou_solicitacao", usuarioId: userData!.uid, usuarioNome: userData!.nome,
+        usuarioRole: userData!.role, detalhes: `Corrigiu e reenviou solicitação de ${correcaoForm.nome}`,
+      });
+      toast.success("Solicitação reenviada! Aguardando aprovação do assessor.");
+      setCorrecaoModal(null);
+      loadData();
+    } catch (e) {
+      toast.error("Erro ao reenviar solicitação");
+    } finally {
+      setCorrecaoSaving(false);
+    }
   }
 
   const coordMapFull = useMemo(() => {
@@ -641,11 +699,15 @@ export default function ColaboradoresPage() {
                   <Users size={11} />
                   <span>{ranking[c.uid]?.total ?? 0} eleitores</span>
                 </div>
-                {podeGerenciar && (
+                {c.status === "recusado" && isCoordenador(userData) && c.coordenadorId === userData?.uid ? (
+                  <button onClick={() => openCorrecao(c)} className="text-xs text-amber-400 hover:text-amber-300 transition-colors font-medium">
+                    Corrigir Solicitação
+                  </button>
+                ) : podeGerenciar && c.status !== "pendente" && c.status !== "recusado" ? (
                   <button onClick={() => handleToggleColabStatus(c.uid, c.ativo)} className={`text-xs ${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
                     {c.ativo ? "Desativar" : "Ativar"}
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
           ))}
@@ -661,6 +723,66 @@ export default function ColaboradoresPage() {
           <div className="flex gap-3 pt-2">
             <Button onClick={handleEditColab} className="flex-1">Salvar</Button>
             <Button variant="ghost" onClick={() => setEditModal(null)} className="flex-1">Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* CORRIGIR SOLICITAÇÃO */}
+      <Modal open={!!correcaoModal} onClose={() => setCorrecaoModal(null)} title="Corrigir Solicitação">
+        <div className="space-y-4">
+          {correcaoModal?.recusaMotivo && (
+            <div className="p-3 bg-red-500/10 rounded-xl border border-red-500/20">
+              <p className="text-xs text-red-400 font-medium mb-0.5">Motivo da recusa:</p>
+              <p className="text-sm text-red-300">{correcaoModal.recusaMotivo}</p>
+              {correcaoModal.recusaJustificativa && (
+                <p className="text-xs text-red-400/70 mt-1 italic">"{correcaoModal.recusaJustificativa}"</p>
+              )}
+              {correcaoModal.recusadoPorNome && (
+                <p className="text-xs text-white/30 mt-1">Recusado por: {correcaoModal.recusadoPorNome}</p>
+              )}
+            </div>
+          )}
+          <Input label="Nome completo" value={correcaoForm.nome} onChange={(e) => setCorrecaoForm({ ...correcaoForm, nome: e.target.value })} />
+          <Input label="Email" type="email" value={correcaoForm.email} onChange={(e) => setCorrecaoForm({ ...correcaoForm, email: e.target.value })} />
+          <Input label="Telefone" value={correcaoForm.telefone} onChange={(e) => setCorrecaoForm({ ...correcaoForm, telefone: e.target.value })} />
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Tipo de documento"
+              value={correcaoForm.tipoDocumento}
+              onChange={(e) => setCorrecaoForm({ ...correcaoForm, tipoDocumento: e.target.value })}
+              options={[{ value: "titulo", label: "Título de Eleitor" }, { value: "cpf", label: "CPF" }, { value: "rg", label: "RG" }]}
+            />
+            <Input label="Documento" value={correcaoForm.documento} onChange={(e) => setCorrecaoForm({ ...correcaoForm, documento: e.target.value })} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Select
+              label="Estado"
+              value={correcaoForm.estado}
+              onChange={(e) => { setCorrecaoForm({ ...correcaoForm, estado: e.target.value, cidade: "" }); setCorrecaoCidades(getCidades(e.target.value)); }}
+              options={estados.map((s) => ({ value: s.sigla, label: s.nome }))}
+            />
+            <Select
+              label="Cidade"
+              value={correcaoForm.cidade}
+              onChange={(e) => setCorrecaoForm({ ...correcaoForm, cidade: e.target.value })}
+              options={correcaoCidades.map((c) => ({ value: c, label: c }))}
+            />
+          </div>
+          <Input label="Bairro" value={correcaoForm.bairro} onChange={(e) => setCorrecaoForm({ ...correcaoForm, bairro: e.target.value })} />
+          <div>
+            <label className="block text-sm font-medium text-white/70 mb-1.5">Observações</label>
+            <textarea
+              value={correcaoForm.observacoes}
+              onChange={(e) => setCorrecaoForm({ ...correcaoForm, observacoes: e.target.value })}
+              placeholder="Informações adicionais..."
+              className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500/50 transition-all min-h-[60px]"
+            />
+          </div>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={handleCorrigir} loading={correcaoSaving} disabled={!correcaoForm.nome || !correcaoForm.email} className="flex-1 bg-amber-500/20 text-amber-400 hover:bg-amber-500/30">
+              Reenviar Solicitação
+            </Button>
+            <Button variant="ghost" onClick={() => setCorrecaoModal(null)} className="flex-1">Cancelar</Button>
           </div>
         </div>
       </Modal>

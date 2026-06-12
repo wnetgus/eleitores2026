@@ -28,6 +28,10 @@ export interface AppUser {
   status?: ColaboradorStatus;
   recusaMotivo?: string;
   recusaJustificativa?: string;
+  dataRecusa?: Date;
+  recusadoPor?: string;
+  recusadoPorNome?: string;
+  tentativas?: number;
   solicitadoPor?: string;
   solicitadoPorNome?: string;
   telefone?: string;
