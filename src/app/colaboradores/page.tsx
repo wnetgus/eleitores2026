@@ -171,6 +171,7 @@ export default function ColaboradoresPage() {
         gabineteId: campanhaVinculo,
         campanhaId: campanhaVinculo,
         criadoPor: userData.uid,
+        criadoEm: serverTimestamp(),
       };
       if (form.telefone) dados.telefone = form.telefone;
       if (form.cep) dados.cep = form.cep;

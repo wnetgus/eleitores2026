@@ -6,7 +6,7 @@ import {
   inMemoryPersistence,
   createUserWithEmailAndPassword,
 } from "firebase/auth";
-import { getFirestore, doc, setDoc } from "firebase/firestore";
+import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -47,6 +47,7 @@ export async function createAuthUser(
   await setPersistence(secondaryAuth, inMemoryPersistence);
   const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
   await setDoc(doc(secondaryDb, "usuarios", cred.user.uid), {
+    criadoEm: serverTimestamp(),
     ...dados,
     uid: cred.user.uid,
   });

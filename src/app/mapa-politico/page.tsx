@@ -507,7 +507,7 @@ export default function MapaPoliticoPage() {
         const [gSnap, eSnap, uSnap] = await Promise.all([
           getDocs(query(collection(db, "campanhas"), orderBy("criadoEm", "desc"))),
           getDocs(query(collection(db, "eleitores"), orderBy("criadoEm", "desc"))),
-          getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc"))),
+          getDocs(collection(db, "usuarios")),
         ]);
         setGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
         setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));

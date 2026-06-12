@@ -16,7 +16,8 @@
     "clean:fake": "node scripts/limpar-cenario-fake.mjs --confirm",
     "seed:fake:auth": "node scripts/criar-auth-coords-mobs.mjs",
     "seed:v3": "node scripts/seed-cenario-v3.mjs",
-    "seed:v3:reset": "node scripts/seed-cenario-v3.mjs --reset"
+    "seed:v3:reset": "node scripts/seed-cenario-v3.mjs --reset",
+    "fix:orfaos": "node scripts/religar-colaboradores-orfaos.mjs"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
