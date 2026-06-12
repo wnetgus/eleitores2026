@@ -62,9 +62,20 @@ service cloud.firestore {
       );
       allow delete: if isAuth() && (
         isAdmin() ||
+        // assessor: exclui coordenadores e colaboradores (inclui pendente/aprovado) da própria campanha
         (
           me().get("role", "") == "assessor" &&
-          resource.data.get("status", "") in ["pendente", "aprovado"] &&
+          resource.data.get("role", "") in ["coordenador", "colaborador"] &&
+          (
+            resource.data.get("campanhaId", "") == myCampanha() ||
+            resource.data.get("gabineteId", "") == myCampanha()
+          )
+        ) ||
+        // coordenador: exclui colaboradores que gerencia
+        (
+          me().get("role", "") == "coordenador" &&
+          resource.data.get("role", "") == "colaborador" &&
+          resource.data.get("coordenadorId", "") == request.auth.uid &&
           resource.data.get("campanhaId", "") == myCampanha()
         )
       );

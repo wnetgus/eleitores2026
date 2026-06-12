@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, getDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, getDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -240,7 +240,7 @@ export default function ColaboradoresPage() {
     if (!excluirModal) return;
     setExcluirSaving(true);
     try {
-      await fetch(`/api/auth/delete?uid=${excluirModal.uid}`, { method: "DELETE" });
+      await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       toast.success("Colaborador excluído!");
       setExcluirModal(null);
       loadData();

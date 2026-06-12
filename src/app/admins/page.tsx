@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, deleteDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -16,7 +16,6 @@ import toast from "react-hot-toast";
 import { formatDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
 import { Modal } from "@/components/ui/Modal";
-import { deleteUser } from "firebase/auth";
 
 export default function AdminsPage() {
   const { userData } = useAuth();
@@ -83,8 +82,7 @@ export default function AdminsPage() {
     if (!excluirModal) return;
     setExcluirSaving(true);
     try {
-      const uid = excluirModal.uid;
-      await fetch(`/api/auth/delete?uid=${uid}`, { method: "DELETE" });
+      await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_admin_master", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu admin master ${excluirModal.nome}` });
       toast.success("Admin Master excluído!");
       setExcluirModal(null);

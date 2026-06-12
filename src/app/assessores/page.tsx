@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -218,7 +218,7 @@ export default function AssessoresPage() {
     if (!excluirModal) return;
     setExcluirSaving(true);
     try {
-      await fetch(`/api/auth/delete?uid=${excluirModal.uid}`, { method: "DELETE" });
+      await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_assessor", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu assessor ${excluirModal.nome}` });
       toast.success("Assessor excluído!");
       setExcluirModal(null);

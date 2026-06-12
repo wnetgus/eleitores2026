@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -146,7 +146,7 @@ export default function CoordenadoresPage() {
     if (!excluirModal) return;
     setExcluirSaving(true);
     try {
-      await fetch(`/api/auth/delete?uid=${excluirModal.uid}`, { method: "DELETE" });
+      await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu coordenador ${excluirModal.nome}` });
       toast.success("Coordenador excluído!");
       setExcluirModal(null);
