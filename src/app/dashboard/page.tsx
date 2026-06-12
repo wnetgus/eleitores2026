@@ -166,7 +166,8 @@ export default function DashboardPage() {
   const cidadeMap = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => { acc[e.cidade] = (acc[e.cidade] || 0) + 1; return acc; }, {});
   const topCidade = Object.entries(cidadeMap).sort((a, b) => b[1] - a[1])[0];
 
-  const ranking = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => { acc[e.colaboradorNome] = (acc[e.colaboradorNome] || 0) + 1; return acc; }, {});
+  const colaboradoresIds = new Set(usuarios.filter((u) => u.role === "colaborador").map((u) => u.uid));
+  const ranking = eleitoresFiltrados.filter((e) => e.colaboradorId && colaboradoresIds.has(e.colaboradorId)).reduce<Record<string, number>>((acc, e) => { acc[e.colaboradorNome] = (acc[e.colaboradorNome] || 0) + 1; return acc; }, {});
   const rankingArray = Object.entries(ranking).map(([nome, total]) => ({ nome, total })).sort((a, b) => b.total - a.total);
   const cidadesArray = Object.entries(cidadeMap).map(([cidade, total]) => ({ cidade, total })).sort((a, b) => b.total - a.total);
 

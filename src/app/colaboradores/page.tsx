@@ -307,7 +307,8 @@ export default function ColaboradoresPage() {
   const config = getRoleConfig(userData);
   const roleInfo = ROLE_CONFIG[userData.role];
 
-  const ranking = eleitores.reduce<Record<string, { nome: string; total: number; id: string }>>((acc, e) => {
+  const colaboradoresIds = new Set(colaboradores.map((c) => c.uid));
+  const ranking = eleitores.filter((e) => e.colaboradorId && colaboradoresIds.has(e.colaboradorId)).reduce<Record<string, { nome: string; total: number; id: string }>>((acc, e) => {
     if (!acc[e.colaboradorId]) acc[e.colaboradorId] = { nome: e.colaboradorNome, total: 0, id: e.colaboradorId };
     acc[e.colaboradorId].total++;
     return acc;

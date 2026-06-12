@@ -200,7 +200,8 @@ export default function EleitoresPage() {
         estado: form.estado, cidade: form.cidade, bairro: form.bairro,
         grauApoio: form.grauApoio,
         observacoes: form.observacoes,
-        colaboradorId: userData.uid, colaboradorNome: userData.nome,
+        colaboradorId: isColaborador(userData) ? userData.uid : "",
+        colaboradorNome: isColaborador(userData) ? userData.nome : "",
         coordenadorId: userData.coordenadorId || "",
       };
       if (form.telefone) eleitorData.telefone = form.telefone;
