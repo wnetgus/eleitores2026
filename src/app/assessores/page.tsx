@@ -300,7 +300,7 @@ export default function AssessoresPage() {
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center text-lg`}>🗺️</div>
           <div className="flex-1">
-            <h1 className="text-2xl font-bold text-white">Força Territorial</h1>
+            <h1 className="text-2xl font-bold text-white">Desempenho das Assessorias</h1>
             <p className="text-sm text-amber-400/70">
               {totalBracos} {totalBracos === 1 ? "braço regional" : "braços regionais"} do mandato
               {bracosAtivos > 0 && ` · ${bracosAtivos} com atividade nos últimos 30 dias`}

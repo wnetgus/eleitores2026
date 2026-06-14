@@ -319,11 +319,13 @@ export default function ExportacoesPage() {
           <h3 className="text-white font-semibold">PDF Premium</h3>
           <p className="text-xs text-white/40 mt-1">Relatório executivo com capa</p>
         </GlassCard>
-        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportJSON}>
-          <Upload size={40} className="mx-auto mb-3 text-purple-400" />
-          <h3 className="text-white font-semibold">JSON</h3>
-          <p className="text-xs text-white/40 mt-1">Dados .json</p>
-        </GlassCard>
+        {!isPolitico(userData) && (
+          <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportJSON}>
+            <Upload size={40} className="mx-auto mb-3 text-purple-400" />
+            <h3 className="text-white font-semibold">JSON</h3>
+            <p className="text-xs text-white/40 mt-1">Dados .json</p>
+          </GlassCard>
+        )}
       </div>
 
       {isPolitico(userData) ? (

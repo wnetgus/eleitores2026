@@ -73,8 +73,8 @@ function NucleoCard({
 }: { nucleo: Nucleo; expanded: boolean; onToggle: () => void; usuarios: AppUser[] }) {
   const { g, el, coords, colabs, assessoresDaBase, sfp, ic, status, cidade, estado } = nucleo;
   const [coordsOpen, setCoordsOpen] = useState<Record<string, boolean>>({});
-  const fortes = el.filter(e => e.grauApoio === "forte" || e.grauApoio === "medio").length;
-  const conversao = el.length > 0 ? Math.round((fortes / el.length) * 100) : 0;
+  const fortes = el.filter(e => e.grauApoio === "forte").length;
+  const apoioForte = el.length > 0 ? Math.round((fortes / el.length) * 100) : 0;
 
   return (
     <div className="border border-white/[0.08] rounded-2xl overflow-hidden transition-all hover:border-white/[0.14]">
@@ -146,11 +146,11 @@ function NucleoCard({
         {/* Barra de conversão */}
         {el.length > 0 && (
           <div className="flex items-center gap-2 mt-2.5 text-xs">
-            <span className="text-white/30">Conversão</span>
+            <span className="text-white/30">Apoio Forte</span>
             <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all" style={{ width: `${conversao}%` }} />
+              <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all" style={{ width: `${apoioForte}%` }} />
             </div>
-            <span className="text-emerald-400 font-medium">{conversao}%</span>
+            <span className="text-emerald-400 font-medium">{apoioForte}%</span>
           </div>
         )}
       </button>
