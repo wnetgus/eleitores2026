@@ -85,40 +85,47 @@ export default function MetasPage() {
         setCoordInfoMap(infoMap);
         if (coordIds.length > 0) {
           const gabIdMetas = userData!.gabineteId || userData!.campanhaId;
-          const eQuery = gabIdMetas
-            ? query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas))
-            : query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds));
-          const uQuery = gabIdMetas
-            ? query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas))
-            : query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds));
-          const [esnap, uSnap] = await Promise.all([getDocs(eQuery), getDocs(uQuery)]);
-          setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-          setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+          if (!gabIdMetas) {
+            // Race condition: campanhaId ainda não resolveu — aguarda próxima resolução do userData
+            setEleitores([]); setColaboradores([]);
+          } else {
+            const eQuery = query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas));
+            const uQuery = query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas));
+            const [esnap, uSnap] = await Promise.all([getDocs(eQuery), getDocs(uQuery)]);
+            setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+            setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+          }
         } else {
           setEleitores([]); setColaboradores([]);
         }
       } else {
-        const constraints: any[] = [orderBy("criadoEm", "desc")];
-        if (isColaborador(userData!)) {
-          constraints.unshift(where("colaboradorId", "==", userData!.uid));
-        } else if (isCoordenador(userData!)) {
-          constraints.unshift(where("coordenadorId", "==", userData!.uid));
-        }
-        if (!isSuperOrMaster(userData!) && userData?.campanhaId) {
-          constraints.unshift(where("campanhaId", "==", userData.campanhaId));
-        }
-        const q = query(collection(db, "eleitores"), ...constraints);
-        const snap = await getDocs(q);
-        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        // Guard: roles sem filtro de uid precisam de campanhaId; sem ele, a query seria sem WHERE → PERMISSION_DENIED
+        if (!isSuperOrMaster(userData!) && !isCoordenador(userData!) && !userData?.campanhaId) {
+          setEleitores([]);
+          setColaboradores([]);
+        } else {
+          const constraints: any[] = [orderBy("criadoEm", "desc")];
+          if (isColaborador(userData!)) {
+            constraints.unshift(where("colaboradorId", "==", userData!.uid));
+          } else if (isCoordenador(userData!)) {
+            constraints.unshift(where("coordenadorId", "==", userData!.uid));
+          }
+          if (!isSuperOrMaster(userData!) && userData?.campanhaId) {
+            constraints.unshift(where("campanhaId", "==", userData.campanhaId));
+          }
+          const q = query(collection(db, "eleitores"), ...constraints);
+          const snap = await getDocs(q);
+          setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
 
-        const uConstraints: any[] = [where("role", "==", "colaborador")];
-        if (isCoordenador(userData)) {
-          uConstraints.push(where("coordenadorId", "==", userData!.uid));
-        } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
-          uConstraints.push(where("campanhaId", "==", userData.campanhaId));
+          const uConstraints: any[] = [where("role", "==", "colaborador")];
+          if (isCoordenador(userData)) {
+            uConstraints.push(where("coordenadorId", "==", userData!.uid));
+          } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
+            uConstraints.push(where("campanhaId", "==", userData.campanhaId));
+          }
+          const uSnap = await getDocs(query(collection(db, "usuarios"), ...uConstraints));
+          setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
         }
-        const uSnap = await getDocs(query(collection(db, "usuarios"), ...uConstraints));
-        setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
 
         if (isPolitico(userData!)) {
           const gabIdPol = userData!.campanhaId || userData!.gabineteId;

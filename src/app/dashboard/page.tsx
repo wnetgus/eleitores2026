@@ -98,12 +98,15 @@ export default function DashboardPage() {
           }
         }
         // Dados extras para Super Admin
-        // Metas
-        const mSnap = isSuperOrMaster(userData) || !gabId
-          ? await getDocs(query(collection(db, "metas")))
-          : isColaborador(userData)
-            ? await getDocs(query(collection(db, "metas"), where("colaboradorId", "==", userData!.uid)))
-            : await getDocs(query(collection(db, "metas"), where("gabineteId", "==", gabId)));
+        // Metas — usuários não-admin sem gabId não executam query sem filtro
+        let mSnap: { docs: any[] } = { docs: [] };
+        if (isSuperOrMaster(userData)) {
+          mSnap = await getDocs(query(collection(db, "metas")));
+        } else if (isColaborador(userData)) {
+          mSnap = await getDocs(query(collection(db, "metas"), where("colaboradorId", "==", userData!.uid)));
+        } else if (gabId) {
+          mSnap = await getDocs(query(collection(db, "metas"), where("gabineteId", "==", gabId)));
+        }
         const metasMap: Record<string, number> = {};
         mSnap.docs.forEach((d) => {
           const data = d.data();

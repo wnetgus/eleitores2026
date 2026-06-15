@@ -149,6 +149,11 @@ export default function EleitoresPage() {
       }
       const campanhaId = isSuperOrMaster(userData) ? undefined : userData?.campanhaId;
       const colaboradorId = isColaborador(userData) ? userData?.uid : undefined;
+      // Guard: não-admin sem filtro algum → race condition, aguarda próxima resolução do userData
+      if (!isSuperOrMaster(userData) && !campanhaId && !colaboradorId) {
+        setEleitores([]);
+        return;
+      }
       const data = await buscarEleitores(campanhaId, colaboradorId);
       setEleitores(data);
     } catch (e) { console.error(e); } finally { setLoading(false); }
