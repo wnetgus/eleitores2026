@@ -17,7 +17,9 @@
     "seed:fake:auth": "node scripts/criar-auth-coords-mobs.mjs",
     "seed:v3": "node scripts/seed-cenario-v3.mjs",
     "seed:v3:reset": "node scripts/seed-cenario-v3.mjs --reset",
-    "fix:orfaos": "node scripts/religar-colaboradores-orfaos.mjs"
+    "fix:orfaos": "node scripts/religar-colaboradores-orfaos.mjs",
+    "seed:exec": "node scripts/seed-cenario-exec.mjs",
+    "seed:exec:reset": "node scripts/seed-cenario-exec.mjs --reset"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

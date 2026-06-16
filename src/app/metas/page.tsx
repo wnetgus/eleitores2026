@@ -13,7 +13,8 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
-import { TrendingUp, Target, Zap, Flag, Save, Users, MapPin, Crown } from "lucide-react";
+import { TrendingUp, Target, Zap, Flag, Save, Users, MapPin, Crown, AlertTriangle } from "lucide-react";
+import { calcularSFPSimples } from "@/lib/inteligencia";
 import toast from "react-hot-toast";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -63,7 +64,8 @@ export default function MetasPage() {
   const [perfPill, setPerfPill] = useState<"" | "excelente" | "no_ritmo" | "atencao" | "critico">("");
   const [politicoCoordAssessorMap, setPoliticoCoordAssessorMap] = useState<Record<string, string>>({});
   const [politicoAssessorNomes, setPoliticoAssessorNomes] = useState<Record<string, string>>({});
-  const [politicoAssessorCidades, setPoliticoAssessorCidades] = useState<Record<string, string>>({});
+  const [politicoAssessorCidades, setPoliticoAssessorCidades] = useState<Record<string, string[]>>({});
+  const [assessoresList, setAssessoresList] = useState<AppUser[]>([]);
 
   const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
 
@@ -137,14 +139,16 @@ export default function MetasPage() {
             const cm: Record<string, string> = {};
             coordSnap.docs.forEach((d) => { const dt = d.data(); if (dt.assessorId) cm[d.id] = dt.assessorId; });
             const am: Record<string, string> = {};
-            const ac: Record<string, string> = {};
+            const ac: Record<string, string[]> = {};
             assessorSnap.docs.forEach((d) => {
-              am[d.id] = d.data().nome || "Assessor";
-              if (d.data().cidadePrincipal) ac[d.id] = d.data().cidadePrincipal;
+              const dt = d.data();
+              am[d.id] = dt.nome || "Sem responsável definido";
+              ac[d.id] = dt.cidades?.length ? dt.cidades : (dt.cidadePrincipal ? [dt.cidadePrincipal] : []);
             });
             setPoliticoCoordAssessorMap(cm);
             setPoliticoAssessorNomes(am);
             setPoliticoAssessorCidades(ac);
+            setAssessoresList(assessorSnap.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser)));
           }
         }
       }
@@ -389,16 +393,21 @@ export default function MetasPage() {
     : coordStats.filter((c) => getCoordStatus(c.prog, c.metaTotal) === perfPill);
 
   const assessorRanking = isPolitico(userData) ? (() => {
-    const stats = eleitores.reduce<Record<string, { nome: string; total: number; fortes: number; territorios: Record<string, number> }>>((acc, e) => {
+    const stats: Record<string, { nome: string; semNome: boolean; total: number; fortes: number; territorios: Record<string, number> }> = {};
+    for (const e of eleitores) {
       const aId = e.coordenadorId ? politicoCoordAssessorMap[e.coordenadorId] : undefined;
-      if (!aId) return acc;
-      if (!acc[aId]) acc[aId] = { nome: politicoAssessorNomes[aId] || "Assessor", total: 0, fortes: 0, territorios: {} };
-      acc[aId].total++;
-      if (e.grauApoio === "forte") acc[aId].fortes++;
+      if (!aId) continue;
+      const nomeReal = politicoAssessorNomes[aId];
+      if (!stats[aId]) stats[aId] = { nome: nomeReal || "Sem responsável definido", semNome: !nomeReal, total: 0, fortes: 0, territorios: {} };
+      stats[aId].total++;
+      if (e.grauApoio === "forte") stats[aId].fortes++;
       const key = e.bairro ? `${e.bairro} · ${e.cidade}` : e.cidade;
-      acc[aId].territorios[key] = (acc[aId].territorios[key] || 0) + 1;
-      return acc;
-    }, {});
+      stats[aId].territorios[key] = (stats[aId].territorios[key] || 0) + 1;
+    }
+    // Incluir assessores com zero eleitores — mesma visibilidade do Dashboard
+    Object.entries(politicoAssessorNomes).forEach(([uid, nome]) => {
+      if (!stats[uid]) stats[uid] = { nome, semNome: false, total: 0, fortes: 0, territorios: {} };
+    });
     return Object.entries(stats)
       .map(([id, s]) => {
         const myCoordIds = Object.entries(politicoCoordAssessorMap)
@@ -408,24 +417,25 @@ export default function MetasPage() {
         const metaTotal = myColabs.reduce((sum, c) => sum + (metas[c.uid] || 0), 0);
         const prog = metaTotal > 0 ? Math.round((s.total / metaTotal) * 100) : 0;
         return {
-          id, nome: s.nome, total: s.total, fortes: s.fortes,
+          id, nome: s.nome, semNome: s.semNome, total: s.total, fortes: s.fortes,
           pctForte: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
-          topTerr: Object.entries(s.territorios).sort((a, b) => b[1] - a[1])[0]?.[0] || "-",
-          cidadePrincipal: politicoAssessorCidades[id] ?? null,
+          topTerr: Object.entries(s.territorios).sort((a, b) => b[1] - a[1])[0]?.[0] || null,
+          cidades: politicoAssessorCidades[id] ?? [],
           metaTotal, prog,
         };
       })
       .sort((a, b) => b.total - a.total);
-  })() : [] as { id: string; nome: string; total: number; fortes: number; pctForte: number; topTerr: string; cidadePrincipal: string | null; metaTotal: number; prog: number }[];
+  })() : [] as { id: string; nome: string; semNome: boolean; total: number; fortes: number; pctForte: number; topTerr: string | null; cidades: string[]; metaTotal: number; prog: number }[];
 
-  const maxAssessorTotal = assessorRanking[0]?.total || 1;
+  const maxAssessorTotal = assessorRanking.filter((a) => a.total > 0)[0]?.total || 1;
 
   const politicoBriefing: string[] = isPolitico(userData) ? (() => {
     const frases: string[] = [];
     const lider = assessorRanking[0];
     if (lider) frases.push(`🥇 ${lider.nome.split(" ")[0]} lidera a operação com ${lider.total} ${lider.total === 1 ? "cadastro" : "cadastros"}.`);
-    if (assessorRanking.length > 1) {
-      const ultimo = assessorRanking[assessorRanking.length - 1];
+    const assessoresAtivos = assessorRanking.filter((a) => a.total > 0);
+    if (assessoresAtivos.length > 1) {
+      const ultimo = assessoresAtivos[assessoresAtivos.length - 1];
       const diff = (lider?.total || 0) - ultimo.total;
       if (diff > 0) frases.push(`⚠ ${ultimo.nome.split(" ")[0]} está ${diff} ${diff === 1 ? "registro" : "registros"} atrás do líder.`);
     }
@@ -452,13 +462,515 @@ export default function MetasPage() {
 
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8" style={{ color: roleInfo.text.replace("text-", "") } as React.CSSProperties} viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
+  // ═══ CENTRO DE METAS ESTRATÉGICAS DO MANDATO ═══
+  if (isPolitico(userData)) {
+    const agora = Date.now();
+
+    const assessorPorCidade = new Map<string, AppUser>();
+    for (const a of assessoresList) {
+      for (const c of (a.cidades ?? (a.cidadePrincipal ? [a.cidadePrincipal] : []))) {
+        if (!assessorPorCidade.has(c)) assessorPorCidade.set(c, a);
+      }
+    }
+
+    const cidadeStats = Object.entries(
+      eleitores.reduce<Record<string, { total: number; fortes: number; indecisos: number; recentes: number; prev30: number }>>((acc, e) => {
+        if (!acc[e.cidade]) acc[e.cidade] = { total: 0, fortes: 0, indecisos: 0, recentes: 0, prev30: 0 };
+        acc[e.cidade].total++;
+        if (e.grauApoio === "forte")    acc[e.cidade].fortes++;
+        if (e.grauApoio === "indeciso") acc[e.cidade].indecisos++;
+        const t = parseDate(e.criadoEm).getTime();
+        if (t > agora - 30 * 86400000)      acc[e.cidade].recentes++;
+        else if (t > agora - 60 * 86400000) acc[e.cidade].prev30++;
+        return acc;
+      }, {})
+    ).map(([cidade, s]) => {
+      const el = eleitores.filter(e => e.cidade === cidade);
+      const numCoords = new Set(
+        eleitores.filter(e => e.cidade === cidade && e.coordenadorId).map(e => e.coordenadorId!)
+      ).size;
+      return {
+        cidade, ...s,
+        forca:     s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
+        tendencia: s.prev30 > 0 ? Math.round(((s.recentes - s.prev30) / s.prev30) * 100) : s.recentes > 0 ? 100 : 0,
+        sfp:       calcularSFPSimples(el),
+        assessor:  assessorPorCidade.get(cidade) ?? null,
+        numCoords,
+      };
+    }).sort((a, b) => b.total - a.total);
+
+    const assessorRankingEnh = assessorRanking.map(a => {
+      const myCoordIds = Object.entries(politicoCoordAssessorMap)
+        .filter(([, aId]) => aId === a.id).map(([cId]) => cId);
+      const hasCoords = myCoordIds.length > 0;
+      const recentesA = eleitores.filter(e =>
+        myCoordIds.includes(e.coordenadorId || "") &&
+        parseDate(e.criadoEm).getTime() > agora - 30 * 86400000
+      ).length;
+
+      const badge: { emoji: string; label: string; cor: string } =
+        (a.total === 0 && !hasCoords) ? { emoji: "🔴", label: "Sem Base",          cor: "text-red-400"     } :
+        (a.total === 0)               ? { emoji: "🔴", label: "Estrutura Parada",   cor: "text-red-400"     } :
+        (recentesA === 0)             ? { emoji: "🔴", label: "Estrutura Parada",   cor: "text-red-400"     } :
+        (a.pctForte >= 40 && recentesA > 5) ? { emoji: "🟢", label: "Expansão Forte",  cor: "text-emerald-400" } :
+        (recentesA > 2)               ? { emoji: "🟢", label: "Operação Saudável",  cor: "text-emerald-400" } :
+                                        { emoji: "🟡", label: "Crescimento Baixo",  cor: "text-amber-400"   };
+
+      const metaStatus: { emoji: string; label: string; cor: string } =
+        (a.metaTotal === 0) ? { emoji: "—",  label: "Sem Meta",        cor: "text-white/30"    } :
+        (a.prog >= 100)     ? { emoji: "🟢", label: "Meta Superada",   cor: "text-emerald-400" } :
+        (a.prog >= 80)      ? { emoji: "🟢", label: "Em Ritmo",        cor: "text-emerald-400" } :
+        (a.prog >= 60)      ? { emoji: "🟡", label: "Em Atenção",      cor: "text-amber-400"   } :
+        (a.prog >= 1)       ? { emoji: "🔴", label: "Atrasada",        cor: "text-red-400"     } :
+                              { emoji: "🔴", label: "Estrutura Parada", cor: "text-red-400"     };
+
+      const metaSugerida    = a.total > 0 ? Math.ceil(a.total * 1.15) : 100;
+      const agendaPrazo     = a.total === 0 ? 15 : a.pctForte < 20 ? 30 : 90;
+      const agendaAcao      = a.total === 0
+        ? "Iniciar operação ou reestruturar assessoria"
+        : a.pctForte < 20
+          ? "Recuperar força política"
+          : `Expandir base de ${a.total} → ${metaSugerida}`;
+
+      return { ...a, badge, metaStatus, metaSugerida, hasCoords, recentesA, agendaPrazo, agendaAcao };
+    });
+
+    const metaGlobal   = assessorRanking.reduce((s, a) => s + a.metaTotal, 0);
+    const realizado    = eleitores.length;
+    const cumprimento  = metaGlobal > 0 ? Math.min(100, Math.round((realizado / metaGlobal) * 100)) : 0;
+
+    const semAssessoriaList = cidadeStats.filter(c => c.total >= 3 && !c.assessor);
+    const reestruturarList  = assessorRankingEnh.filter(a => a.total === 0 || (a.recentesA === 0 && a.total > 0));
+    const expandirList      = assessorRankingEnh.filter(a => a.total > 20 && !a.badge.label.includes("Parada") && a.badge.label !== "Sem Base");
+
+    const semAssessoria = cidadeStats.filter(c => !c.assessor && c.total > 0);
+    const semCoord      = cidadeStats.filter(c => c.assessor && c.numCoords === 0);
+    const baixaForca    = cidadeStats.filter(c => c.numCoords > 0 && c.forca < 30);
+
+    const agendaItems = [...assessorRankingEnh].sort((a, b) => a.agendaPrazo - b.agendaPrazo);
+
+    return (
+      <div className="space-y-6 animate-in">
+
+        {/* Cabeçalho */}
+        <div>
+          <h1 className="text-2xl font-bold text-white">Metas Estratégicas</h1>
+          <p className="text-white/50 text-sm mt-1">Planejamento, execução e expansão territorial do mandato</p>
+        </div>
+
+        {/* Briefing Estratégico Inteligente */}
+        {(semAssessoriaList.length > 0 || reestruturarList.length > 0 || expandirList.length > 0) && (
+          <div>
+            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <Zap size={16} className="text-violet-400" />
+              Briefing Estratégico
+            </h2>
+            <div className="space-y-3">
+              {semAssessoriaList.length > 0 && (
+                <div className="p-4 rounded-xl bg-red-500/[0.05] border border-red-500/20">
+                  <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">🔴 PRIORIDADE MÁXIMA</p>
+                  <p className="text-sm text-white/70 font-medium mb-2">Criar assessoria regional:</p>
+                  <div className="space-y-0.5 mb-3">
+                    {semAssessoriaList.slice(0, 4).map(c => (
+                      <p key={c.cidade} className="text-sm text-white/55">• {c.cidade}</p>
+                    ))}
+                  </div>
+                  <p className="text-xs text-white/30 mb-3">Motivo: Municípios possuem eleitores mas não possuem liderança política.</p>
+                  <button onClick={() => router.push("/assessores")} className="text-xs text-red-400 hover:text-red-300 transition-colors font-medium">
+                    → Designar assessoria
+                  </button>
+                </div>
+              )}
+              {reestruturarList.slice(0, 3).map(a => (
+                <div key={a.id} className="p-4 rounded-xl bg-amber-500/[0.05] border border-amber-500/20">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">🟡 REESTRUTURAR</p>
+                  <p className="text-sm text-white font-semibold mb-2">{a.nome}</p>
+                  <div className="space-y-0.5 mb-3">
+                    {a.total === 0 && <p className="text-xs text-white/45">• 0 eleitores na base</p>}
+                    {a.recentesA === 0 && a.total > 0 && <p className="text-xs text-white/45">• Sem cadastros nos últimos 30 dias</p>}
+                    {a.pctForte < 15 && a.total > 5 && <p className="text-xs text-white/45">• Base pouco consolidada ({a.pctForte}% forte)</p>}
+                    {!a.hasCoords && <p className="text-xs text-white/45">• Sem coordenadores vinculados</p>}
+                  </div>
+                  <button
+                    onClick={() => router.push(`/coordenadores?assessorId=${a.id}&assessorNome=${encodeURIComponent(a.nome)}`)}
+                    className="text-xs text-amber-400 hover:text-amber-300 transition-colors font-medium"
+                  >
+                    → Ver equipe
+                  </button>
+                </div>
+              ))}
+              {expandirList.slice(0, 2).map(a => (
+                <div key={a.id} className="p-4 rounded-xl bg-emerald-500/[0.05] border border-emerald-500/20">
+                  <p className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-3">🟢 EXPANDIR</p>
+                  <p className="text-sm text-white font-semibold">{a.nome}</p>
+                  <p className="text-sm text-white/55 mb-3">{a.total} apoiadores</p>
+                  <div className="space-y-1 text-xs text-white/40 mb-3">
+                    <p>Meta sugerida: <span className="text-white/65">{a.metaSugerida} apoiadores</span></p>
+                    <p>Prazo: <span className="text-white/65">90 dias</span></p>
+                  </div>
+                  <button
+                    onClick={() => router.push(`/coordenadores?assessorId=${a.id}&assessorNome=${encodeURIComponent(a.nome)}`)}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
+                  >
+                    → Ver equipe
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Meta × Realizado */}
+        {metaGlobal > 0 ? (
+          <GlassCard className="p-5">
+            <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <Target size={16} className="text-violet-400" />
+              Meta × Realizado
+            </h3>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                <p className="text-2xl font-bold text-white/40">{metaGlobal.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-white/25 mt-1">Meta do período</p>
+              </div>
+              <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                <p className="text-2xl font-bold text-violet-400">{realizado.toLocaleString("pt-BR")}</p>
+                <p className="text-xs text-white/25 mt-1">Realizado</p>
+              </div>
+              <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                <p className={`text-2xl font-bold ${cumprimento >= 90 ? "text-emerald-400" : cumprimento >= 60 ? "text-amber-400" : "text-red-400"}`}>
+                  {cumprimento}%
+                </p>
+                <p className="text-xs text-white/25 mt-1">Cumprimento</p>
+              </div>
+            </div>
+            <div className="w-full bg-white/[0.04] rounded-full h-2.5">
+              <div
+                className={`h-2.5 rounded-full ${cumprimento >= 90 ? "bg-emerald-500" : cumprimento >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                style={{ width: `${Math.min(cumprimento, 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-white/20 mt-1.5">
+              <span>0</span>
+              <span>{metaGlobal.toLocaleString("pt-BR")}</span>
+            </div>
+          </GlassCard>
+        ) : (
+          <GlassCard className="p-5 border-white/[0.05]">
+            <h3 className="text-white font-semibold mb-2 flex items-center gap-2">
+              <Target size={16} className="text-white/30" />
+              Meta × Realizado
+            </h3>
+            <p className="text-sm text-white/30">Defina metas para os colaboradores para ativar o acompanhamento global.</p>
+            <p className="text-xl font-bold text-white/20 mt-3">{realizado} <span className="text-sm font-normal">apoiadores cadastrados · sem meta definida</span></p>
+          </GlassCard>
+        )}
+
+        {/* Metas por Assessoria */}
+        <div>
+          <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+            <Crown size={16} className="text-violet-400" />
+            Metas por Assessoria
+            {assessorRankingEnh.length > 0 && (
+              <span className="text-xs text-white/30 font-normal ml-1">{assessorRankingEnh.length} assessorias</span>
+            )}
+          </h2>
+          {assessorRankingEnh.length === 0 ? (
+            <GlassCard className="p-5">
+              <p className="text-sm text-white/30 italic text-center">Nenhuma assessoria cadastrada neste gabinete.</p>
+            </GlassCard>
+          ) : (
+            <div className="space-y-4">
+              {assessorRankingEnh.map(a => {
+                const metaQ = 40;
+                const problemas: string[] = [];
+                if (a.total === 0) problemas.push("Sem produção");
+                if (!a.hasCoords)  problemas.push("Sem coordenadores vinculados");
+                if (a.recentesA === 0 && a.total > 0) problemas.push("Sem cadastros nos últimos 30 dias");
+                if (a.pctForte < 15 && a.total > 5)   problemas.push(`Base pouco consolidada (${a.pctForte}% forte)`);
+                const borderCor = a.badge.cor === "text-red-400" ? "border-red-500/15" :
+                                  a.badge.cor === "text-amber-400" ? "border-amber-500/15" : "border-emerald-500/10";
+                return (
+                  <GlassCard key={a.id} className={`p-5 ${borderCor}`}>
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3 mb-4">
+                      <div>
+                        <p className="text-white font-semibold text-base">{a.nome}</p>
+                        <p className={`text-xs font-medium mt-0.5 ${a.badge.cor}`}>{a.badge.emoji} {a.badge.label}</p>
+                        {a.cidades.length > 0 && (
+                          <p className="text-xs text-white/35 mt-1 flex items-center gap-1">
+                            <MapPin size={9} className="shrink-0 text-white/20" />
+                            {a.cidades.join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className={`text-sm font-bold ${a.metaStatus.cor}`}>{a.metaStatus.emoji} {a.metaStatus.label}</p>
+                        {a.metaTotal > 0 && <p className="text-[10px] text-white/25 mt-0.5">meta: {a.metaTotal}</p>}
+                      </div>
+                    </div>
+
+                    {/* Stats grid */}
+                    <div className="grid grid-cols-4 gap-2 mb-4">
+                      <div className="text-center p-2 rounded-lg bg-white/[0.03]">
+                        <p className="text-lg font-bold text-white">{a.total}</p>
+                        <p className="text-[10px] text-white/30 mt-0.5">Atual</p>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-white/[0.03]">
+                        {a.metaTotal > 0 ? (
+                          <>
+                            <p className={`text-lg font-bold ${a.metaStatus.cor}`}>{Math.min(a.prog, 100)}%</p>
+                            <p className="text-[10px] text-white/30 mt-0.5">Cumprimento</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-lg font-bold text-white/20">—</p>
+                            <p className="text-[10px] text-white/30 mt-0.5">Sem meta</p>
+                          </>
+                        )}
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-white/[0.03]">
+                        <p className={`text-lg font-bold ${a.pctForte >= metaQ ? "text-emerald-400" : a.pctForte >= metaQ * 0.7 ? "text-amber-400" : "text-red-400"}`}>
+                          {a.pctForte}%
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-0.5">Base Forte</p>
+                      </div>
+                      <div className="text-center p-2 rounded-lg bg-white/[0.03]">
+                        <p className="text-lg font-bold text-white/35">{metaQ}%</p>
+                        <p className="text-[10px] text-white/30 mt-0.5">Meta Qualit.</p>
+                      </div>
+                    </div>
+
+                    {/* Progress bar */}
+                    {a.metaTotal > 0 && (
+                      <div className="mb-4">
+                        <div className="w-full bg-white/[0.04] rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full ${a.prog >= 100 ? "bg-emerald-500" : a.prog >= 80 ? "bg-blue-500" : a.prog >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                            style={{ width: `${Math.min(a.prog, 100)}%` }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[10px] text-white/20 mt-1">
+                          <span>{a.total}/{a.metaTotal}</span>
+                          <span>Prazo: 31/12/2026</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Problemas */}
+                    {problemas.length > 0 && (
+                      <div className="mb-4 space-y-1">
+                        {problemas.map(p => (
+                          <p key={p} className="text-xs text-red-400/60 flex items-center gap-1.5">
+                            <span className="w-1 h-1 rounded-full bg-red-500 shrink-0" />
+                            {p}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Footer */}
+                    <div className="flex items-center justify-between pt-3 border-t border-white/[0.05]">
+                      <button
+                        onClick={() => router.push(`/coordenadores?assessorId=${a.id}&assessorNome=${encodeURIComponent(a.nome)}`)}
+                        className="text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium"
+                      >
+                        Ver Equipe →
+                      </button>
+                      <div className="flex items-center gap-3">
+                        <label className="flex items-center gap-1.5 text-[10px] text-white/20 cursor-not-allowed select-none" title="Fase 2">
+                          <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
+                          Notificar
+                        </label>
+                        <label className="flex items-center gap-1.5 text-[10px] text-white/20 cursor-not-allowed select-none" title="Fase 2">
+                          <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
+                          Cobrar
+                        </label>
+                      </div>
+                    </div>
+                  </GlassCard>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Metas por Município */}
+        {cidadeStats.length > 0 && (
+          <div>
+            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <MapPin size={16} className="text-emerald-400" />
+              Metas por Município
+              <span className="text-xs text-white/30 font-normal ml-1">{cidadeStats.length} municípios</span>
+            </h2>
+            <div className="space-y-2">
+              {cidadeStats.map(c => {
+                const metaQAlvo = 40;
+                const situacao: { emoji: string; label: string; cor: string; acao?: string; link?: string } =
+                  !c.assessor       ? { emoji: "🔴", label: "Sem Estrutura",   cor: "text-red-400",   acao: "→ Designar Assessoria", link: "/assessores"     } :
+                  c.numCoords === 0 ? { emoji: "🟡", label: "Sem Coordenação", cor: "text-amber-400", acao: "→ Criar Coordenador",   link: `/coordenadores?alertaEstrutura=${encodeURIComponent(c.cidade)}|${encodeURIComponent(c.assessor.nome)}` } :
+                  c.forca < 15      ? { emoji: "🔴", label: "Base Crítica",    cor: "text-red-400",   acao: "→ Reforçar Operação",   link: "/mapa-politico"  } :
+                  c.forca < 30      ? { emoji: "🟡", label: "Recuperação",     cor: "text-amber-400", acao: "→ Intensificar Ação",   link: "/mapa-politico"  } :
+                  c.forca >= 40     ? { emoji: "🟢", label: "Em Ritmo",        cor: "text-emerald-400"                                                        } :
+                                      { emoji: "🟡", label: "Em Atenção",      cor: "text-amber-400"                                                          };
+                return (
+                  <div key={c.cidade} className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                    <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <p className="text-white/85 font-medium text-sm">{c.cidade}</p>
+                        <span className={`text-xs ${situacao.cor}`}>{situacao.emoji} {situacao.label}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs shrink-0">
+                        <span className="text-white/45">{c.total} eleit.</span>
+                        <span className={c.forca >= 40 ? "text-emerald-400" : c.forca >= 20 ? "text-amber-400" : "text-red-400"}>{c.forca}% forte</span>
+                        <span className="text-white/20">meta: {metaQAlvo}%</span>
+                        <span className="text-white/25">{c.numCoords} coord{c.numCoords !== 1 ? "s" : "."}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-white/[0.04] rounded-full h-1">
+                        <div
+                          className={`h-1 rounded-full ${c.forca >= 40 ? "bg-emerald-500" : c.forca >= 20 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${c.forca}%` }}
+                        />
+                      </div>
+                      {situacao.acao && situacao.link && (
+                        <button
+                          onClick={() => router.push(situacao.link!)}
+                          className="text-[10px] text-white/25 hover:text-violet-400 transition-colors whitespace-nowrap shrink-0"
+                        >
+                          {situacao.acao}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Plano de Expansão Territorial */}
+        {(semAssessoria.length > 0 || semCoord.length > 0 || baixaForca.length > 0) && (
+          <div>
+            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp size={16} className="text-blue-400" />
+              Plano de Expansão Territorial
+            </h2>
+            <div className="space-y-3">
+              {semAssessoria.length > 0 && (
+                <div className="p-4 rounded-xl bg-red-500/[0.04] border border-red-500/15">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-red-400">A) Sem assessoria</p>
+                    <span className="text-[10px] text-red-400/50 bg-red-500/10 px-2 py-0.5 rounded-full">🔴 Não iniciado</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {semAssessoria.map(c => (
+                      <span key={c.cidade} className="text-xs text-white/55 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.05]">
+                        {c.cidade} · {c.total}
+                      </span>
+                    ))}
+                  </div>
+                  <button onClick={() => router.push("/assessores")} className="text-xs text-red-400/70 hover:text-red-400 transition-colors font-medium">
+                    → Criar Assessoria
+                  </button>
+                </div>
+              )}
+              {semCoord.length > 0 && (
+                <div className="p-4 rounded-xl bg-amber-500/[0.04] border border-amber-500/15">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-amber-400">B) Com assessoria · sem coordenação</p>
+                    <span className="text-[10px] text-amber-400/50 bg-amber-500/10 px-2 py-0.5 rounded-full">🟡 Estrutura incompleta</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {semCoord.map(c => (
+                      <span key={c.cidade} className="text-xs text-white/55 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.05]">
+                        {c.cidade} · {c.total}
+                      </span>
+                    ))}
+                  </div>
+                  <button onClick={() => router.push("/coordenadores")} className="text-xs text-amber-400/70 hover:text-amber-400 transition-colors font-medium">
+                    → Criar coordenador
+                  </button>
+                </div>
+              )}
+              {baixaForca.length > 0 && (
+                <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.07]">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-sm font-semibold text-white/60">C) Com coordenação · baixa força</p>
+                    <span className="text-[10px] text-white/30 bg-white/5 px-2 py-0.5 rounded-full">🟡 Recuperação necessária</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    {baixaForca.map(c => (
+                      <span key={c.cidade} className="text-xs text-white/55 bg-white/[0.03] px-2.5 py-1 rounded-lg border border-white/[0.05]">
+                        {c.cidade} · {c.forca}% forte
+                      </span>
+                    ))}
+                  </div>
+                  <button onClick={() => router.push("/mapa-politico")} className="text-xs text-white/35 hover:text-white/60 transition-colors font-medium">
+                    → Reforçar operação
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Agenda de Acompanhamento */}
+        {agendaItems.length > 0 && (
+          <div>
+            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <Flag size={16} className="text-amber-400" />
+              Agenda de Acompanhamento
+            </h2>
+            <div className="space-y-2 mb-4">
+              {agendaItems.map(a => {
+                const cor   = a.agendaPrazo <= 15 ? "text-red-400" : a.agendaPrazo <= 30 ? "text-amber-400" : "text-emerald-400";
+                const emoji = a.agendaPrazo <= 15 ? "🔴" : a.agendaPrazo <= 30 ? "🟡" : "🟢";
+                return (
+                  <div key={a.id} className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                    <span className="text-base mt-0.5 shrink-0">{emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-white/80 font-medium">{a.nome}</p>
+                      <p className="text-xs text-white/40 mt-0.5">{a.agendaAcao}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className={`text-xs font-medium ${cor}`}>{a.agendaPrazo}d</p>
+                      <p className="text-[10px] text-white/20 mt-0.5">prazo</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Fase 2 */}
+            <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.04]">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-white/25 uppercase tracking-wider">Ações — Fase 2</p>
+                <span className="text-[9px] text-white/15 italic">Em breve</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {["Notificar assessor", "Cobrar coordenador", "Registrar conclusão", "Aprovar resultado", "Histórico de cobranças"].map(acao => (
+                  <label key={acao} className="flex items-center gap-2 text-xs text-white/25 cursor-not-allowed select-none">
+                    <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
+                    {acao}
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center text-lg`}>{roleInfo.icon}</div>
         <div>
-          <h1 className="text-2xl font-bold text-white">{isPolitico(userData) ? "Metas de Expansão" : "Metas"}</h1>
-          <p className={`text-sm ${roleInfo.text}`}>{isPolitico(userData) ? "Evolução territorial da base política" : "Acompanhe sua produtividade"}</p>
+          <h1 className="text-2xl font-bold text-white">Metas</h1>
+          <p className={`text-sm ${roleInfo.text}`}>Acompanhe sua produtividade</p>
         </div>
       </div>
 
@@ -485,127 +997,6 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {/* ═══ PERFIL POLÍTICO — CENTRAL DE GESTÃO ESTRATÉGICA ═══ */}
-      {isPolitico(userData) && (
-        <>
-          {/* P1 — BRIEFING ESTRATÉGICO */}
-          {politicoBriefing.length > 0 && (
-            <GlassCard className="p-5 border-violet-500/10">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap size={16} className="text-violet-400" />
-                <h3 className="text-white font-semibold">Briefing Estratégico</h3>
-              </div>
-              <div className="space-y-1.5">
-                {politicoBriefing.map((frase, i) => (
-                  <p key={i} className="text-sm text-white/70 leading-relaxed">{frase}</p>
-                ))}
-              </div>
-            </GlassCard>
-          )}
-
-          {/* P5 — KPIs GERENCIAIS */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <GlassCard className="p-5 text-center">
-              <Users size={24} className="mx-auto mb-2 text-violet-400" />
-              <p className="text-3xl font-bold text-white">{Object.keys(politicoAssessorNomes).length || assessorRanking.length}</p>
-              <p className="text-xs text-white/40">Assessorias</p>
-            </GlassCard>
-            <GlassCard className="p-5 text-center">
-              <Target size={24} className="mx-auto mb-2 text-blue-400" />
-              <p className="text-3xl font-bold text-white">{numTerritorios}</p>
-              <p className="text-xs text-white/40">Territórios</p>
-            </GlassCard>
-            <GlassCard className="p-5 text-center">
-              <MapPin size={24} className="mx-auto mb-2 text-emerald-400" />
-              <p className="text-3xl font-bold text-white">{cidadesExpansao.length}</p>
-              <p className="text-xs text-white/40">Cidades</p>
-            </GlassCard>
-            <GlassCard className="p-5 text-center">
-              <TrendingUp size={24} className="mx-auto mb-2 text-emerald-400" />
-              <p className="text-3xl font-bold text-white">{eleitores.length}</p>
-              <p className="text-xs text-white/40">Eleitores</p>
-            </GlassCard>
-          </div>
-
-          {/* P2 + P3 + P4 — RANKING DAS ASSESSORIAS */}
-          <GlassCard className="p-5">
-            <div className="flex items-center gap-2 mb-5">
-              <Crown size={16} className="text-violet-400" />
-              <h3 className="text-white font-semibold">Ranking das Assessorias</h3>
-              {assessorRanking.length > 0 && (
-                <span className="text-xs text-white/30 ml-1">{assessorRanking.length} assessorias</span>
-              )}
-            </div>
-
-            {assessorRanking.length === 0 ? (
-              <div className="py-4 text-center">
-                <p className="text-sm text-white/30 italic">Nenhuma assessoria com cadastros registrados ainda.</p>
-              </div>
-            ) : (
-              <div className="space-y-5">
-                {assessorRanking.map((a, idx) => {
-                  const medals = ["🥇", "🥈", "🥉"];
-                  const rank = idx < 3 ? medals[idx] : `${idx + 1}º`;
-                  const pct = Math.round((a.total / maxAssessorTotal) * 100);
-                  const corForte = a.pctForte >= 50 ? "text-emerald-400" : a.pctForte >= 30 ? "text-amber-400" : "text-red-400";
-                  const statusKey = a.metaTotal > 0 ? getCoordStatus(a.prog, a.metaTotal) : "sem_meta";
-                  const sc = STATUS_CONFIG[statusKey];
-                  return (
-                    <div key={a.id} className="flex items-start gap-3">
-                      <span className="text-lg w-8 shrink-0 text-center mt-0.5">{rank}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-start justify-between gap-2 mb-1.5">
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-semibold text-white">{a.nome}</p>
-                              <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${sc.bg} ${sc.color} ${sc.border}`}>
-                                {sc.label}
-                              </span>
-                            </div>
-                            {a.cidadePrincipal ? (
-                              <p className="flex items-center gap-1 text-xs text-white/50 mt-0.5 truncate">
-                                <MapPin size={10} className="shrink-0 text-white/30" />
-                                {a.cidadePrincipal}
-                              </p>
-                            ) : (
-                              <p className="text-xs text-white/40 mt-0.5 truncate">{a.topTerr}</p>
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-sm font-bold text-white">{a.total}</p>
-                            <p className={`text-xs ${corForte}`}>{a.pctForte}% fortes</p>
-                          </div>
-                        </div>
-                        {a.metaTotal > 0 ? (
-                          <div className="space-y-1">
-                            <div className="flex justify-between text-xs">
-                              <span className="text-white/30">{a.total}/{a.metaTotal}</span>
-                              <span className={`font-bold ${sc.color}`}>{Math.min(a.prog, 100)}%</span>
-                            </div>
-                            <div className="w-full bg-white/[0.04] rounded-full h-1.5">
-                              <div className={`h-1.5 rounded-full ${sc.bar}`} style={{ width: `${Math.min(pct, 100)}%` }} />
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-full bg-white/[0.04] rounded-full h-1.5">
-                            <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${pct}%` }} />
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {assessorRanking.every((a) => a.metaTotal === 0) && (
-              <p className="text-xs text-white/20 mt-5 pt-4 border-t border-white/[0.05] italic">
-                Defina metas para acompanhar a evolução da estrutura.
-              </p>
-            )}
-          </GlassCard>
-        </>
-      )}
 
       {/* CARD PRINCIPAL DE META — colaborador */}
       {isColaborador(userData) && (() => {
@@ -1186,7 +1577,7 @@ export default function MetasPage() {
             </GlassCard>
           </div>
         );
-      })() : isPolitico(userData) ? null : (
+      })() : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <GlassCard className="p-5 text-center">
             <Target size={24} className={`mx-auto mb-2 ${roleInfo.text}`} />
@@ -1228,35 +1619,7 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {isPolitico(userData) ? (
-        cidadesExpansao.length > 0 && (
-          <GlassCard className="p-5">
-            <div className="flex items-center gap-2 mb-5">
-              <MapPin size={16} className="text-emerald-400" />
-              <h3 className="text-white font-semibold">Expansão Territorial</h3>
-            </div>
-            <div className="space-y-3">
-              {cidadesExpansao.map(([cidade, total]) => {
-                const pct = eleitores.length > 0 ? Math.round((total / eleitores.length) * 100) : 0;
-                return (
-                  <div key={cidade}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm text-white/80 truncate">{cidade}</span>
-                      <div className="flex items-center gap-2 shrink-0 ml-2">
-                        <span className="text-sm text-white/50">{total}</span>
-                        <span className="text-xs text-white/30 w-9 text-right">{pct}%</span>
-                      </div>
-                    </div>
-                    <div className="w-full bg-white/[0.04] rounded-full h-1.5">
-                      <div className="h-1.5 rounded-full bg-emerald-500" style={{ width: `${Math.round((total / maxExpansao) * 100)}%` }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </GlassCard>
-        )
-      ) : (
+      {(
         <GlassCard className="p-5">
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
             <h3 className="text-white font-semibold">

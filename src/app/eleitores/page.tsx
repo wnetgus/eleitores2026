@@ -21,6 +21,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 
 import toast from "react-hot-toast";
 import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador, isPolitico } from "@/lib/permissions";
+import { calcularSFPSimples } from "@/lib/inteligencia";
 
 const grauOptions = [
   { value: "forte", label: "Forte" },
@@ -325,10 +326,15 @@ export default function EleitoresPage() {
         if (parseDate(e.criadoEm).getTime() > agora - 30 * 86400000) acc[e.cidade].recentes++;
         return acc;
       }, {})
-    ).map(([cidade, s]) => ({
-      cidade, ...s,
-      forca: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
-    })).sort((a, b) => b.total - a.total).slice(0, 15);
+    ).map(([cidade, s]) => {
+      const el = eleitores.filter(e => e.cidade === cidade);
+      const sfp = calcularSFPSimples(el);
+      return {
+        cidade, ...s,
+        forca: s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
+        sfp,
+      };
+    }).sort((a, b) => b.total - a.total).slice(0, 15);
 
     const zonasQuentes = cidadeStats.filter((c) => c.recentes > 0 && c.forca >= 40);
     const zonasFrias   = cidadeStats.filter((c) => c.recentes === 0 && c.total > 0);
@@ -345,6 +351,10 @@ export default function EleitoresPage() {
       const top3 = cidadeStats.slice(0, 3).reduce((s, c) => s + c.total, 0);
       return Math.round((top3 / totalBase) * 100);
     })() : 0;
+    const top3Cidades = cidadeStats.slice(0, 3).map(c => c.cidade);
+    const municipiosCriticos = cidadeStats.filter(c =>
+      c.total >= 5 && (c.forca < 10 || c.sfp?.label === "Em Risco" || c.sfp?.label === "Abandonado")
+    );
 
     return (
       <div className="space-y-6 animate-in">
@@ -379,10 +389,15 @@ export default function EleitoresPage() {
                 <p className="text-xs text-white/40 mt-1">Indecisos convertíveis</p>
               </GlassCard>
               <GlassCard className="p-4 text-center">
-                <p className={`text-3xl font-bold ${crescimento30d >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {crescimento30d > 0 ? "+" : ""}{crescimento30d}%
+                <p className={`text-3xl font-bold ${ultimos30 > 0 ? "text-emerald-400" : "text-white/30"}`}>
+                  {ultimos30 > 0 ? "+" : ""}{ultimos30}
                 </p>
-                <p className="text-xs text-white/40 mt-1">Crescimento 30 dias</p>
+                <p className="text-xs text-white/40 mt-1">Novos apoiadores · 30 dias</p>
+                {anteriores30 > 0 && (
+                  <p className={`text-[11px] mt-1 ${crescimento30d >= 0 ? "text-emerald-400/50" : "text-red-400/50"}`}>
+                    {crescimento30d > 0 ? "+" : ""}{crescimento30d}% vs 30d anteriores
+                  </p>
+                )}
               </GlassCard>
             </div>
 
@@ -391,10 +406,12 @@ export default function EleitoresPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {projecaoEleitoral > 0 && (
                   <GlassCard className="p-4 border-violet-500/10">
-                    <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Projeção Eleitoral Estimada</p>
+                    <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Base Comprometida</p>
                     <p className="text-3xl font-bold text-violet-400">{projecaoEleitoral.toLocaleString("pt-BR")}</p>
-                    <p className="text-xs text-white/30 mt-1">votos · conversão ponderada por grau</p>
-                    <p className="text-[11px] text-white/20 mt-3">Forte ×0.9 · Médio ×0.6 · Indeciso ×0.25 · Fraco ×0.05</p>
+                    <p className="text-xs text-violet-400/60 mt-1">votos de alta confiança</p>
+                    {indecisos > 0 && (
+                      <p className="text-xs text-blue-400/70 mt-2">+{indecisos.toLocaleString("pt-BR")} indecisos em disputa</p>
+                    )}
                   </GlassCard>
                 )}
                 {concentracaoTop3 > 0 && (
@@ -403,9 +420,14 @@ export default function EleitoresPage() {
                     <p className={`text-3xl font-bold ${concentracaoTop3 > 70 ? "text-red-400" : concentracaoTop3 > 50 ? "text-amber-400" : "text-emerald-400"}`}>
                       {concentracaoTop3}%
                     </p>
-                    <p className="text-xs text-white/30 mt-1">da base nos 3 territórios principais</p>
+                    <p className="text-xs text-white/30 mt-1">da base concentrada em:</p>
+                    <div className="flex flex-col gap-0.5 mt-2">
+                      {top3Cidades.map(c => (
+                        <span key={c} className="text-xs text-white/50">• {c}</span>
+                      ))}
+                    </div>
                     <p className={`text-[11px] mt-3 ${concentracaoTop3 > 70 ? "text-red-400/60" : "text-white/20"}`}>
-                      {concentracaoTop3 > 70 ? "⚠ Alta dependência territorial" : concentracaoTop3 > 50 ? "Atenção à diversificação" : "Distribuição saudável"}
+                      {concentracaoTop3 > 70 ? "⚠ Alta dependência territorial" : concentracaoTop3 > 50 ? "Atenção à diversificação territorial" : "Distribuição saudável"}
                     </p>
                   </GlassCard>
                 )}
@@ -432,6 +454,38 @@ export default function EleitoresPage() {
                 </div>
               )}
             </GlassCard>
+
+            {/* Municípios Prioritários */}
+            {municipiosCriticos.length > 0 && (
+              <GlassCard className="p-5 border-amber-500/15">
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-amber-400 text-base">⚠</span>
+                  <h3 className="text-white font-semibold">Municípios Prioritários</h3>
+                  <span className="text-xs text-white/30 ml-auto">
+                    {municipiosCriticos.length} {municipiosCriticos.length === 1 ? "município requer atenção" : "municípios requerem atenção"}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {municipiosCriticos.map(c => {
+                    const critico = c.forca < 5 || c.sfp?.label === "Abandonado";
+                    return (
+                      <div key={c.cidade} className="flex items-center justify-between gap-3 p-2.5 rounded-xl bg-white/[0.02]">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className={`shrink-0 text-xs font-semibold ${critico ? "text-red-400" : "text-amber-400"}`}>
+                            {critico ? "🔴 Crítico" : "🟡 Atenção"}
+                          </span>
+                          <span className="text-white/80 text-sm font-medium truncate">{c.cidade}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 text-xs">
+                          <span className={c.forca < 5 ? "text-red-400" : "text-amber-400"}>{c.forca}% forte</span>
+                          {c.sfp && <span className={`${c.sfp.cor} hidden sm:inline`}>{c.sfp.label}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </GlassCard>
+            )}
 
             {/* Zonas quentes e frias */}
             {(zonasQuentes.length > 0 || zonasFrias.length > 0) && (
@@ -492,6 +546,7 @@ export default function EleitoresPage() {
                         <th className="text-right py-3 px-2 font-medium">Fracos</th>
                         <th className="text-right py-3 px-2 font-medium">30d</th>
                         <th className="text-left py-3 px-2 font-medium">Força</th>
+                        <th className="text-left py-3 px-2 font-medium">Situação</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -519,6 +574,25 @@ export default function EleitoresPage() {
                                 {c.forca}%
                               </span>
                             </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            {c.sfp ? (
+                              <span className={`text-xs font-medium whitespace-nowrap ${
+                                c.sfp.label === "Forte"           ? "text-emerald-400" :
+                                c.sfp.label === "Sólido"          ? "text-emerald-400" :
+                                c.sfp.label === "Em Consolidação" ? "text-amber-400"   :
+                                c.sfp.label === "Em Risco"        ? "text-red-400"     :
+                                                                    "text-red-400"
+                              }`}>
+                                {c.sfp.label === "Forte"           ? "🟢 Forte"    :
+                                 c.sfp.label === "Sólido"          ? "🟢 Boa"      :
+                                 c.sfp.label === "Em Consolidação" ? "🟡 Atenção"  :
+                                 c.sfp.label === "Em Risco"        ? "🔴 Em Risco" :
+                                                                     "🔴 Crítico"  }
+                              </span>
+                            ) : (
+                              <span className="text-xs text-white/20">—</span>
+                            )}
                           </td>
                         </tr>
                       ))}

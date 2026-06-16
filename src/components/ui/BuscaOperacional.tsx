@@ -213,14 +213,15 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
             <select
               value={filtrosAtuais[nivel.chave] || ""}
               onChange={(e) => handleNivel(nivel.chave, e.target.value)}
-              className="w-full px-4 py-[7px] pr-8 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none cursor-pointer"
+              className="w-full px-4 py-[7px] pr-8 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none cursor-pointer"
+              style={{ colorScheme: "dark" }}
             >
-              <option value="" className="bg-[#0a0a0f] text-white/40">{nivel.placeholder}</option>
+              <option value="" className="bg-zinc-950 text-zinc-400">{nivel.placeholder}</option>
               {nivel.opcoes.length === 0 && (
-                <option value="" disabled className="bg-[#0a0a0f] text-white/20">Nenhum disponível</option>
+                <option value="" disabled className="bg-zinc-950 text-zinc-600">Nenhum disponível</option>
               )}
               {nivel.opcoes.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-[#0a0a0f]">{opt.label}</option>
+                <option key={opt.value} value={opt.value} className="bg-zinc-950 text-white">{opt.label}</option>
               ))}
             </select>
             <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />

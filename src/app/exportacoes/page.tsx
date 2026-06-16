@@ -5,11 +5,11 @@ import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { Eleitor } from "@/types";
+import { Eleitor, AppUser } from "@/types";
 import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { formatDate, parseDate } from "@/lib/utils";
-import { FileSpreadsheet, FileText, Upload, BarChart2, Zap, AlertTriangle } from "lucide-react";
+import { FileSpreadsheet, FileText, Upload, BarChart2, Zap, AlertTriangle, X, MapPin, Crown, Target, Flag, TrendingUp } from "lucide-react";
 import { exportPDFPremium, exportRelatorioExecutivo } from "@/lib/reports";
 import * as XLSX from "xlsx";
 import toast from "react-hot-toast";
@@ -19,6 +19,14 @@ export default function ExportacoesPage() {
   const router = useRouter();
   const [eleitores, setEleitores] = useState<Eleitor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [assessores, setAssessores] = useState<AppUser[]>([]);
+  const [selectedAssessorId, setSelectedAssessorId] = useState("");
+  const [selectedCidade, setSelectedCidade] = useState("");
+  const [modalDossie, setModalDossie] = useState(false);
+  const [filtroTipo, setFiltroTipo] = useState("executivo");
+  const [filtroFormato, setFiltroFormato] = useState("pdf");
+  const [filtroPeriodo, setFiltroPeriodo] = useState("tudo");
+  const [filtroEscopo, setFiltroEscopo] = useState("mandato");
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessor(userData)) {
@@ -33,6 +41,10 @@ export default function ExportacoesPage() {
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        if (isPolitico(userData!) && gabId) {
+          const aSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", gabId)));
+          setAssessores(aSnap.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser)));
+        }
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
     if (userData) load();
@@ -297,14 +309,403 @@ export default function ExportacoesPage() {
     );
   }
 
-  // ── VIEW ORIGINAL (super_admin / politico / prefeito / vereador) ──────────
+  // ── CENTRAL DE RELATÓRIOS — Vista do Deputado ────────────────────────────
+  if (isPolitico(userData)) {
+    const totalBase  = eleitores.length;
+    const fortesN    = eleitores.filter(e => e.grauApoio === "forte").length;
+    const indecisosN = eleitores.filter(e => e.grauApoio === "indeciso").length;
+    const pctForte   = totalBase > 0 ? Math.round((fortesN / totalBase) * 100) : 0;
+    const cidadesUniq = [...new Set(eleitores.map(e => e.cidade).filter(Boolean))].sort() as string[];
+    const assessorSel = assessores.find(a => a.uid === selectedAssessorId);
+
+    function filtroBtn(label: string, ativo: boolean, onClick: () => void) {
+      return (
+        <button key={label} onClick={onClick} className={`flex items-center gap-2 text-sm transition-colors ${ativo ? "text-violet-400" : "text-white/40 hover:text-white/60"}`}>
+          <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${ativo ? "border-violet-400" : "border-white/20"}`}>
+            {ativo && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
+          </span>
+          {label}
+        </button>
+      );
+    }
+
+    return (
+      <div className="space-y-6 animate-in">
+
+        {/* Cabeçalho */}
+        <div>
+          <h1 className="text-2xl font-bold text-white">Central de Relatórios</h1>
+          <p className="text-white/50 text-sm mt-1">Relatórios executivos e consolidados estratégicos do mandato</p>
+        </div>
+
+        {/* KPI strip */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <GlassCard className="p-4 text-center">
+            <p className="text-2xl font-bold text-white">{totalBase.toLocaleString("pt-BR")}</p>
+            <p className="text-xs text-white/35 mt-0.5">Base total</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className={`text-2xl font-bold ${pctForte >= 40 ? "text-emerald-400" : pctForte >= 20 ? "text-amber-400" : "text-red-400"}`}>{pctForte}%</p>
+            <p className="text-xs text-white/35 mt-0.5">Base forte</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-2xl font-bold text-blue-400">{indecisosN}</p>
+            <p className="text-xs text-white/35 mt-0.5">Conversíveis</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-2xl font-bold text-violet-400">{cidadesUniq.length}</p>
+            <p className="text-xs text-white/35 mt-0.5">Municípios</p>
+          </GlassCard>
+        </div>
+
+        {/* Relatórios Disponíveis */}
+        <div>
+          <h2 className="text-white font-semibold mb-4">Relatórios Disponíveis</h2>
+          <div className="space-y-4">
+
+            {/* 📘 Executivo Premium */}
+            <GlassCard className="p-5 hover:border-blue-500/20 transition-colors">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center text-xl shrink-0">📘</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="text-white font-semibold">Relatório Executivo Premium</p>
+                      <p className="text-xs text-white/35 mt-0.5">Panorama completo do mandato</p>
+                    </div>
+                    <span className="text-xs text-blue-400/60 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20 shrink-0">PDF</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-4">
+                    {["Panorama do mandato", "Força Territorial", "Municípios críticos", "Municípios em expansão", "Inteligência Política", "Agenda de acompanhamento"].map(item => (
+                      <div key={item} className="flex items-center gap-1.5 text-xs text-white/40">
+                        <span className="text-emerald-400 text-[10px]">✓</span> {item}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-4 pt-3 border-t border-white/[0.05]">
+                    <button onClick={() => router.push("/relatorios")} className="text-xs text-white/35 hover:text-blue-400 transition-colors font-medium">Visualizar →</button>
+                    <button onClick={exportPDFPremiumAction} className="text-xs text-blue-400 hover:text-blue-300 transition-colors font-medium">Exportar PDF →</button>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* 📗 Por Assessoria */}
+            <GlassCard className="p-5 hover:border-emerald-500/20 transition-colors">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xl shrink-0">📗</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <p className="text-white font-semibold">Relatório por Assessoria</p>
+                      <p className="text-xs text-white/35 mt-0.5">Desempenho e diagnóstico por assessor</p>
+                    </div>
+                    <span className="text-xs text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">PDF</span>
+                  </div>
+                  <select
+                    value={selectedAssessorId}
+                    onChange={e => setSelectedAssessorId(e.target.value)}
+                    className="w-full text-sm bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 mb-3"
+                    style={{ colorScheme: "dark" }}
+                  >
+                    <option value="" className="bg-zinc-950 text-zinc-400">Selecionar assessor…</option>
+                    {assessores.map(a => <option key={a.uid} value={a.uid} className="bg-zinc-950 text-white">{a.nome}</option>)}
+                  </select>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-3">
+                    {["Territórios", "Coordenadores", "Eleitores", "Base Forte", "Metas", "Diagnóstico"].map(item => (
+                      <div key={item} className="flex items-center gap-1.5 text-xs text-white/40">
+                        <span className="text-emerald-400 text-[10px]">✓</span> {item}
+                      </div>
+                    ))}
+                  </div>
+                  {assessorSel && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mb-3">
+                      <span className="text-white/40">Assessor: <span className="text-white/65">{assessorSel.nome}</span></span>
+                      {(assessorSel.cidades ?? []).length > 0 && (
+                        <span className="text-white/40">Territórios: <span className="text-white/65">{(assessorSel.cidades ?? []).join(" · ")}</span></span>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-4 pt-3 border-t border-white/[0.05]">
+                    <button onClick={() => router.push("/assessores")} className="text-xs text-white/35 hover:text-emerald-400 transition-colors font-medium">Visualizar →</button>
+                    <button
+                      onClick={() => {
+                        const titulo = assessorSel
+                          ? `Assessoria · ${assessorSel.nome} · ${(assessorSel.cidades ?? []).join(", ") || "Territórios"}`
+                          : "Relatório de Assessorias";
+                        try { exportPDFPremium(eleitores, titulo); toast.success("Relatório exportado!"); }
+                        catch { toast.error("Erro ao exportar"); }
+                      }}
+                      className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
+                    >
+                      Exportar PDF →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* 📙 Territorial */}
+            <GlassCard className="p-5 hover:border-amber-500/20 transition-colors">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-xl shrink-0">📙</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div>
+                      <p className="text-white font-semibold">Relatório Territorial</p>
+                      <p className="text-xs text-white/35 mt-0.5">Análise por município</p>
+                    </div>
+                    <span className="text-xs text-amber-400/60 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20 shrink-0">PDF</span>
+                  </div>
+                  <select
+                    value={selectedCidade}
+                    onChange={e => setSelectedCidade(e.target.value)}
+                    className="w-full text-sm bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-zinc-600 mb-3"
+                    style={{ colorScheme: "dark" }}
+                  >
+                    <option value="" className="bg-zinc-950 text-zinc-400">Selecionar município…</option>
+                    {cidadesUniq.map(c => <option key={c} value={c} className="bg-zinc-950 text-white">{c}</option>)}
+                  </select>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-3">
+                    {["Eleitores", "Forte / Médio / Fraco", "Tendência", "Crescimento", "Assessor responsável", "Situação"].map(item => (
+                      <div key={item} className="flex items-center gap-1.5 text-xs text-white/40">
+                        <span className="text-emerald-400 text-[10px]">✓</span> {item}
+                      </div>
+                    ))}
+                  </div>
+                  {selectedCidade && (() => {
+                    const el = eleitores.filter(e => e.cidade === selectedCidade);
+                    const f  = el.filter(e => e.grauApoio === "forte").length;
+                    const pct = el.length > 0 ? Math.round((f / el.length) * 100) : 0;
+                    return (
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs mb-3">
+                        <span className="text-white/40">{selectedCidade}: <span className="text-white/65">{el.length} eleitores</span></span>
+                        <span className="text-white/40">Base forte: <span className={pct >= 40 ? "text-emerald-400" : "text-amber-400"}>{pct}%</span></span>
+                      </div>
+                    );
+                  })()}
+                  <div className="flex items-center gap-4 pt-3 border-t border-white/[0.05]">
+                    <button onClick={() => router.push("/relatorios")} className="text-xs text-white/35 hover:text-amber-400 transition-colors font-medium">Visualizar →</button>
+                    <button
+                      onClick={() => {
+                        const lista  = selectedCidade ? eleitores.filter(e => e.cidade === selectedCidade) : eleitores;
+                        const titulo = selectedCidade ? `Relatório Territorial · ${selectedCidade}` : "Relatório Territorial";
+                        if (lista.length === 0) { toast.error("Nenhum eleitor neste município."); return; }
+                        try { exportPDFPremium(lista, titulo); toast.success("Relatório exportado!"); }
+                        catch { toast.error("Erro ao exportar"); }
+                      }}
+                      className="text-xs text-amber-400 hover:text-amber-300 transition-colors font-medium"
+                    >
+                      Exportar PDF →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* 📕 Metas */}
+            <GlassCard className="p-5 hover:border-red-500/20 transition-colors">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-xl shrink-0">📕</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="text-white font-semibold">Relatório de Metas</p>
+                      <p className="text-xs text-white/35 mt-0.5">Cumprimento e pendências estratégicas</p>
+                    </div>
+                    <span className="text-xs text-red-400/60 bg-red-500/10 px-2 py-0.5 rounded-full border border-red-500/20 shrink-0">PDF</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-4">
+                    {["Meta global", "Meta por assessor", "Meta por município", "Cumprimento", "Pendências", "Agenda"].map(item => (
+                      <div key={item} className="flex items-center gap-1.5 text-xs text-white/40">
+                        <span className="text-emerald-400 text-[10px]">✓</span> {item}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-4 pt-3 border-t border-white/[0.05]">
+                    <button onClick={() => router.push("/metas")} className="text-xs text-white/35 hover:text-red-400 transition-colors font-medium">Visualizar →</button>
+                    <button
+                      onClick={() => {
+                        try { exportPDFPremium(eleitores, `Metas Estratégicas · ${userData?.gabineteNome || "Mandato"}`); toast.success("Relatório exportado!"); }
+                        catch { toast.error("Erro ao exportar"); }
+                      }}
+                      className="text-xs text-red-400 hover:text-red-300 transition-colors font-medium"
+                    >
+                      Exportar PDF →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+
+            {/* 📊 Excel Executivo */}
+            <GlassCard className="p-5 hover:border-emerald-500/20 transition-colors">
+              <div className="flex items-start gap-4">
+                <div className="w-11 h-11 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-xl shrink-0">📊</div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div>
+                      <p className="text-white font-semibold">Excel Executivo Premium</p>
+                      <p className="text-xs text-white/35 mt-0.5">Planilha analítica multi-abas</p>
+                    </div>
+                    <span className="text-xs text-emerald-400/60 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 shrink-0">Excel</span>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mb-4">
+                    {["Resumo Geral", "Municípios", "Assessorias", "Metas", "Inteligência Política", "Agenda"].map(item => (
+                      <div key={item} className="flex items-center gap-1.5 text-xs text-white/40">
+                        <span className="text-emerald-400 text-[10px]">✓</span> {item}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-3 border-t border-white/[0.05]">
+                    <button onClick={exportExcelPremiumAction} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium">
+                      Exportar Excel →
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </GlassCard>
+          </div>
+        </div>
+
+        {/* Filtros de Exportação */}
+        <GlassCard className="p-5">
+          <h3 className="text-white font-semibold mb-4">Filtros de Exportação</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
+            <div>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Tipo</p>
+              <div className="space-y-2">
+                {[["executivo","Executivo"],["territorial","Territorial"],["assessoria","Assessoria"],["metas","Metas"],["inteligencia","Inteligência"]].map(([k,l]) =>
+                  filtroBtn(l, filtroTipo === k, () => setFiltroTipo(k))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Formato</p>
+              <div className="space-y-2">
+                {[["pdf","PDF"],["excel","Excel"]].map(([k,l]) =>
+                  filtroBtn(l, filtroFormato === k, () => setFiltroFormato(k))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Período</p>
+              <div className="space-y-2">
+                {[["30d","30 dias"],["90d","90 dias"],["ano","Ano eleitoral"],["tudo","Todo histórico"]].map(([k,l]) =>
+                  filtroBtn(l, filtroPeriodo === k, () => setFiltroPeriodo(k))
+                )}
+              </div>
+            </div>
+            <div>
+              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Escopo</p>
+              <div className="space-y-2">
+                {[["mandato","Todo mandato"],["assessor","Por assessor"],["municipio","Por município"]].map(([k,l]) =>
+                  filtroBtn(l, filtroEscopo === k, () => setFiltroEscopo(k))
+                )}
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+
+        {/* ⭐ Dossiê Político Premium */}
+        <GlassCard className="p-5 border-violet-500/25">
+          <div className="flex items-start gap-4">
+            <div className="w-11 h-11 rounded-xl bg-violet-500/15 border border-violet-500/30 flex items-center justify-center text-xl shrink-0">⭐</div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <div>
+                  <p className="text-white font-bold">Dossiê Político Premium</p>
+                  <p className="text-xs text-violet-400/60 mt-0.5">Documento executivo completo do mandato · 8 seções</p>
+                </div>
+                <span className="text-xs text-violet-400/60 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20 shrink-0">PDF Premium</span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 mb-4">
+                {["Capa do mandato","Panorama Executivo","Força Territorial","Municípios Críticos","Oportunidades","Metas Estratégicas","Ranking Assessorias","Recomendações"].map((item, i) => (
+                  <div key={item} className="flex items-center gap-1.5 text-xs text-white/50">
+                    <span className="text-violet-400/60 font-bold">{i+1}.</span> {item}
+                  </div>
+                ))}
+              </div>
+              {/* Fase 2 */}
+              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
+                {["Compartilhar PDF","Enviar por WhatsApp","Enviar por e-mail","Histórico de relatórios","Relatórios agendados"].map(acao => (
+                  <label key={acao} className="flex items-center gap-1.5 text-xs text-white/20 cursor-not-allowed select-none">
+                    <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
+                    {acao}
+                  </label>
+                ))}
+              </div>
+              <div className="flex items-center gap-4 pt-3 border-t border-violet-500/10">
+                <button onClick={() => setModalDossie(true)} className="text-xs text-white/35 hover:text-violet-400 transition-colors font-medium">Visualizar →</button>
+                <button onClick={exportPDFPremiumAction} className="text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium">Gerar PDF Premium →</button>
+              </div>
+            </div>
+          </div>
+        </GlassCard>
+
+        {/* Modal Dossiê */}
+        {modalDossie && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setModalDossie(false)}>
+            <div className="w-full max-w-lg bg-[#0f1117] border border-white/10 rounded-2xl shadow-2xl max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+              <div className="p-6">
+                <div className="flex items-start justify-between mb-5">
+                  <div>
+                    <p className="text-xs text-violet-400/60 uppercase tracking-wider mb-1">Dossiê Político Premium</p>
+                    <h3 className="text-xl font-bold text-white">{userData?.gabineteNome || "Mandato 2026"}</h3>
+                    <p className="text-xs text-white/30 mt-0.5">Ano Eleitoral 2026 · Eleitores 2026</p>
+                  </div>
+                  <button onClick={() => setModalDossie(false)} className="text-white/30 hover:text-white/60 transition-colors mt-0.5 shrink-0">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="space-y-2.5 mb-5">
+                  {[
+                    { n: "1", title: "Panorama Executivo",       detail: `${totalBase.toLocaleString("pt-BR")} apoiadores · ${cidadesUniq.length} municípios` },
+                    { n: "2", title: "Força Territorial",        detail: `${pctForte}% base forte · ${assessores.length} assessorias` },
+                    { n: "3", title: "Municípios Críticos",      detail: "Territórios com base fraca ou sem cobertura" },
+                    { n: "4", title: "Oportunidades Eleitorais", detail: `${indecisosN} indecisos identificados` },
+                    { n: "5", title: "Metas Estratégicas",       detail: "Cumprimento por assessoria e município" },
+                    { n: "6", title: "Ranking das Assessorias",  detail: `${assessores.length} assessorias avaliadas` },
+                    { n: "7", title: "Agenda de Acompanhamento", detail: "Prioridades e prazos por assessoria" },
+                    { n: "8", title: "Recomendações Estratégicas", detail: "Ações priorizadas por urgência" },
+                  ].map(sec => (
+                    <div key={sec.n} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                      <span className="w-6 h-6 rounded-lg bg-violet-500/20 text-violet-400 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{sec.n}</span>
+                      <div>
+                        <p className="text-white/80 font-medium text-sm">{sec.title}</p>
+                        <p className="text-xs text-white/35 mt-0.5">{sec.detail}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-4 border-t border-white/[0.06]">
+                  <p className="text-[10px] text-white/20 text-center mb-3">Gerado automaticamente pelo Eleitores 2026</p>
+                  <button
+                    onClick={() => { setModalDossie(false); exportPDFPremiumAction(); }}
+                    className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 transition-colors text-white text-sm font-medium"
+                  >
+                    Gerar PDF Premium
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  }
+
+  // ── VIEW ORIGINAL (super_admin / prefeito / vereador) ────────────────────
   return (
     <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center text-lg`}>👑</div>
         <div>
           <h1 className="text-2xl font-bold text-white">Exportações</h1>
-          <p className="text-sm text-purple-400">{isPolitico(userData) ? "Consolidados territoriais da sua base" : "Exporte dados da plataforma"}</p>
+          <p className="text-sm text-purple-400">Exporte dados da plataforma</p>
         </div>
       </div>
 
@@ -319,101 +720,45 @@ export default function ExportacoesPage() {
           <h3 className="text-white font-semibold">PDF Premium</h3>
           <p className="text-xs text-white/40 mt-1">Relatório executivo com capa</p>
         </GlassCard>
-        {!isPolitico(userData) && (
-          <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportJSON}>
-            <Upload size={40} className="mx-auto mb-3 text-purple-400" />
-            <h3 className="text-white font-semibold">JSON</h3>
-            <p className="text-xs text-white/40 mt-1">Dados .json</p>
-          </GlassCard>
-        )}
+        <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportJSON}>
+          <Upload size={40} className="mx-auto mb-3 text-purple-400" />
+          <h3 className="text-white font-semibold">JSON</h3>
+          <p className="text-xs text-white/40 mt-1">Dados .json</p>
+        </GlassCard>
       </div>
 
-      {isPolitico(userData) ? (
-        <GlassCard className="p-5">
-          <div className="flex items-center justify-between mb-5">
-            <h3 className="text-white font-semibold">Consolidado Territorial</h3>
-            <span className="text-xs text-white/30">{eleitores.length} apoiadores registrados</span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
-            {[
-              { label: "Forte",    value: stats.fortes,    cor: "text-emerald-400", border: "border-emerald-500/20", bg: "bg-emerald-500/10" },
-              { label: "Médio",    value: stats.medios,    cor: "text-amber-400",   border: "border-amber-500/20",   bg: "bg-amber-500/10"   },
-              { label: "Indeciso", value: stats.indecisos, cor: "text-blue-400",    border: "border-blue-500/20",    bg: "bg-blue-500/10"    },
-              { label: "Fraco",    value: stats.fracos,    cor: "text-red-400",     border: "border-red-500/20",     bg: "bg-red-500/10"     },
-            ].map(({ label, value, cor, border, bg }) => (
-              <div key={label} className={`p-3 rounded-xl border ${border} ${bg} text-center`}>
-                <p className={`text-xl font-bold ${cor}`}>{value}</p>
-                <p className="text-xs text-white/40 mt-0.5">{label}</p>
-                {eleitores.length > 0 && (
-                  <p className={`text-[10px] mt-0.5 ${cor}`}>{Math.round((value / eleitores.length) * 100)}%</p>
-                )}
-              </div>
-            ))}
-          </div>
-          {cidadesTop.length > 0 && (
-            <div className="mb-5">
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Distribuição por cidade</p>
-              <div className="space-y-2.5">
-                {cidadesTop.map(({ cidade, total }) => (
-                  <div key={cidade} className="flex items-center gap-3">
-                    <span className="text-sm text-white/70 w-32 shrink-0 truncate">{cidade}</span>
-                    <div className="flex-1 bg-white/[0.04] rounded-full h-1.5">
-                      <div className="h-1.5 rounded-full bg-violet-500" style={{ width: `${Math.round((total / maxCidade) * 100)}%` }} />
-                    </div>
-                    <span className="text-sm text-white/50 w-8 text-right shrink-0">{total}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {estadosOrdenados.length > 0 && (
-            <div>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-2">Por estado</p>
-              <div className="flex flex-wrap gap-2">
-                {estadosOrdenados.map(([estado, total]) => (
-                  <div key={estado} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/[0.04] border border-white/[0.06]">
-                    <span className="text-sm font-medium text-white">{estado}</span>
-                    <span className="text-xs text-white/40">{total}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </GlassCard>
-      ) : (
-        <GlassCard className="p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-white font-semibold">Resumo dos Dados</h3>
-            <span className="text-sm text-white/40">{eleitores.length} registros</span>
-          </div>
-          <div className="overflow-x-auto max-h-80 overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-white/40 border-b border-white/[0.06]">
-                  <th className="text-left py-2 px-2 font-medium">Nome</th>
-                  <th className="text-left py-2 px-2 font-medium">Cidade</th>
-                  <th className="text-left py-2 px-2 font-medium">Estado</th>
-                  <th className="text-left py-2 px-2 font-medium">Grau</th>
-                  <th className="text-left py-2 px-2 font-medium">Colaborador</th>
+      <GlassCard className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-semibold">Resumo dos Dados</h3>
+          <span className="text-sm text-white/40">{eleitores.length} registros</span>
+        </div>
+        <div className="overflow-x-auto max-h-80 overflow-y-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-white/40 border-b border-white/[0.06]">
+                <th className="text-left py-2 px-2 font-medium">Nome</th>
+                <th className="text-left py-2 px-2 font-medium">Cidade</th>
+                <th className="text-left py-2 px-2 font-medium">Estado</th>
+                <th className="text-left py-2 px-2 font-medium">Grau</th>
+                <th className="text-left py-2 px-2 font-medium">Colaborador</th>
+              </tr>
+            </thead>
+            <tbody>
+              {eleitores.slice(0, 20).map((e) => (
+                <tr key={e.id} className="border-b border-white/[0.03]">
+                  <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td>
+                  <td className="py-2 px-2 text-white/50">{e.cidade}</td>
+                  <td className="py-2 px-2 text-white/50">{e.estado}</td>
+                  <td className="py-2 px-2">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span>
+                  </td>
+                  <td className="py-2 px-2 text-white/50">{e.colaboradorNome}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {eleitores.slice(0, 20).map((e) => (
-                  <tr key={e.id} className="border-b border-white/[0.03]">
-                    <td className="py-2 px-2 text-white/70">{e.nomeCompleto}</td>
-                    <td className="py-2 px-2 text-white/50">{e.cidade}</td>
-                    <td className="py-2 px-2 text-white/50">{e.estado}</td>
-                    <td className="py-2 px-2">
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.grauApoio === "forte" ? "bg-emerald-500/20 text-emerald-400" : e.grauApoio === "medio" ? "bg-amber-500/20 text-amber-400" : e.grauApoio === "fraco" ? "bg-red-500/20 text-red-400" : "bg-blue-500/20 text-blue-400"}`}>{e.grauApoio}</span>
-                    </td>
-                    <td className="py-2 px-2 text-white/50">{e.colaboradorNome}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </GlassCard>
-      )}
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </GlassCard>
     </div>
   );
 }

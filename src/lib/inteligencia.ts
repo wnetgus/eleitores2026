@@ -110,9 +110,9 @@ export function calcularSFPSimples(eleitores: Eleitor[]): SFPResult | null {
 
   const score = Math.round((bruto / eleitores.length) * 100) / 100;
 
-  if (score >= 2.5) return { score, label: "Forte",     cor: "text-emerald-400", bg: "bg-emerald-500/10", dot: "bg-emerald-400", total: eleitores.length };
-  if (score >= 1.8) return { score, label: "Sólido",    cor: "text-amber-400",   bg: "bg-amber-500/10",   dot: "bg-amber-400",   total: eleitores.length };
-  if (score >= 1.0) return { score, label: "Fraco",     cor: "text-orange-400",  bg: "bg-orange-500/10",  dot: "bg-orange-400",  total: eleitores.length };
+  if (score >= 2.5) return { score, label: "Forte",           cor: "text-emerald-400", bg: "bg-emerald-500/10", dot: "bg-emerald-400", total: eleitores.length };
+  if (score >= 1.8) return { score, label: "Sólido",          cor: "text-amber-400",   bg: "bg-amber-500/10",   dot: "bg-amber-400",   total: eleitores.length };
+  if (score >= 1.0) return { score, label: "Em Consolidação", cor: "text-orange-400",  bg: "bg-orange-500/10",  dot: "bg-orange-400",  total: eleitores.length };
   if (score >= 0.1) return { score, label: "Em Risco",  cor: "text-red-400",     bg: "bg-red-500/10",     dot: "bg-red-400",     total: eleitores.length };
   return                   { score, label: "Abandonado",cor: "text-white/30",    bg: "bg-white/5",         dot: "bg-white/20",    total: eleitores.length };
 }

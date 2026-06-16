@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo, useRef } from "react";
 import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AppUser, Gabinete, Eleitor, ROLE_CONFIG } from "@/types";
 import { getRoleConfig, isSuperOrMaster, isPrefeito, isAssessor, isPolitico, canViewAssessores, canManageUsers } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -14,7 +14,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Select } from "@/components/ui/Select";
 import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
 import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
-import { Shield, UserPlus, Mail, Pencil, Building2, Trash2, MapPin, Users, TrendingUp, TrendingDown, X, Plus } from "lucide-react";
+import { Shield, UserPlus, Mail, Pencil, Building2, Trash2, MapPin, Users, TrendingUp, TrendingDown, X, Plus, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate, sugerirEmail, parseDate } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
@@ -96,6 +96,12 @@ function CidadesInput({
 export default function AssessoresPage() {
   const { userData } = useAuth();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const acaoParam = searchParams.get("acao");
+  const municipiosParam = searchParams.get("municipios");
+  const municipiosSemAssessoria = acaoParam === "expandir" && municipiosParam
+    ? municipiosParam.split(",").map(decodeURIComponent).filter(Boolean)
+    : [] as string[];
   const [assessores, setAssessores] = useState<AppUser[]>([]);
   const [form, setForm] = useState({ email: "", password: "", nome: "", gabineteVinculoId: "", cidades: [] as string[] });
   const [emailManual, setEmailManual] = useState(false);
@@ -111,7 +117,7 @@ export default function AssessoresPage() {
   const [gabinetesMap, setGabinetesMap] = useState<Record<string, { nome: string; politicoNome: string; cargo: string }>>({});
   const [coordenaoresExec, setCoordenadoresExec] = useState<AppUser[]>([]);
   const [eleitoresExec, setEleitoresExec] = useState<Eleitor[]>([]);
-  const [ordenacao, setOrdenacao] = useState<"forca" | "criticos" | "crescimento" | "estagnados">("forca");
+  const [ordenacao, setOrdenacao] = useState<"forca" | "criticos" | "crescimento" | "estagnados" | "sem-base" | "sem-coord">("forca");
   const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessor(userData);
   const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
 
@@ -251,7 +257,17 @@ export default function AssessoresPage() {
       const prev30 = meusEleitores.filter((e) => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
       const tendencia = prev30 > 0 ? Math.round(((recentes30 - prev30) / prev30) * 100) : recentes30 > 0 ? 100 : 0;
 
-      return { uid: a.uid, nome: a.nome, ativo: a.ativo, territorio, cidades: a.cidades ?? [], totalEleitores, totalCoords: meusCoords.length, forca, recentes30, tendencia };
+      const diagnostico = (() => {
+        if (totalEleitores === 0 && meusCoords.length === 0) return "Sem estrutura montada";
+        if (totalEleitores === 0 && meusCoords.length > 0) return "Estrutura sem produção";
+        if (totalEleitores > 0 && recentes30 === 0) return "Sem novos cadastros nos últimos 30 dias";
+        if (totalEleitores > 0 && recentes30 > 0 && tendencia < -25) return "Queda significativa de atividade";
+        if (forca < 15 && totalEleitores >= 10) return "Base pouco consolidada";
+        if (totalEleitores > 0 && recentes30 > 0 && forca >= 30) return "Estrutura completa";
+        return null as string | null;
+      })();
+
+      return { uid: a.uid, nome: a.nome, ativo: a.ativo, territorio, cidades: a.cidades ?? [], totalEleitores, totalCoords: meusCoords.length, forca, recentes30, tendencia, diagnostico };
     });
   }, [assessores, coordenaoresExec, eleitoresExec, userData]);
 
@@ -267,6 +283,12 @@ export default function AssessoresPage() {
     }
     if (ordenacao === "crescimento") {
       return lista.sort((a, b) => b.tendencia - a.tendencia || b.recentes30 - a.recentes30);
+    }
+    if (ordenacao === "sem-base") {
+      return lista.sort((a, b) => (a.totalEleitores === 0 ? -1 : 1) - (b.totalEleitores === 0 ? -1 : 1) || a.totalEleitores - b.totalEleitores);
+    }
+    if (ordenacao === "sem-coord") {
+      return lista.sort((a, b) => (a.totalCoords === 0 ? -1 : 1) - (b.totalCoords === 0 ? -1 : 1) || a.totalEleitores - b.totalEleitores);
     }
     return lista.sort((a, b) => a.recentes30 - b.recentes30 || a.tendencia - b.tendencia);
   }, [statsExec, ordenacao]);
@@ -309,6 +331,29 @@ export default function AssessoresPage() {
           <BuscaGlobal userData={userData} />
         </div>
 
+        {municipiosSemAssessoria.length > 0 && (
+          <GlassCard className="p-4 border-red-500/20">
+            <div className="flex items-center gap-2 mb-3">
+              <AlertTriangle size={15} className="text-red-400 shrink-0" />
+              <h3 className="text-white font-semibold text-sm">Cobertura Territorial Pendente</h3>
+              <span className="ml-auto text-xs text-red-400/60 px-2 py-0.5 rounded-full bg-red-500/10">
+                {municipiosSemAssessoria.length} {municipiosSemAssessoria.length === 1 ? "município" : "municípios"}
+              </span>
+            </div>
+            <p className="text-sm text-white/60 mb-3">
+              {municipiosSemAssessoria.length === 1 ? "O município abaixo possui" : "Os municípios abaixo possuem"} eleitores cadastrados mas ainda {municipiosSemAssessoria.length === 1 ? "não possui" : "não possuem"} assessoria regional responsável.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {municipiosSemAssessoria.map(m => (
+                <span key={m} className="text-xs px-2 py-1 rounded-lg bg-red-500/10 text-red-400/80">• {m}</span>
+              ))}
+            </div>
+            <p className="text-xs text-white/35">
+              Ação recomendada: designar um assessor responsável ou criar nova assessoria regional para {municipiosSemAssessoria.length === 1 ? "esse território" : "esses territórios"}.
+            </p>
+          </GlassCard>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <GlassCard className="p-4 text-center">
             <p className="text-3xl font-bold text-white">{totalBracos}</p>
@@ -333,10 +378,12 @@ export default function AssessoresPage() {
             <span className="text-[11px] text-white/20 pr-1 tracking-wide uppercase">Prioridade</span>
             {(
               [
-                { key: "forca",       label: "Mais fortes" },
-                { key: "criticos",    label: "Críticos"    },
-                { key: "crescimento", label: "Crescimento" },
-                { key: "estagnados",  label: "Estagnados"  },
+                { key: "forca",       label: "Mais Fortes"    },
+                { key: "criticos",    label: "Críticos"        },
+                { key: "crescimento", label: "Crescimento"     },
+                { key: "estagnados",  label: "Estagnados"      },
+                { key: "sem-base",    label: "Sem Base"        },
+                { key: "sem-coord",   label: "Estrutura Incompleta" },
               ] as const
             ).map(({ key, label }) => (
               <button
@@ -361,11 +408,19 @@ export default function AssessoresPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {statsExecOrdenados.map((s) => {
-              const statusAtivo = s.recentes30 > 0;
-              const statusVazio = s.totalEleitores === 0;
-              const statusLabel = statusAtivo ? "Território Ativo" : statusVazio ? "Sem base mapeada" : "Presença Reduzida";
-              const statusDot   = statusAtivo ? "bg-emerald-400" : statusVazio ? "bg-white/20" : "bg-amber-400";
-              const statusText  = statusAtivo ? "text-emerald-400" : statusVazio ? "text-white/30" : "text-amber-400";
+              const badge = (() => {
+                if (s.totalEleitores === 0 && s.totalCoords === 0)
+                  return { label: "🔴 Sem Base",          text: "text-red-400"     };
+                if (s.totalEleitores === 0 && s.totalCoords > 0)
+                  return { label: "🔴 Estrutura Parada",  text: "text-red-400"     };
+                if (s.totalEleitores > 0 && s.recentes30 === 0)
+                  return { label: "🔴 Estrutura Parada",  text: "text-red-400"     };
+                if (s.totalEleitores > 0 && s.recentes30 > 0 && s.tendencia >= 10 && s.forca >= 35)
+                  return { label: "🟢 Expansão Forte",    text: "text-emerald-400" };
+                if (s.totalEleitores > 0 && s.recentes30 > 0 && s.forca >= 20)
+                  return { label: "🟢 Operação Saudável", text: "text-emerald-400" };
+                return   { label: "🟡 Crescimento Baixo", text: "text-amber-400"   };
+              })();
 
               return (
                 <div key={s.uid} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] space-y-3 hover:border-white/[0.10] transition-colors">
@@ -376,9 +431,8 @@ export default function AssessoresPage() {
                       </div>
                       <p className="text-white font-semibold text-sm truncate">{s.nome}</p>
                     </div>
-                    <div className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-full bg-white/[0.04] ${statusText}`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${statusDot}`} />
-                      <span className="text-xs font-medium whitespace-nowrap">{statusLabel}</span>
+                    <div className={`flex items-center shrink-0 px-2 py-1 rounded-full bg-white/[0.04] ${badge.text}`}>
+                      <span className="text-xs font-medium whitespace-nowrap">{badge.label}</span>
                     </div>
                   </div>
 
@@ -433,6 +487,20 @@ export default function AssessoresPage() {
                       )}
                     </div>
                   )}
+
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-white/[0.04]">
+                    {s.diagnostico ? (
+                      <span className="text-white/35 italic">{s.diagnostico}</span>
+                    ) : (
+                      <span />
+                    )}
+                    <a
+                      href={`/coordenadores?assessorId=${s.uid}&assessorNome=${encodeURIComponent(s.nome)}`}
+                      className="text-amber-400/60 hover:text-amber-300 transition-colors shrink-0"
+                    >
+                      Ver equipe →
+                    </a>
+                  </div>
                 </div>
               );
             })}

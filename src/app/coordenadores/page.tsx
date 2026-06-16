@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
 import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
-import { Target, UserPlus, Shield, Mail, MapPin, Pencil, Power, Users, Filter, X, Building2, ChevronRight, Trash2, Search } from "lucide-react";
+import { Target, UserPlus, Shield, Mail, MapPin, Pencil, Power, Users, Filter, X, Building2, ChevronRight, Trash2, Search, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate, sugerirEmail } from "@/lib/utils";
 import { registrarAtividade } from "@/lib/firestore";
@@ -28,6 +28,15 @@ export default function CoordenadoresPage() {
   const searchParams = useSearchParams();
   const filtroAtivo = searchParams.get("filtro") === "sem-colaboradores";
   const gabineteIdParam = searchParams.get("gabineteId");
+  const assessorIdParam = searchParams.get("assessorId");
+  const assessorNomeParam = searchParams.get("assessorNome");
+  const alertaEstruturaParam = searchParams.get("alertaEstrutura");
+  const alertaEstruturaMunicipios = alertaEstruturaParam
+    ? alertaEstruturaParam.split(",").map((par) => {
+        const [cidade, assessorNome] = par.split("|").map(decodeURIComponent);
+        return { cidade, assessorNome: assessorNome || "" };
+      }).filter(({ cidade }) => !!cidade)
+    : [] as { cidade: string; assessorNome: string }[];
   const [gabineteContexto, setGabineteContexto] = useState<{ id: string; nome: string; cargo: string } | null>(null);
   const [assessoresDisponiveis, setAssessoresDisponiveis] = useState<AppUser[]>([]);
   const [coordenadores, setCoordenadores] = useState<AppUser[]>([]);
@@ -172,11 +181,12 @@ export default function CoordenadoresPage() {
     if (filtros.gabineteId) {
       lista = lista.filter((c) => (c.gabineteId || c.campanhaId) === filtros.gabineteId);
     }
-    if (filtros.assessorId) {
-      lista = lista.filter((c) => c.assessorId === filtros.assessorId || c.criadoPor === filtros.assessorId);
+    const effectiveAssessorId = filtros.assessorId || assessorIdParam || "";
+    if (effectiveAssessorId) {
+      lista = lista.filter((c) => c.assessorId === effectiveAssessorId || c.criadoPor === effectiveAssessorId);
     }
     return lista;
-  }, [coordenadores, filtros]);
+  }, [coordenadores, filtros, assessorIdParam]);
 
   if (!userData || !canViewCoordenadores(userData)) return null;
   const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
@@ -202,6 +212,43 @@ export default function CoordenadoresPage() {
         </div>
         <BuscaGlobal userData={userData} />
       </div>
+
+      {assessorIdParam && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/[0.08] border border-amber-500/20 text-sm">
+          <Shield size={14} className="text-amber-400 shrink-0" />
+          <span className="text-white/60">
+            Coordenadores de <span className="text-amber-300 font-medium">{assessorNomeParam || "assessor selecionado"}</span>
+          </span>
+          <a href="/coordenadores" className="ml-auto text-xs text-white/30 hover:text-white/60 transition-colors shrink-0">
+            × Limpar filtro
+          </a>
+        </div>
+      )}
+
+      {alertaEstruturaMunicipios.length > 0 && (
+        <GlassCard className="p-4 border-amber-500/20">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle size={15} className="text-amber-400" />
+            <h3 className="text-white font-semibold text-sm">Estrutura Territorial Incompleta</h3>
+            <span className="ml-auto text-xs text-amber-400/60 px-2 py-0.5 rounded-full bg-amber-500/10">
+              {alertaEstruturaMunicipios.length} {alertaEstruturaMunicipios.length === 1 ? "município" : "municípios"}
+            </span>
+          </div>
+          <p className="text-sm text-white/60 mb-3">
+            Os municípios abaixo possuem assessor responsável, mas ainda não possuem coordenação operacional ativa.
+          </p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            {alertaEstruturaMunicipios.map(({ cidade, assessorNome }) => (
+              <span key={cidade} className="text-xs px-2 py-1 rounded-lg bg-amber-500/10 text-amber-400/80">
+                • {cidade}{assessorNome && <span className="text-white/25"> — {assessorNome}</span>}
+              </span>
+            ))}
+          </div>
+          <p className="text-xs text-white/40">
+            Ação recomendada: criar ou atribuir coordenadores para estes territórios.
+          </p>
+        </GlassCard>
+      )}
 
       {podeGerenciar && (
       <GlassCard className="p-5">
@@ -290,7 +337,15 @@ export default function CoordenadoresPage() {
                     {podeGerenciar && userData?.uid !== c.uid && (
                       <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
                     )}
-                    <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>
+                    {!c.ativo ? (
+                      <Badge variant="default">Inativo</Badge>
+                    ) : qtdColab >= 2 ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 whitespace-nowrap">🟢 Operacional</span>
+                    ) : qtdColab === 1 ? (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 whitespace-nowrap">🟡 Estrutura Mínima</span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-red-500/15 text-red-400 border border-red-500/20 whitespace-nowrap">🔴 Sem Equipe</span>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-white/50"><MapPin size={12} />{(c.bairro || c.regiao) ? `${c.bairro || c.regiao} · ` : ""}{c.cidadePrincipal || c.cidade || "N/I"}</div>

@@ -4,16 +4,17 @@ import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
-import { Eleitor } from "@/types";
+import { Eleitor, AppUser } from "@/types";
 import { estados } from "@/lib/estados-cidades";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { formatDate, parseDate } from "@/lib/utils";
-import { FileSpreadsheet, FileText, Filter, Search, TrendingUp, MapPin, Zap } from "lucide-react";
+import { FileSpreadsheet, FileText, Filter, Search, TrendingUp, MapPin, Zap, X } from "lucide-react";
 import { isPolitico, isAssessor, isCoordenador } from "@/lib/permissions";
 import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import toast from "react-hot-toast";
+import { calcularSFPSimples } from "@/lib/inteligencia";
 
 const grauOptions = [
   { value: "", label: "Todos" },
@@ -34,16 +35,24 @@ export default function RelatoriosPage() {
   const [loading, setLoading] = useState(true);
   const [filtros, setFiltros] = useState({ estado: "", cidade: "", bairro: "", grauApoio: "", dataInicio: "", dataFim: "", search: "", colaboradorId: "" });
   const [grauPill, setGrauPill] = useState<"" | "forte" | "medio" | "fraco" | "indeciso" | "recente">("");
+  const [usuarios, setUsuarios] = useState<AppUser[]>([]);
+  const [modalData, setModalData] = useState<{
+    cidade: string; total: number; fortes: number; fracos: number; indecisos: number;
+    recentes: number; prev30: number; forca: number; tendencia: number;
+    sfp: ReturnType<typeof calcularSFPSimples>;
+    assessor: AppUser | null;
+    situacao: { emoji: string; label: string; cor: string; recomendacoes: string[] };
+  } | null>(null);
 
   useEffect(() => {
     if (!userData) return;
     async function load() {
       try {
+        const gabId = userData?.campanhaId || userData?.gabineteId;
         const constraints: any[] = [orderBy("criadoEm", "desc")];
         if (isCoordenador(userData)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
         } else {
-          const gabId = userData?.campanhaId || userData?.gabineteId;
           if (gabId) constraints.unshift(where("campanhaId", "==", gabId));
         }
         const q = query(collection(db, "eleitores"), ...constraints);
@@ -51,6 +60,15 @@ export default function RelatoriosPage() {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
         setEleitores(data);
         setFiltered(data);
+        if (isPolitico(userData) && gabId) {
+          const [uSnap1, uSnap2] = await Promise.all([
+            getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", gabId))),
+            getDocs(query(collection(db, "usuarios"), where("gabineteId", "==", gabId))),
+          ]);
+          const uMap = new Map<string, AppUser>();
+          [...uSnap1.docs, ...uSnap2.docs].forEach(d => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
+          setUsuarios([...uMap.values()]);
+        }
       } catch (e) { console.error(e); } finally { setLoading(false); }
     }
     load();
@@ -181,16 +199,18 @@ export default function RelatoriosPage() {
 
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8 text-emerald-500" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
-  // Deputado federal: visão executiva de inteligência territorial — sem lista individual
+  // Deputado federal: Central de Decisão Política
   if (userData && isPolitico(userData)) {
     const agora = Date.now();
-    const totalBase = eleitores.length;
-    const fortes    = eleitores.filter((e) => e.grauApoio === "forte").length;
-    const fracos    = eleitores.filter((e) => e.grauApoio === "fraco").length;
     const indecisos = eleitores.filter((e) => e.grauApoio === "indeciso").length;
-    const ultimos30    = eleitores.filter((e) => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
-    const anteriores30 = eleitores.filter((e) => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
-    const crescimento30d = anteriores30 > 0 ? Math.round(((ultimos30 - anteriores30) / anteriores30) * 100) : ultimos30 > 0 ? 100 : 0;
+
+    const assessores = usuarios.filter(u => u.role === "assessor");
+    const assessorPorCidade = new Map<string, AppUser>();
+    for (const a of assessores) {
+      for (const c of (a.cidades ?? (a.cidadePrincipal ? [a.cidadePrincipal] : []))) {
+        if (!assessorPorCidade.has(c)) assessorPorCidade.set(c, a);
+      }
+    }
 
     const cidadeStats = Object.entries(
       eleitores.reduce<Record<string, { total: number; fortes: number; fracos: number; indecisos: number; recentes: number; prev30: number }>>((acc, e) => {
@@ -200,28 +220,72 @@ export default function RelatoriosPage() {
         if (e.grauApoio === "fraco")    acc[e.cidade].fracos++;
         if (e.grauApoio === "indeciso") acc[e.cidade].indecisos++;
         const t = parseDate(e.criadoEm).getTime();
-        if (t > agora - 30 * 86400000)                              acc[e.cidade].recentes++;
-        else if (t > agora - 60 * 86400000)                         acc[e.cidade].prev30++;
+        if (t > agora - 30 * 86400000)      acc[e.cidade].recentes++;
+        else if (t > agora - 60 * 86400000) acc[e.cidade].prev30++;
         return acc;
       }, {})
-    ).map(([cidade, s]) => ({
-      cidade, ...s,
-      forca:     s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
-      rejeicao:  s.total > 0 ? Math.round(((s.fracos + s.indecisos) / s.total) * 100) : 0,
-      tendencia: s.prev30 > 0 ? Math.round(((s.recentes - s.prev30) / s.prev30) * 100) : s.recentes > 0 ? 100 : 0,
-    })).sort((a, b) => b.total - a.total);
+    ).map(([cidade, s]) => {
+      const el = eleitores.filter(e => e.cidade === cidade);
+      return {
+        cidade, ...s,
+        forca:     s.total > 0 ? Math.round((s.fortes / s.total) * 100) : 0,
+        tendencia: s.prev30 > 0 ? Math.round(((s.recentes - s.prev30) / s.prev30) * 100) : s.recentes > 0 ? 100 : 0,
+        sfp:       calcularSFPSimples(el),
+        assessor:  assessorPorCidade.get(cidade) ?? null,
+      };
+    }).sort((a, b) => b.total - a.total);
 
-    const estagnadas  = cidadeStats.filter((c) => c.recentes === 0 && c.total > 5);
-    const criticas    = cidadeStats.filter((c) => c.rejeicao > 60);
-    const oportunidades = cidadeStats.filter((c) => c.indecisos > 0 && c.indecisos / c.total > 0.2);
+    const todasCidades = new Set([
+      ...cidadeStats.map(c => c.cidade),
+      ...assessores.flatMap(a => a.cidades ?? (a.cidadePrincipal ? [a.cidadePrincipal] : [])),
+    ]);
+    const totalCidades  = todasCidades.size;
+    const cidadesComAssessor = [...todasCidades].filter(c => assessorPorCidade.has(c)).length;
+
+    const municipiosExpansao = cidadeStats.filter(c =>
+      c.tendencia > 20 && c.sfp?.label !== "Em Risco" && c.sfp?.label !== "Abandonado" && c.total > 0
+    ).length;
+
+    const municipiosRisco = cidadeStats.filter(c =>
+      c.total > 0 && (c.forca < 10 || c.sfp?.label === "Em Risco" || c.sfp?.label === "Abandonado" || c.tendencia < 0)
+    ).length;
+
+    function getSituacao(c: { forca: number; tendencia: number; indecisos: number; total: number; sfp: ReturnType<typeof calcularSFPSimples>; assessor: AppUser | null }): { emoji: string; label: string; cor: string; recomendacoes: string[] } {
+      if (!c.assessor)
+        return { emoji: "⚫", label: "Sem Cobertura",          cor: "text-white/40",     recomendacoes: ["Designar assessoria regional", "Iniciar mapeamento territorial"] };
+      if (c.forca < 10 || c.sfp?.label === "Em Risco" || c.sfp?.label === "Abandonado" || c.tendencia < -30)
+        return { emoji: "🔴", label: "Intervenção Necessária", cor: "text-red-400",      recomendacoes: ["Reunir assessoria regional", "Reforçar coordenação", "Criar meta de recuperação"] };
+      if (c.forca < 20)
+        return { emoji: "🔴", label: "Base Fragilizada",       cor: "text-red-400",      recomendacoes: ["Reforçar coordenação", "Mapear causas da queda"] };
+      if (c.forca >= 40 && c.tendencia >= 0)
+        return { emoji: "🟢", label: "Domínio Consolidado",    cor: "text-emerald-400",  recomendacoes: ["Expandir bairros estratégicos", "Manter engajamento da base"] };
+      if (c.tendencia > 20)
+        return { emoji: "🟢", label: "Crescimento Forte",      cor: "text-emerald-400",  recomendacoes: ["Intensificar conversão dos indecisos", "Ampliar coordenação"] };
+      return   { emoji: "🟡", label: "Potencial de Conversão", cor: "text-amber-400",    recomendacoes: ["Campanha de conversão direcionada", "Reforçar presença local"] };
+    }
+
+    function getPotencial(c: { indecisos: number; forca: number; tendencia: number }): { label: string; cor: string } {
+      if (c.indecisos > 30 && c.forca >= 25 && c.tendencia > 20) return { label: "🟢 MUITO ALTO POTENCIAL", cor: "text-emerald-400" };
+      if (c.indecisos > 15 && c.forca >= 20)                      return { label: "🟢 ALTO POTENCIAL",       cor: "text-emerald-400" };
+      return                                                               { label: "🟡 POTENCIAL MODERADO",  cor: "text-amber-400"   };
+    }
+
+    const criticas      = cidadeStats.filter(c => c.total > 0 && (c.forca < 10 || c.sfp?.label === "Em Risco" || c.sfp?.label === "Abandonado"));
+    const oportunidades = cidadeStats.filter(c => c.total > 0 && c.indecisos > 0 && c.indecisos / c.total > 0.2);
+
+    const recsPrioridade   = cidadeStats.filter(c => c.total > 0 && (c.forca < 10 || c.tendencia < -30)).slice(0, 3);
+    const recsOportunidade = cidadeStats.filter(c => c.indecisos > 15 && c.forca >= 20).slice(0, 3);
+    const recsExpansao     = cidadeStats.filter(c => !c.assessor).slice(0, 2);
 
     return (
       <div className="space-y-6 animate-in">
+
+        {/* Cabeçalho */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-white">Inteligência Política</h1>
             <p className="text-white/50 text-sm mt-1">
-              Comportamento agregado da base · {cidadeStats.length} {cidadeStats.length === 1 ? "território mapeado" : "territórios mapeados"}
+              Centro de decisão estratégica · {cidadeStats.length} {cidadeStats.length === 1 ? "território mapeado" : "territórios mapeados"}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -230,115 +294,125 @@ export default function RelatoriosPage() {
           </div>
         </div>
 
-        {/* KPIs macro */}
+        {/* KPIs */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <GlassCard className="p-4 text-center">
-            <p className="text-3xl font-bold text-white">{totalBase.toLocaleString("pt-BR")}</p>
-            <p className="text-xs text-white/40 mt-1">Base total</p>
+            <p className={`text-3xl font-bold ${municipiosExpansao > 0 ? "text-emerald-400" : "text-white/30"}`}>{municipiosExpansao}</p>
+            <p className="text-xs text-white/40 mt-1">Municípios em Expansão</p>
+            <p className="text-[10px] text-emerald-400/40 mt-1">crescimento &gt;20%</p>
           </GlassCard>
           <GlassCard className="p-4 text-center">
-            <p className={`text-3xl font-bold ${totalBase > 0 && fortes / totalBase > 0.4 ? "text-emerald-400" : "text-amber-400"}`}>
-              {totalBase > 0 ? Math.round((fortes / totalBase) * 100) : 0}%
+            <p className={`text-3xl font-bold ${municipiosRisco > 0 ? "text-red-400" : "text-white/30"}`}>{municipiosRisco}</p>
+            <p className="text-xs text-white/40 mt-1">Municípios em Risco</p>
+            <p className="text-[10px] text-red-400/40 mt-1">base fraca ou queda</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-3xl font-bold text-blue-400">{indecisos.toLocaleString("pt-BR")}</p>
+            <p className="text-xs text-white/40 mt-1">Eleitores Conversíveis</p>
+            <p className="text-[10px] text-blue-400/40 mt-1">indecisos na base</p>
+          </GlassCard>
+          <GlassCard className="p-4 text-center">
+            <p className="text-3xl font-bold text-amber-400">
+              {cidadesComAssessor}<span className="text-base text-white/30">/{totalCidades}</span>
             </p>
-            <p className="text-xs text-white/40 mt-1">Base forte</p>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <p className="text-3xl font-bold text-blue-400">{indecisos}</p>
-            <p className="text-xs text-white/40 mt-1">Potencial de conversão</p>
-          </GlassCard>
-          <GlassCard className="p-4 text-center">
-            <p className={`text-3xl font-bold ${crescimento30d >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-              {crescimento30d > 0 ? "+" : ""}{crescimento30d}%
-            </p>
-            <p className="text-xs text-white/40 mt-1">Crescimento 30 dias</p>
+            <p className="text-xs text-white/40 mt-1">Cobertura Estratégica</p>
+            <p className="text-[10px] text-amber-400/40 mt-1">municípios com assessor</p>
           </GlassCard>
         </div>
 
-        {/* Alertas estratégicos */}
-        {(estagnadas.length > 0 || criticas.length > 0) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {estagnadas.length > 0 && (
-              <GlassCard className="p-4 border-amber-500/20">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-base">❄️</span>
-                  <h3 className="text-amber-400 font-semibold text-sm">Regiões Estagnadas</h3>
-                  <span className="ml-auto text-xs text-amber-400/60">{estagnadas.length}</span>
-                </div>
-                <div className="space-y-1.5">
-                  {estagnadas.slice(0, 5).map((c) => (
-                    <div key={c.cidade} className="flex justify-between items-center gap-2">
-                      <span className="text-sm text-white/70 truncate">{c.cidade}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-white/40">{c.total} • sem novos</span>
-                        <a
-                          href={`https://wa.me/?text=${encodeURIComponent(`Acionar ${c.cidade}: ${c.total} apoiadores cadastrados, sem novos há 30 dias. Reativar equipe local.`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-base text-green-400/40 hover:text-green-400 transition-colors leading-none"
-                          title="Acionar via WhatsApp"
-                        >📲</a>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </GlassCard>
-            )}
+        {/* Áreas Críticas + Oportunidades */}
+        {(criticas.length > 0 || oportunidades.length > 0) && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
             {criticas.length > 0 && (
-              <GlassCard className="p-4 border-red-500/20">
+              <div>
                 <div className="flex items-center gap-2 mb-3">
-                  <span className="text-base">🔴</span>
-                  <h3 className="text-red-400 font-semibold text-sm">Áreas Críticas</h3>
-                  <span className="ml-auto text-xs text-red-400/60">{criticas.length}</span>
+                  <span className="text-sm">🔴</span>
+                  <h2 className="text-white font-semibold text-sm">Áreas Críticas</h2>
+                  <span className="text-xs text-red-400/60 ml-auto">{criticas.length} {criticas.length === 1 ? "município" : "municípios"}</span>
                 </div>
-                <div className="space-y-1.5">
-                  {criticas.slice(0, 5).map((c) => (
-                    <div key={c.cidade} className="flex justify-between items-center gap-2">
-                      <span className="text-sm text-white/70 truncate">{c.cidade}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-red-400">{c.rejeicao}% rejeição</span>
-                        <a
-                          href={`https://wa.me/?text=${encodeURIComponent(`Área crítica: ${c.cidade} com ${c.rejeicao}% de rejeição. Avaliar estratégia de recuperação territorial.`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-base text-green-400/40 hover:text-green-400 transition-colors leading-none"
-                          title="Acionar via WhatsApp"
-                        >📲</a>
+                <div className="space-y-3">
+                  {criticas.slice(0, 4).map(c => {
+                    const sit = getSituacao(c);
+                    return (
+                      <div key={c.cidade} className="p-4 rounded-xl bg-red-500/[0.05] border border-red-500/15 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="text-white font-semibold">{c.cidade}</p>
+                            <p className={`text-xs font-medium mt-0.5 ${sit.cor}`}>{sit.emoji} {sit.label}</p>
+                          </div>
+                          {c.assessor && (
+                            <div className="text-right shrink-0">
+                              <p className="text-[10px] text-white/25">Assessor(a)</p>
+                              <p className="text-xs text-white/55 font-medium">{c.assessor.nome.split(" ")[0]}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-xs">
+                          <span className={c.forca < 10 ? "text-red-400" : "text-amber-400"}>{c.forca}% forte</span>
+                          {c.indecisos > 0 && <span className="text-blue-400/70">{c.indecisos} indecisos</span>}
+                          {c.tendencia !== 0 && (
+                            <span className={c.tendencia < 0 ? "text-red-400" : "text-emerald-400"}>
+                              {c.tendencia > 0 ? "+" : ""}{c.tendencia}% crescimento
+                            </span>
+                          )}
+                        </div>
+                        <div className="pt-2 border-t border-red-500/10 space-y-1">
+                          <p className="text-[10px] text-white/25 uppercase tracking-wider">Ação recomendada</p>
+                          {sit.recomendacoes.map(r => (
+                            <p key={r} className="text-xs text-red-400/70">→ {r}</p>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </GlassCard>
+              </div>
             )}
+
             {oportunidades.length > 0 && (
-              <GlassCard className="p-4 border-blue-500/20">
+              <div>
                 <div className="flex items-center gap-2 mb-3">
                   <Zap size={14} className="text-blue-400" />
-                  <h3 className="text-blue-400 font-semibold text-sm">Oportunidades Eleitorais</h3>
-                  <span className="ml-auto text-xs text-blue-400/60">{oportunidades.length}</span>
+                  <h2 className="text-white font-semibold text-sm">Oportunidades Eleitorais</h2>
+                  <span className="text-xs text-blue-400/60 ml-auto">{oportunidades.length} {oportunidades.length === 1 ? "município" : "municípios"}</span>
                 </div>
-                <div className="space-y-1.5">
-                  {oportunidades.slice(0, 5).map((c) => (
-                    <div key={c.cidade} className="flex justify-between items-center gap-2">
-                      <span className="text-sm text-white/70 truncate">{c.cidade}</span>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-xs text-blue-400">{c.indecisos} indecisos</span>
-                        <a
-                          href={`https://wa.me/?text=${encodeURIComponent(`Oportunidade em ${c.cidade}: ${c.indecisos} indecisos a converter. Reforçar presença local.`)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-base text-green-400/40 hover:text-green-400 transition-colors leading-none"
-                          title="Acionar via WhatsApp"
-                        >📲</a>
+                <div className="space-y-3">
+                  {oportunidades.slice(0, 4).map(c => {
+                    const pot = getPotencial(c);
+                    return (
+                      <div key={c.cidade} className="p-4 rounded-xl bg-blue-500/[0.05] border border-blue-500/15 space-y-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div>
+                            <p className="text-white font-semibold">{c.cidade}</p>
+                            <p className={`text-xs font-semibold mt-0.5 ${pot.cor}`}>{pot.label}</p>
+                          </div>
+                          <p className="text-2xl font-bold text-blue-400 shrink-0">{c.indecisos}</p>
+                        </div>
+                        <div className="flex flex-wrap gap-3 text-xs">
+                          <span className="text-white/45">{c.indecisos} indecisos</span>
+                          <span className={c.forca >= 30 ? "text-emerald-400" : "text-amber-400"}>{c.forca}% forte</span>
+                          {c.tendencia !== 0 && (
+                            <span className={c.tendencia > 0 ? "text-emerald-400" : "text-red-400"}>
+                              {c.tendencia > 0 ? "+" : ""}{c.tendencia}% crescimento
+                            </span>
+                          )}
+                        </div>
+                        <div className="pt-2 border-t border-blue-500/10 space-y-1">
+                          <p className="text-[10px] text-white/25 uppercase tracking-wider">Ação</p>
+                          <p className="text-xs text-blue-400/70">→ Intensificar conversão dos indecisos</p>
+                          {c.tendencia > 0 && <p className="text-xs text-blue-400/70">→ Campanha segmentada por bairro</p>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
-              </GlassCard>
+              </div>
             )}
           </div>
         )}
 
-        {/* Ranking territorial completo */}
+        {/* Ranking Territorial */}
         {cidadeStats.length > 0 && (
           <GlassCard className="p-5">
             <div className="flex items-center gap-2 mb-4">
@@ -357,57 +431,56 @@ export default function RelatoriosPage() {
                     <th className="text-right py-3 px-2 font-medium">30d</th>
                     <th className="text-right py-3 px-2 font-medium">Tendência</th>
                     <th className="text-left py-3 px-2 font-medium">Força política</th>
+                    <th className="text-left py-3 px-2 font-medium">Situação</th>
                     <th className="py-3 px-2"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {cidadeStats.map((c) => {
-                    const waMsg = c.recentes === 0 && c.total > 5
-                      ? `Território estagnado: ${c.cidade} — ${c.total} apoiadores sem novos cadastros há 30 dias. Reativar equipe local.`
-                      : c.rejeicao > 60
-                        ? `Área crítica: ${c.cidade} — ${c.rejeicao}% de rejeição. Avaliar estratégia de recuperação territorial.`
-                        : c.total > 0 && c.indecisos / c.total > 0.2
-                          ? `Oportunidade em ${c.cidade}: ${c.indecisos} indecisos a converter. Reforçar presença local.`
-                          : `Briefing ${c.cidade}: ${c.total} apoiadores · ${c.forca}% força política${c.recentes > 0 ? ` · +${c.recentes} cadastros em 30 dias` : ""}.`;
+                    const sit = getSituacao(c);
                     return (
-                    <tr key={c.cidade} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
-                      <td className="py-3 px-2 text-white/80 font-medium">{c.cidade}</td>
-                      <td className="py-3 px-2 text-white/60 text-right">{c.total}</td>
-                      <td className="py-3 px-2 text-emerald-400 text-right">{c.fortes}</td>
-                      <td className="py-3 px-2 text-blue-400 text-right">{c.indecisos}</td>
-                      <td className="py-3 px-2 text-right">
-                        <span className={`text-xs ${c.recentes > 0 ? "text-emerald-400" : "text-white/30"}`}>
-                          {c.recentes > 0 ? `+${c.recentes}` : "—"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 text-right">
-                        <span className={`text-xs font-medium ${c.tendencia > 0 ? "text-emerald-400" : c.tendencia < 0 ? "text-red-400" : "text-white/30"}`}>
-                          {c.tendencia > 0 ? `+${c.tendencia}%` : c.tendencia < 0 ? `${c.tendencia}%` : "—"}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-20 bg-white/[0.04] rounded-full h-1.5">
-                            <div
-                              className={`h-1.5 rounded-full ${c.forca >= 40 ? "bg-emerald-500" : c.forca >= 20 ? "bg-amber-500" : "bg-red-500"}`}
-                              style={{ width: `${c.forca}%` }}
-                            />
-                          </div>
-                          <span className={`text-xs ${c.forca >= 40 ? "text-emerald-400" : c.forca >= 20 ? "text-amber-400" : "text-red-400"}`}>
-                            {c.forca}%
+                      <tr key={c.cidade} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                        <td className="py-3 px-2 text-white/80 font-medium">{c.cidade}</td>
+                        <td className="py-3 px-2 text-white/60 text-right">{c.total}</td>
+                        <td className="py-3 px-2 text-emerald-400 text-right">{c.fortes}</td>
+                        <td className="py-3 px-2 text-blue-400 text-right">{c.indecisos}</td>
+                        <td className="py-3 px-2 text-right">
+                          <span className={`text-xs ${c.recentes > 0 ? "text-emerald-400" : "text-white/30"}`}>
+                            {c.recentes > 0 ? `+${c.recentes}` : "—"}
                           </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-2">
-                        <a
-                          href={`https://wa.me/?text=${encodeURIComponent(waMsg)}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-base text-green-400/30 hover:text-green-400 transition-colors leading-none"
-                          title="Acionar via WhatsApp"
-                        >📲</a>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="py-3 px-2 text-right">
+                          <span className={`text-xs font-medium ${c.tendencia > 0 ? "text-emerald-400" : c.tendencia < 0 ? "text-red-400" : "text-white/30"}`}>
+                            {c.tendencia > 0 ? `+${c.tendencia}%` : c.tendencia < 0 ? `${c.tendencia}%` : "—"}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 bg-white/[0.04] rounded-full h-1.5">
+                              <div
+                                className={`h-1.5 rounded-full ${c.forca >= 40 ? "bg-emerald-500" : c.forca >= 20 ? "bg-amber-500" : "bg-red-500"}`}
+                                style={{ width: `${c.forca}%` }}
+                              />
+                            </div>
+                            <span className={`text-xs ${c.forca >= 40 ? "text-emerald-400" : c.forca >= 20 ? "text-amber-400" : "text-red-400"}`}>
+                              {c.forca}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-2">
+                          <span className={`text-xs font-medium whitespace-nowrap ${sit.cor}`}>
+                            {sit.emoji} {sit.label}
+                          </span>
+                        </td>
+                        <td className="py-3 px-2">
+                          <button
+                            onClick={() => setModalData({ ...c, situacao: sit })}
+                            className="text-xs text-white/25 hover:text-violet-400 transition-colors whitespace-nowrap"
+                          >
+                            Ver análise →
+                          </button>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>
@@ -415,6 +488,165 @@ export default function RelatoriosPage() {
             </div>
           </GlassCard>
         )}
+
+        {/* Recomendações Estratégicas */}
+        {(recsPrioridade.length > 0 || recsOportunidade.length > 0 || recsExpansao.length > 0) && (
+          <div>
+            <h2 className="text-white font-semibold mb-4 flex items-center gap-2">
+              <span>⭐</span><span>Recomendações Estratégicas</span>
+            </h2>
+            <div className="space-y-3">
+              {recsPrioridade.map(c => {
+                const sit = getSituacao(c);
+                return (
+                  <div key={`p-${c.cidade}`} className="p-4 rounded-xl bg-red-500/[0.05] border border-red-500/20">
+                    <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">🔴 PRIORIDADE MÁXIMA</p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1 min-w-0">
+                        <p className="text-white font-semibold truncate">{c.cidade}</p>
+                        {c.assessor && <p className="text-xs text-white/35">Assessor(a): <span className="text-white/55">{c.assessor.nome.split(" ")[0]}</span></p>}
+                        <div className="flex gap-3 text-xs">
+                          <span className="text-red-400">{c.forca}% forte</span>
+                          {c.tendencia < 0 && <span className="text-red-400/70">{c.tendencia}% crescimento</span>}
+                        </div>
+                      </div>
+                      <div className="space-y-1 shrink-0 text-right">
+                        {sit.recomendacoes.map(r => (
+                          <p key={r} className="text-xs text-red-400/60">→ {r}</p>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {recsOportunidade.map(c => (
+                <div key={`o-${c.cidade}`} className="p-4 rounded-xl bg-amber-500/[0.05] border border-amber-500/20">
+                  <p className="text-xs font-bold text-amber-400 uppercase tracking-wider mb-3">🟡 OPORTUNIDADE</p>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1 min-w-0">
+                      <p className="text-white font-semibold truncate">{c.cidade}</p>
+                      <div className="flex gap-3 text-xs">
+                        <span className="text-blue-400">{c.indecisos} indecisos</span>
+                        <span className="text-emerald-400">{c.forca}% forte</span>
+                      </div>
+                    </div>
+                    <div className="space-y-1 shrink-0 text-right">
+                      <p className="text-xs text-amber-400/60">→ Campanha de conversão</p>
+                      <p className="text-xs text-amber-400/60">→ Reforçar presença local</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {recsExpansao.map(c => (
+                <div key={`e-${c.cidade}`} className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.07]">
+                  <p className="text-xs font-bold text-white/40 uppercase tracking-wider mb-3">⚫ EXPANSÃO</p>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1 min-w-0">
+                      <p className="text-white font-semibold truncate">{c.cidade}</p>
+                      <p className="text-xs text-white/30">{c.total} apoiadores · sem assessoria</p>
+                    </div>
+                    <div className="space-y-1 shrink-0 text-right">
+                      <p className="text-xs text-white/35">→ Designar assessoria regional</p>
+                      <p className="text-xs text-white/35">→ Iniciar mapeamento territorial</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Modal de análise territorial */}
+        {modalData && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+            onClick={() => setModalData(null)}
+          >
+            <div
+              className="w-full max-w-md bg-[#0f1117] border border-white/[0.10] rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-5 space-y-4 max-h-[85vh] overflow-y-auto">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className={`text-xs font-medium uppercase tracking-wider mb-1 ${modalData.situacao.cor}`}>
+                      {modalData.situacao.emoji} {modalData.situacao.label}
+                    </p>
+                    <h3 className="text-xl font-bold text-white">{modalData.cidade}</h3>
+                  </div>
+                  <button onClick={() => setModalData(null)} className="text-white/30 hover:text-white/70 transition-colors mt-0.5 shrink-0">
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                    <p className="text-xl font-bold text-white">{modalData.total}</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">apoiadores</p>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                    <p className="text-xl font-bold text-emerald-400">{modalData.fortes}</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">fortes</p>
+                  </div>
+                  <div className="text-center p-3 rounded-xl bg-white/[0.03]">
+                    <p className="text-xl font-bold text-blue-400">{modalData.indecisos}</p>
+                    <p className="text-[10px] text-white/30 mt-0.5">indecisos</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 text-xs px-1">
+                  <span className={`font-medium ${modalData.tendencia > 0 ? "text-emerald-400" : modalData.tendencia < 0 ? "text-red-400" : "text-white/30"}`}>
+                    {modalData.tendencia > 0 ? `+${modalData.tendencia}%` : modalData.tendencia < 0 ? `${modalData.tendencia}%` : "—"} crescimento 30d
+                  </span>
+                  <span className="text-white/20">·</span>
+                  <span className={modalData.forca >= 40 ? "text-emerald-400" : modalData.forca >= 20 ? "text-amber-400" : "text-red-400"}>
+                    {modalData.forca}% forte
+                  </span>
+                </div>
+
+                {modalData.assessor && (
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.03]">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                      {modalData.assessor.nome.charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-sm text-white/75 font-medium">{modalData.assessor.nome}</p>
+                      <p className="text-[10px] text-white/30">Assessor(a) regional</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="pt-1 border-t border-white/[0.06] space-y-2">
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider">Recomendações</p>
+                  {modalData.situacao.recomendacoes.map(r => (
+                    <div key={r} className="flex items-center gap-2.5 text-xs text-white/55">
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        modalData.situacao.cor === "text-emerald-400" ? "bg-emerald-400" :
+                        modalData.situacao.cor === "text-amber-400"  ? "bg-amber-400"   :
+                        modalData.situacao.cor === "text-red-400"    ? "bg-red-400"     : "bg-white/30"
+                      }`} />
+                      {r}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-1 border-t border-white/[0.06] space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-white/30 uppercase tracking-wider">Próximas Ações</p>
+                    <span className="text-[9px] text-white/15 italic">Fase 2</span>
+                  </div>
+                  {["Reunir assessor", "Criar meta territorial", "Reforçar coordenação", "Expandir município"].map(acao => (
+                    <label key={acao} className="flex items-center gap-2.5 text-xs text-white/35 cursor-not-allowed select-none">
+                      <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
+                      {acao}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     );
   }

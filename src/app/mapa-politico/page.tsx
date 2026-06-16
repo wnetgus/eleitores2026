@@ -11,9 +11,8 @@ import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
 import { calcularSFPSimples, calcularIC } from "@/lib/inteligencia";
 import {
-  ChevronDown, ChevronRight, Users, Target, Zap, Map as MapIcon,
+  ChevronDown, ChevronRight, Users, Target, Zap, BarChart3,
   Building2, Globe, MapPin, TrendingUp, Mail, Shield, AlertTriangle,
-  ArrowUpRight, ArrowDownRight, Minus, BarChart3, ExternalLink,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -23,14 +22,14 @@ function getStatus(ultimaData: any): { label: string; color: string; dot: string
   if (!ultimaData) return { label: "Sem dados", color: "text-gray-400", dot: "bg-gray-400" };
   const data = ultimaData?.seconds ? new Date(ultimaData.seconds * 1000) : new Date(ultimaData);
   const dias = (Date.now() - data.getTime()) / (1000 * 60 * 60 * 24);
-  if (dias <= 3) return { label: "Ativo",         color: "text-emerald-400", dot: "bg-emerald-400" };
-  if (dias <= 7) return { label: "Baixa atividade", color: "text-amber-400", dot: "bg-amber-400" };
-  return              { label: "Inativo",          color: "text-red-400",    dot: "bg-red-400" };
+  if (dias <= 3) return { label: "Ativo",           color: "text-emerald-400", dot: "bg-emerald-400" };
+  if (dias <= 7) return { label: "Baixa atividade", color: "text-amber-400",   dot: "bg-amber-400"   };
+  return              { label: "Inativo",            color: "text-red-400",     dot: "bg-red-400"     };
 }
 
 function calcularCrescimento(el: Eleitor[]): string {
   const agora = Date.now();
-  const recentes  = el.filter(e => parseDate(e.criadoEm).getTime() > agora - 7  * 864e5).length;
+  const recentes   = el.filter(e => parseDate(e.criadoEm).getTime() > agora - 7  * 864e5).length;
   const anteriores = el.filter(e => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 14 * 864e5 && t <= agora - 7 * 864e5; }).length;
   if (anteriores === 0) return recentes > 0 ? "+100%" : "0%";
   const pct = Math.round(((recentes - anteriores) / anteriores) * 100);
@@ -53,255 +52,220 @@ function CardPessoa({ nome, email, role, contexto }: { nome: string; email?: str
   );
 }
 
-// ─── Nucleo card (deputado view) ───────────────────────────────────────────────
+// ─── Score Territorial ─────────────────────────────────────────────────────────
+// Fórmula: 40 pts qualidade (SFP) + 25 pts crescimento (IC) + 20 pts cobertura + 15 pts atividade recente
+// Projetado para evoluir sem refatoração: apenas adicionar campos ao objeto retornado por cidadesStats.
 
-type Nucleo = {
-  g: Gabinete;
-  el: Eleitor[];
-  coords: AppUser[];
-  colabs: AppUser[];
-  assessoresDaBase: AppUser[];
+function calcularScoreTerritorial({
+  sfp, ic, temAssessor, temCoordenador, recentes30, totalEleitores,
+}: {
   sfp: ReturnType<typeof calcularSFPSimples>;
   ic: ReturnType<typeof calcularIC>;
-  status: ReturnType<typeof getStatus>;
-  cidade: string;
-  estado: string;
-};
-
-function NucleoCard({
-  nucleo, expanded, onToggle, usuarios,
-}: { nucleo: Nucleo; expanded: boolean; onToggle: () => void; usuarios: AppUser[] }) {
-  const { g, el, coords, colabs, assessoresDaBase, sfp, ic, status, cidade, estado } = nucleo;
-  const [coordsOpen, setCoordsOpen] = useState<Record<string, boolean>>({});
-  const fortes = el.filter(e => e.grauApoio === "forte").length;
-  const apoioForte = el.length > 0 ? Math.round((fortes / el.length) * 100) : 0;
-
-  return (
-    <div className="border border-white/[0.08] rounded-2xl overflow-hidden transition-all hover:border-white/[0.14]">
-      {/* Cabeçalho clicável */}
-      <button onClick={onToggle} className="w-full p-4 bg-white/[0.02] hover:bg-white/[0.04] transition-all text-left">
-        {/* Cidade + estado + status */}
-        <div className="flex items-center gap-2 mb-2.5">
-          <MapPin size={13} className="text-amber-400 shrink-0" />
-          <span className="text-white/90 font-semibold text-sm">{cidade}</span>
-          {estado !== "—" && <span className="text-white/30 text-xs">{estado}</span>}
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${status.dot}`} />
-            <span className={`text-[10px] ${status.color}`}>{status.label}</span>
-          </div>
-        </div>
-
-        {/* Político */}
-        <div className="flex items-center gap-2.5 mb-3.5">
-          <div className="w-9 h-9 rounded-xl flex items-center justify-center text-white text-sm font-bold shrink-0"
-            style={{ background: g.corPrincipal || "#059669" }}>
-            {(g.politicoNome || g.nome).charAt(0)}
-          </div>
-          <div className="min-w-0">
-            <p className="text-white font-semibold text-sm truncate">{g.politicoNome || g.nome}</p>
-            <p className="text-white/40 text-xs truncate capitalize">
-              {g.cargo}{g.politicoPartido ? ` • ${g.politicoPartido}` : ""}
-              {g.politicoNumero ? ` • ${g.politicoNumero}` : ""}
-            </p>
-          </div>
-          <span className="ml-auto text-white/20">{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-        </div>
-
-        {/* Métricas em grid */}
-        <div className="grid grid-cols-3 gap-2 mb-3">
-          <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-            <p className="text-white font-bold text-base leading-tight">{el.length.toLocaleString("pt-BR")}</p>
-            <p className="text-white/40 text-[10px] mt-0.5">Eleitores</p>
-          </div>
-          <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-            <p className="text-white font-bold text-base leading-tight">{coords.length}</p>
-            <p className="text-white/40 text-[10px] mt-0.5">Coord.</p>
-          </div>
-          <div className="bg-white/[0.04] rounded-xl p-2.5 text-center">
-            <p className="text-white font-bold text-base leading-tight">{colabs.length}</p>
-            <p className="text-white/40 text-[10px] mt-0.5">Militantes</p>
-          </div>
-        </div>
-
-        {/* SFP + crescimento */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {sfp ? (
-            <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${sfp.bg} ${sfp.cor}`}>
-              SFP {sfp.label}
-            </span>
-          ) : (
-            <span className="text-xs px-2.5 py-0.5 rounded-full font-medium bg-white/5 text-white/30">
-              SFP — poucos dados
-            </span>
-          )}
-          {ic ? (
-            <span className={`text-xs font-semibold ml-auto ${ic.cor}`}>
-              {ic.seta} {ic.label}
-            </span>
-          ) : (
-            <span className="text-xs text-white/30 ml-auto">{calcularCrescimento(el)}</span>
-          )}
-        </div>
-
-        {/* Barra de conversão */}
-        {el.length > 0 && (
-          <div className="flex items-center gap-2 mt-2.5 text-xs">
-            <span className="text-white/30">Apoio Forte</span>
-            <div className="flex-1 h-1 bg-white/10 rounded-full overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all" style={{ width: `${apoioForte}%` }} />
-            </div>
-            <span className="text-emerald-400 font-medium">{apoioForte}%</span>
-          </div>
-        )}
-      </button>
-
-      {/* Expansão: equipe operacional */}
-      {expanded && (
-        <div className="border-t border-white/[0.06] p-4 space-y-3 bg-white/[0.01]">
-          {assessoresDaBase.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-purple-400 mb-1.5 flex items-center gap-1">
-                <Shield size={11} /> Assessores ({assessoresDaBase.length})
-              </p>
-              <div className="space-y-1">
-                {assessoresDaBase.map(a => (
-                  <CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor"
-                    contexto={`Assessor(a) • ${g.cargo} ${g.nome}`} />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {coords.length > 0 && (
-            <div>
-              <p className="text-xs font-semibold text-blue-400 mb-1.5 flex items-center gap-1">
-                <Target size={11} /> Coordenadores ({coords.length})
-              </p>
-              <div className="space-y-1">
-                {coords.map(c => {
-                  const colsDoCoord = usuarios.filter(u => u.role === "colaborador" && u.coordenadorId === c.uid);
-                  return (
-                    <div key={c.uid}>
-                      <button onClick={() => setCoordsOpen(p => ({ ...p, [c.uid]: !p[c.uid] }))}
-                        className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] text-left text-sm transition-all">
-                        <span className="text-white/30">{coordsOpen[c.uid] ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
-                        <div className="w-6 h-6 rounded-lg bg-blue-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{c.nome.charAt(0)}</div>
-                        <span className="text-white/80 flex-1 truncate text-xs">{c.nome}</span>
-                        <span className="text-white/30 text-[10px] shrink-0">{colsDoCoord.length} militantes</span>
-                      </button>
-                      {coordsOpen[c.uid] && (
-                        <div className="ml-7 mt-1 space-y-1">
-                          {colsDoCoord.map(col => (
-                            <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador"
-                              contexto={`Militante • Coord. ${c.nome}`} />
-                          ))}
-                          {colsDoCoord.length === 0 && <p className="text-xs text-white/30 italic pl-2">Nenhum militante</p>}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {assessoresDaBase.length === 0 && coords.length === 0 && colabs.length === 0 && (
-            <p className="text-xs text-white/30 italic">Nenhuma equipe registrada nesta base</p>
-          )}
-        </div>
-      )}
-    </div>
-  );
+  temAssessor: boolean;
+  temCoordenador: boolean;
+  recentes30: number;
+  totalEleitores: number;
+}): number {
+  const ptsSFP = sfp ? Math.min(40, Math.round((sfp.score / 3.0) * 40)) : 0;
+  const ptsCrescimento = ic
+    ? Math.round(((Math.max(-100, Math.min(100, ic.variacao)) + 100) / 200) * 25)
+    : totalEleitores > 0 ? 12 : 0;
+  const ptsCobertura = (temAssessor ? 10 : 0) + (temCoordenador ? 10 : 0);
+  const ptsAtividade = totalEleitores > 0
+    ? Math.min(15, Math.round((recentes30 / Math.max(totalEleitores * 0.1, 1)) * 15))
+    : 0;
+  return Math.min(100, ptsSFP + ptsCrescimento + ptsCobertura + ptsAtividade);
 }
 
-// ─── View Executiva Territorial (deputado federal) ─────────────────────────────
+// ─── IC 30 dias — mesma janela de dashboard e assessores ──────────────────────
 
-function ViewExecutiva({
-  gAtual, gabinetes, eleitores, usuarios, router,
+function calcularIC30d(el: Eleitor[], agora: number) {
+  const atual    = el.filter(e => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
+  const anterior = el.filter(e => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
+  if (atual === 0 && anterior === 0) return null;
+  const variacao = anterior === 0 ? (atual > 0 ? 100 : 0) : Math.round(((atual - anterior) / anterior) * 100);
+  if (variacao > 25)  return { atual, anterior, variacao, label: `+${variacao}% vs 30d anterior`, direcao: "acelerando" as const, cor: "text-emerald-400", seta: "↗" };
+  if (variacao > 5)   return { atual, anterior, variacao, label: `+${variacao}% vs 30d anterior`, direcao: "crescendo"  as const, cor: "text-emerald-400", seta: "↗" };
+  if (variacao >= -5) return { atual, anterior, variacao, label: "Estável",                        direcao: "estavel"    as const, cor: "text-white/50",    seta: "→" };
+  if (variacao >= -25)return { atual, anterior, variacao, label: `${variacao}% vs 30d anterior`,  direcao: "retraindo"  as const, cor: "text-amber-400",   seta: "↘" };
+  return               { atual, anterior, variacao, label: `${variacao}% vs 30d anterior`,  direcao: "queda"      as const, cor: "text-red-400",     seta: "⬇" };
+}
+
+// ─── View Força Territorial (deputado) ─────────────────────────────────────────
+
+function ViewForcaTerritorial({
+  gAtual, gabinetes, eleitores, usuarios,
 }: {
   gAtual: Gabinete;
   gabinetes: Gabinete[];
   eleitores: Eleitor[];
   usuarios: AppUser[];
-  router: ReturnType<typeof useRouter>;
 }) {
-  const [sortBy, setSortBy] = useState<"eleitores" | "crescimento" | "sfp">("eleitores");
-  const [nucleoExpanded, setNucleoExpanded] = useState<Record<string, boolean>>({});
+  const [sortBy, setSortBy] = useState<"score" | "forca" | "crescimento" | "risco">("score");
+  const agora = useMemo(() => Date.now(), []);
 
-  const meuGabId = gAtual.id!;
-  const bases = useMemo(() =>
-    gabinetes.filter(g => g.parentGabineteId === meuGabId && g.ativo),
-    [gabinetes, meuGabId]
-  );
+  const assessores  = useMemo(() => usuarios.filter(u => u.role === "assessor"),     [usuarios]);
+  const coordenadores = useMemo(() => usuarios.filter(u => u.role === "coordenador"), [usuarios]);
 
-  const nucleos: Nucleo[] = useMemo(() => {
-    return bases.map(g => {
-      const el = eleitores.filter(e => e.campanhaId === g.id);
-      const coords = usuarios.filter(u => u.role === "coordenador" && (u.campanhaId === g.id || u.gabineteId === g.id));
-      const colabs = usuarios.filter(u => u.role === "colaborador" && (u.campanhaId === g.id || u.gabineteId === g.id));
-      const assessoresDaBase = usuarios.filter(u => u.role === "assessor" && (u.gabineteId === g.id || u.campanhaId === g.id));
-      const sfp = calcularSFPSimples(el);
-      const ic = calcularIC(el);
-      const sorted = [...el].sort((a, b) => parseDate(b.criadoEm).getTime() - parseDate(a.criadoEm).getTime());
-      const status = getStatus(sorted[0]?.criadoEm ?? null);
-      const cidade = g.cidade || el.find(e => e.cidade)?.cidade || "—";
-      const estado = g.estado || el.find(e => e.estado)?.estado || "—";
-      return { g, el, coords, colabs, assessoresDaBase, sfp, ic, status, cidade, estado };
+  // cidadesStats — unidade: município (nível 1).
+  // Estrutura preparada para expansão futura: adicionar campos `territorio` e `bairros[]`
+  // sem refatoração completa (territorioStats herda este shape).
+  const cidadesStats = useMemo(() => {
+    const todasCidades = new Set([
+      ...eleitores.map(e => e.cidade).filter(Boolean),
+      ...assessores.flatMap(a => (a.cidades ?? [])).filter(Boolean),
+    ] as string[]);
+
+    return [...todasCidades].map(cidade => {
+      const el          = eleitores.filter(e => e.cidade === cidade);
+      const assessor    = assessores.find(a => (a.cidades ?? []).includes(cidade)) ?? null;
+      const coords      = coordenadores.filter(c => c.cidadePrincipal === cidade || c.cidade === cidade);
+      const sfp         = calcularSFPSimples(el);
+      const ic          = calcularIC30d(el, agora);
+      const recentes30  = el.filter(e => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
+      const fortes      = el.filter(e => e.grauApoio === "forte").length;
+      const pctForte    = el.length > 0 ? Math.round((fortes / el.length) * 100) : 0;
+      const temAssessor    = !!assessor;
+      const temCoordenador = coords.length > 0;
+      const scoreT = calcularScoreTerritorial({ sfp, ic, temAssessor, temCoordenador, recentes30, totalEleitores: el.length });
+      return {
+        cidade,
+        // territorio: null,  // futuro nível 2 — ex: "Zona Norte / Zona Sul"
+        // bairros: [] as string[], // futuro nível 3 — ex: ["Boa Viagem", "Imbiribeira"]
+        eleitoresData: el,
+        assessor,
+        coordenadoresData: coords,
+        sfp,
+        ic,
+        recentes30,
+        pctForte,
+        temAssessor,
+        temCoordenador,
+        scoreT,
+      };
     });
-  }, [bases, eleitores, usuarios]);
+  }, [eleitores, assessores, coordenadores, agora]);
 
-  const nucleosSorted = useMemo(() => {
-    return [...nucleos].sort((a, b) => {
-      if (sortBy === "crescimento") return (b.ic?.variacao ?? -999) - (a.ic?.variacao ?? -999);
-      if (sortBy === "sfp")        return (b.sfp?.score ?? 0) - (a.sfp?.score ?? 0);
-      return b.el.length - a.el.length; // "eleitores"
+  const cidadesSorted = useMemo(() => {
+    const lista = [...cidadesStats];
+    if (sortBy === "score")       return lista.sort((a, b) => b.scoreT - a.scoreT);
+    if (sortBy === "forca")       return lista.sort((a, b) => (b.sfp?.score ?? 0) - (a.sfp?.score ?? 0));
+    if (sortBy === "crescimento") return lista.sort((a, b) => (b.ic?.variacao ?? -999) - (a.ic?.variacao ?? -999));
+    return lista.sort((a, b) => {
+      const rA = (!a.temAssessor ? 2 : !a.temCoordenador ? 1 : 0) + (a.ic?.direcao === "queda" || a.ic?.direcao === "retraindo" ? 1 : 0);
+      const rB = (!b.temAssessor ? 2 : !b.temCoordenador ? 1 : 0) + (b.ic?.direcao === "queda" || b.ic?.direcao === "retraindo" ? 1 : 0);
+      return rB - rA || b.eleitoresData.length - a.eleitoresData.length;
     });
-  }, [nucleos, sortBy]);
+  }, [cidadesStats, sortBy]);
 
-  // KPIs globais (próprios + bases)
-  const totalEleitoresGlobal = eleitores.length;
-  const cidadesAlcancadas    = useMemo(() => new Set(eleitores.map(e => e.cidade).filter(Boolean)).size, [eleitores]);
-  const basesAtivas          = useMemo(() => nucleos.filter(n => n.status.label === "Ativo").length, [nucleos]);
-  const icGlobal             = useMemo(() => calcularIC(eleitores), [eleitores]);
-  const sfpGlobal            = useMemo(() => calcularSFPSimples(eleitores), [eleitores]);
+  // KPIs globais
+  const icGlobal      = useMemo(() => calcularIC30d(eleitores, agora), [eleitores, agora]);
+  const sfpGlobal     = useMemo(() => calcularSFPSimples(eleitores), [eleitores]);
+  const municipiosCobertos = cidadesStats.filter(c => c.eleitoresData.length > 0).length;
+  const assessoresAtivos   = useMemo(() =>
+    assessores.filter(a => {
+      const el = eleitores.filter(e => (a.cidades ?? []).includes(e.cidade));
+      return el.some(e => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000);
+    }).length,
+  [assessores, eleitores, agora]);
 
-  // Equipe direta do deputado
-  const meusAssessores  = useMemo(() => usuarios.filter(u => u.role === "assessor"     && (u.gabineteId === meuGabId || u.campanhaId === meuGabId)), [usuarios, meuGabId]);
-  const meusCoordenadores = useMemo(() => usuarios.filter(u => u.role === "coordenador" && (u.gabineteId === meuGabId || u.campanhaId === meuGabId)), [usuarios, meuGabId]);
-  const [equipeDiretaOpen, setEquipeDiretaOpen] = useState(false);
-  const [coordEquipOpen, setCoordEquipOpen] = useState<Record<string, boolean>>({});
-
-  // Alertas automáticos
+  // Alertas estratégicos
   const alertas = useMemo(() => {
-    const list: { tipo: "danger" | "warn"; msg: string }[] = [];
-    const semEleitores = nucleos.filter(n => n.el.length === 0);
-    const emQueda = nucleos.filter(n => n.ic && (n.ic.direcao === "queda" || n.ic.direcao === "retraindo"));
-    const semAtividade = nucleos.filter(n => n.status.label === "Inativo" && n.el.length > 0);
-    if (semEleitores.length > 0) list.push({ tipo: "warn",   msg: `${semEleitores.length} ${semEleitores.length === 1 ? "base sem" : "bases sem"} eleitores cadastrados` });
-    if (emQueda.length > 0)      list.push({ tipo: "danger", msg: `${emQueda.length} ${emQueda.length === 1 ? "base com queda" : "bases com queda"} de cadastros esta semana` });
-    if (semAtividade.length > 0) list.push({ tipo: "warn",   msg: `${semAtividade.length} ${semAtividade.length === 1 ? "base inativa" : "bases inativas"} nos últimos 7 dias` });
-    return list;
-  }, [nucleos]);
+    const criticos:     { msg: string; link?: string; linkLabel?: string }[] = [];
+    const atencao:      { msg: string; link?: string; linkLabel?: string }[] = [];
+    const oportunidades: { msg: string }[] = [];
+
+    const semAssessor = cidadesStats.filter(c => !c.temAssessor && c.eleitoresData.length > 0);
+    if (semAssessor.length > 0)
+      criticos.push({
+        msg: `${semAssessor.length} ${semAssessor.length === 1 ? "município com eleitores sem assessoria regional" : "municípios com eleitores sem assessoria regional"}`,
+        link: `/assessores?acao=expandir&municipios=${semAssessor.map(c => encodeURIComponent(c.cidade)).join(",")}`,
+        linkLabel: "Designar assessoria",
+      });
+
+    const emQueda = cidadesStats.filter(c => c.ic?.direcao === "queda" || c.ic?.direcao === "retraindo");
+    if (emQueda.length > 0)
+      criticos.push({ msg: `${emQueda.length} ${emQueda.length === 1 ? "município" : "municípios"} com queda de cadastros (${emQueda.map(c => c.cidade).join(", ")})` });
+
+    const semCoord = cidadesStats.filter(c => c.temAssessor && !c.temCoordenador);
+    if (semCoord.length > 0) {
+      const alertaEstrutura = semCoord
+        .map(c => `${encodeURIComponent(c.cidade)}|${encodeURIComponent(c.assessor?.nome ?? "")}`)
+        .join(",");
+      atencao.push({
+        msg: `${semCoord.length} ${semCoord.length === 1 ? "município com assessor mas sem coordenação ativa" : "municípios com assessor mas sem coordenação ativa"}`,
+        link: `/coordenadores?alertaEstrutura=${alertaEstrutura}`,
+        linkLabel: "Ver coordenadores",
+      });
+    }
+
+    const assessSemAtiv = assessores.filter(a => {
+      const el = eleitores.filter(e => (a.cidades ?? []).includes(e.cidade));
+      return el.length > 0 && !el.some(e => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000);
+    });
+    if (assessSemAtiv.length > 0)
+      atencao.push({
+        msg: `${assessSemAtiv.length} ${assessSemAtiv.length === 1 ? "assessoria sem cadastros" : "assessorias sem cadastros"} nos últimos 30 dias`,
+        link: "/assessores", linkLabel: "Ver assessores",
+      });
+
+    const acelerando = cidadesStats.filter(c => (c.ic?.direcao === "acelerando" || c.ic?.direcao === "crescendo") && c.eleitoresData.length >= 10);
+    if (acelerando.length > 0)
+      oportunidades.push({ msg: `${acelerando.length} ${acelerando.length === 1 ? "município" : "municípios"} em crescimento acelerado — considere ampliar a coordenação` });
+
+    return { criticos, atencao, oportunidades };
+  }, [cidadesStats, assessores, eleitores, agora]);
+
+  // Desempenho das assessorias — mesma lógica de statsExec da aba /assessores
+  const assessoriasStats = useMemo(() => {
+    return assessores.map(a => {
+      const meusCoords    = coordenadores.filter(c => c.assessorId === a.uid);
+      const coordIds      = new Set(meusCoords.map(c => c.uid));
+      const meusEl        = eleitores.filter(e => coordIds.has(e.coordenadorId));
+      const totalEleitores = meusEl.length;
+      const fortes        = meusEl.filter(e => e.grauApoio === "forte").length;
+      const forca         = totalEleitores > 0 ? Math.round((fortes / totalEleitores) * 100) : 0;
+      const recentes30    = meusEl.filter(e => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
+      const prev30        = meusEl.filter(e => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
+      const tendencia     = prev30 > 0 ? Math.round(((recentes30 - prev30) / prev30) * 100) : recentes30 > 0 ? 100 : 0;
+      const badge = (() => {
+        if (totalEleitores === 0 && meusCoords.length === 0) return { label: "🔴 Sem Base",           text: "text-red-400"     };
+        if (totalEleitores === 0 && meusCoords.length > 0)  return { label: "🔴 Estrutura Parada",   text: "text-red-400"     };
+        if (totalEleitores > 0 && recentes30 === 0)          return { label: "🔴 Estrutura Parada",   text: "text-red-400"     };
+        if (totalEleitores > 0 && recentes30 > 0 && tendencia >= 10 && forca >= 35) return { label: "🟢 Expansão Forte",    text: "text-emerald-400" };
+        if (totalEleitores > 0 && recentes30 > 0 && forca >= 20)                    return { label: "🟢 Operação Saudável",  text: "text-emerald-400" };
+        return { label: "🟡 Crescimento Baixo", text: "text-amber-400" };
+      })();
+      const diagnostico = (() => {
+        if (totalEleitores === 0 && meusCoords.length === 0) return "Sem estrutura montada";
+        if (totalEleitores === 0 && meusCoords.length > 0)  return "Estrutura sem produção";
+        if (totalEleitores > 0 && recentes30 === 0)          return "Sem novos cadastros nos últimos 30 dias";
+        if (totalEleitores > 0 && recentes30 > 0 && tendencia < -25) return "Queda significativa de atividade";
+        if (forca < 15 && totalEleitores >= 10)              return "Base pouco consolidada";
+        if (totalEleitores > 0 && recentes30 > 0 && forca >= 30) return "Estrutura completa";
+        return null as string | null;
+      })();
+      return { uid: a.uid, nome: a.nome, cidades: a.cidades ?? [], totalEleitores, totalCoords: meusCoords.length, forca, recentes30, tendencia, badge, diagnostico };
+    }).sort((a, b) => b.totalEleitores - a.totalEleitores || b.forca - a.forca);
+  }, [assessores, coordenadores, eleitores, agora]);
 
   return (
     <div className="space-y-6">
 
-      {/* ── KPI BAR ── */}
+      {/* ── 1. KPIs ── */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <GlassCard className="p-4 text-center">
-          <p className="text-2xl font-bold text-white">{totalEleitoresGlobal.toLocaleString("pt-BR")}</p>
-          <p className="text-xs text-white/40 mt-0.5">Eleitores</p>
-          <p className="text-[10px] text-white/20 mt-1">total da coalizão</p>
+          <p className="text-2xl font-bold text-white">{eleitores.length.toLocaleString("pt-BR")}</p>
+          <p className="text-xs text-white/40 mt-0.5">Apoiadores</p>
+          <p className="text-[10px] text-white/20 mt-1">base do mandato</p>
         </GlassCard>
 
         <GlassCard className="p-4 text-center">
           {icGlobal ? (
             <>
-              <p className={`text-2xl font-bold ${icGlobal.cor}`}>
-                {icGlobal.variacao > 0 ? "+" : ""}{icGlobal.variacao}%
-              </p>
+              <p className={`text-2xl font-bold ${icGlobal.cor}`}>{icGlobal.variacao > 0 ? "+" : ""}{icGlobal.variacao}%</p>
               <p className="text-xs text-white/40 mt-0.5">Crescimento</p>
-              <p className={`text-[10px] mt-1 ${icGlobal.cor}`}>{icGlobal.seta} vs semana anterior</p>
+              <p className={`text-[10px] mt-1 ${icGlobal.cor}`}>{icGlobal.seta} 30 dias</p>
             </>
           ) : (
             <>
@@ -313,15 +277,17 @@ function ViewExecutiva({
         </GlassCard>
 
         <GlassCard className="p-4 text-center">
-          <p className="text-2xl font-bold text-amber-400">{cidadesAlcancadas}</p>
+          <p className="text-2xl font-bold text-amber-400">{municipiosCobertos}</p>
           <p className="text-xs text-white/40 mt-0.5">Municípios</p>
-          <p className="text-[10px] text-white/20 mt-1">com presença ativa</p>
+          <p className="text-[10px] text-white/20 mt-1">com presença</p>
         </GlassCard>
 
         <GlassCard className="p-4 text-center">
-          <p className="text-2xl font-bold text-blue-400">{basesAtivas}<span className="text-sm text-white/30">/{bases.length}</span></p>
-          <p className="text-xs text-white/40 mt-0.5">Bases Ativas</p>
-          <p className="text-[10px] text-white/20 mt-1">aliados com movimento</p>
+          <p className="text-2xl font-bold text-blue-400">
+            {assessoresAtivos}<span className="text-sm text-white/30">/{assessores.length}</span>
+          </p>
+          <p className="text-xs text-white/40 mt-0.5">Assessorias Ativas</p>
+          <p className="text-[10px] text-white/20 mt-1">com cadastros em 30d</p>
         </GlassCard>
 
         <GlassCard className={`p-4 text-center ${sfpGlobal ? sfpGlobal.bg : "bg-white/5"} border ${sfpGlobal ? "border-white/10" : "border-white/5"}`}>
@@ -341,133 +307,202 @@ function ViewExecutiva({
         </GlassCard>
       </div>
 
-      {/* ── ALERTAS ── */}
-      {alertas.length > 0 && (
+      {/* ── 2. ALERTAS ESTRATÉGICOS ── */}
+      {(alertas.criticos.length > 0 || alertas.atencao.length > 0 || alertas.oportunidades.length > 0) && (
         <div className="space-y-2">
-          {alertas.map((a, i) => (
-            <div key={i} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm border
-              ${a.tipo === "danger"
-                ? "bg-red-500/8 border-red-500/20 text-red-400"
-                : "bg-amber-500/8 border-amber-500/20 text-amber-400"}`}>
+          {alertas.criticos.map((a, i) => (
+            <div key={`c${i}`} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm border bg-red-500/8 border-red-500/20 text-red-400">
               <AlertTriangle size={15} className="shrink-0" />
+              <span className="flex-1">{a.msg}</span>
+              {a.link && (
+                <a href={a.link} className="text-xs text-red-400/60 hover:text-red-300 transition-colors shrink-0">
+                  {a.linkLabel} →
+                </a>
+              )}
+            </div>
+          ))}
+          {alertas.atencao.map((a, i) => (
+            <div key={`a${i}`} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm border bg-amber-500/8 border-amber-500/20 text-amber-400">
+              <AlertTriangle size={15} className="shrink-0" />
+              <span className="flex-1">{a.msg}</span>
+              {a.link && (
+                <a href={a.link} className="text-xs text-amber-400/60 hover:text-amber-300 transition-colors shrink-0">
+                  {a.linkLabel} →
+                </a>
+              )}
+            </div>
+          ))}
+          {alertas.oportunidades.map((a, i) => (
+            <div key={`o${i}`} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm border bg-emerald-500/8 border-emerald-500/20 text-emerald-400">
+              <TrendingUp size={15} className="shrink-0" />
               <span>{a.msg}</span>
             </div>
           ))}
         </div>
       )}
 
-      {/* ── NUCLEOS TERRITORIAIS ── */}
+      {/* ── 3. FORÇA POR MUNICÍPIO ── */}
       <div>
         <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
           <div>
-            <h2 className="text-white font-semibold">Núcleos Territoriais</h2>
-            <p className="text-xs text-white/40">{bases.length} {bases.length === 1 ? "base vinculada" : "bases vinculadas"} • clique para expandir equipe</p>
+            <h2 className="text-white font-semibold">Força por Município</h2>
+            <p className="text-xs text-white/40">
+              {cidadesStats.length} {cidadesStats.length === 1 ? "município no radar territorial" : "municípios no radar territorial"}
+            </p>
           </div>
-
-          {/* Sort */}
-          {bases.length > 1 && (
-            <div className="flex gap-1.5">
-              {(["eleitores", "crescimento", "sfp"] as const).map(opt => (
-                <button key={opt} onClick={() => setSortBy(opt)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize
-                    ${sortBy === opt ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "bg-white/5 text-white/40 hover:text-white/70"}`}>
-                  {opt === "eleitores" ? "Eleitores" : opt === "crescimento" ? "Crescimento" : "SFP"}
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="flex gap-1.5 flex-wrap">
+            {([
+              { key: "score",       label: "Score"       },
+              { key: "forca",       label: "Força"       },
+              { key: "crescimento", label: "Crescimento" },
+              { key: "risco",       label: "Risco"       },
+            ] as const).map(({ key, label }) => (
+              <button key={key} onClick={() => setSortBy(key)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all
+                  ${sortBy === key ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "bg-white/5 text-white/40 hover:text-white/70"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {nucleosSorted.length === 0 ? (
+        {cidadesSorted.length === 0 ? (
           <GlassCard className="p-8 text-center">
-            <Building2 size={32} className="mx-auto mb-3 text-white/20" />
-            <p className="text-white/40 text-sm">Nenhuma base política vinculada</p>
-            <p className="text-white/20 text-xs mt-1">Vincule prefeitos e vereadores aliados no painel do gabinete</p>
+            <Globe size={32} className="mx-auto mb-3 text-white/20" />
+            <p className="text-white/40 text-sm">Nenhum município no radar</p>
+            <p className="text-white/20 text-xs mt-1">Cadastre eleitores ou defina os territórios dos assessores</p>
           </GlassCard>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {nucleosSorted.map(nucleo => (
-              <NucleoCard
-                key={nucleo.g.id}
-                nucleo={nucleo}
-                expanded={!!nucleoExpanded[nucleo.g.id!]}
-                onToggle={() => setNucleoExpanded(p => ({ ...p, [nucleo.g.id!]: !p[nucleo.g.id!] }))}
-                usuarios={usuarios}
-              />
-            ))}
+            {cidadesSorted.map(({ cidade, eleitoresData, assessor, coordenadoresData, sfp, ic, recentes30, pctForte, temAssessor, temCoordenador, scoreT }) => {
+              const scoreCor    = scoreT >= 70 ? "text-emerald-400" : scoreT >= 40 ? "text-amber-400" : "text-red-400";
+              const scoreBg     = scoreT >= 70 ? "bg-emerald-500/10" : scoreT >= 40 ? "bg-amber-500/10" : "bg-red-500/10";
+              const cardBorder  = scoreT >= 70 ? "border-emerald-500/15" : scoreT >= 40 ? "border-amber-500/15" : "border-red-500/15";
+              const scoreLabel  = scoreT >= 85 ? "Forte" : scoreT >= 70 ? "Boa" : scoreT >= 50 ? "Atenção" : scoreT >= 30 ? "Fraca" : "Crítica";
+              return (
+                <div key={cidade} className={`p-4 rounded-xl border ${cardBorder} bg-white/[0.02] space-y-3 hover:border-white/[0.10] transition-colors`}>
+
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <MapPin size={13} className="text-amber-400 shrink-0 mt-0.5" />
+                      <p className="text-white font-semibold text-sm">{cidade}</p>
+                    </div>
+                    <div className={`flex flex-col items-end shrink-0 px-2 py-1 rounded-lg ${scoreBg}`}>
+                      <div className="flex items-baseline gap-0.5">
+                        <span className={`text-lg font-bold leading-none ${scoreCor}`}>{scoreT}</span>
+                        <span className={`text-[10px] ${scoreCor} opacity-50`}>/100</span>
+                      </div>
+                      <span className={`text-[10px] font-semibold leading-tight ${scoreCor} opacity-70`}>{scoreLabel}</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {sfp ? (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sfp.bg} ${sfp.cor}`}>SFP {sfp.label}</span>
+                    ) : (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/30">SFP — poucos dados</span>
+                    )}
+                    {ic && <span className={`text-xs font-semibold ml-auto ${ic.cor}`}>{ic.seta} {ic.label}</span>}
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/[0.05]">
+                    <div className="text-center">
+                      <p className="text-white font-bold text-base leading-tight">{eleitoresData.length}</p>
+                      <p className="text-white/30 text-[10px] mt-0.5">eleitores</p>
+                    </div>
+                    <div className="text-center border-x border-white/[0.05]">
+                      <p className="text-white font-bold text-base leading-tight">{coordenadoresData.length}</p>
+                      <p className="text-white/30 text-[10px] mt-0.5">coords</p>
+                    </div>
+                    <div className="text-center">
+                      <p className={`font-bold text-base leading-tight ${pctForte >= 40 ? "text-emerald-400" : pctForte >= 20 ? "text-amber-400" : eleitoresData.length > 0 ? "text-red-400" : "text-white/30"}`}>
+                        {eleitoresData.length > 0 ? `${pctForte}%` : "—"}
+                      </p>
+                      <p className="text-white/30 text-[10px] mt-0.5">apoio forte</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/[0.04]">
+                    <div className="flex items-center gap-2">
+                      <span className={temAssessor    ? "text-emerald-400" : "text-red-400/70"  }>{temAssessor    ? "✓" : "✗"} Assessor</span>
+                      <span className={temCoordenador ? "text-emerald-400" : "text-amber-400/70"}>{temCoordenador ? "✓" : "✗"} Coord</span>
+                    </div>
+                    {assessor && (
+                      <span className="text-white/35 text-[11px] truncate max-w-[100px]">{assessor.nome.split(" ")[0]}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* ── EQUIPE DIRETA DO DEPUTADO ── */}
-      <GlassCard className="p-4">
-        <button onClick={() => setEquipeDiretaOpen(p => !p)}
-          className="w-full flex items-center justify-between text-left">
-          <div className="flex items-center gap-2">
-            <Users size={16} className="text-white/50" />
-            <span className="text-white font-semibold text-sm">Equipe Direta</span>
-            <span className="text-xs text-white/30">
-              {meusAssessores.length} assessores • {meusCoordenadores.length} coordenadores
-            </span>
-          </div>
-          <span className="text-white/30">{equipeDiretaOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}</span>
-        </button>
+      {/* ── 4. DESEMPENHO DAS ASSESSORIAS ── */}
+      {assessoriasStats.length > 0 && (
+        <div>
+          <h2 className="text-white font-semibold mb-1">Desempenho das Assessorias</h2>
+          <p className="text-xs text-white/40 mb-4">Calculado sobre eleitores vinculados via cadeia de coordenação</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {assessoriasStats.map(s => (
+              <div key={s.uid} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center text-white font-bold text-sm">
+                      {s.nome.charAt(0).toUpperCase()}
+                    </div>
+                    <p className="text-white font-semibold text-sm truncate">{s.nome}</p>
+                  </div>
+                  <div className={`flex items-center shrink-0 px-2 py-1 rounded-full bg-white/[0.04] ${s.badge.text}`}>
+                    <span className="text-xs font-medium whitespace-nowrap">{s.badge.label}</span>
+                  </div>
+                </div>
 
-        {equipeDiretaOpen && (
-          <div className="mt-4 space-y-4">
-            {meusAssessores.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-purple-400 mb-1.5 flex items-center gap-1">
-                  <Shield size={11} /> Assessores Parlamentares ({meusAssessores.length})
-                </p>
-                <div className="space-y-1">
-                  {meusAssessores.map(a => (
-                    <CardPessoa key={a.uid} nome={a.nome} email={a.email} role="assessor"
-                      contexto={`Assessor(a) • ${gAtual.cargo} ${gAtual.nome}`} />
-                  ))}
+                {s.cidades.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {s.cidades.map(c => (
+                      <span key={c} className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-white/[0.04] text-white/60 text-[11px]">
+                        <MapPin size={9} className="text-white/30 shrink-0" />{c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/[0.05]">
+                  <div className="text-center">
+                    <p className="text-white font-bold text-lg leading-tight">{s.totalEleitores}</p>
+                    <p className="text-white/30 text-xs mt-0.5">eleitores</p>
+                  </div>
+                  <div className="text-center border-x border-white/[0.05]">
+                    <p className="text-white font-bold text-lg leading-tight">{s.totalCoords}</p>
+                    <p className="text-white/30 text-xs mt-0.5">coords</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-bold text-lg leading-tight ${s.forca >= 40 ? "text-emerald-400" : s.forca >= 20 ? "text-amber-400" : s.totalEleitores > 0 ? "text-red-400" : "text-white/30"}`}>
+                      {s.totalEleitores > 0 ? `${s.forca}%` : "—"}
+                    </p>
+                    <p className="text-white/30 text-xs mt-0.5">força</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-2 border-t border-white/[0.04]">
+                  {s.diagnostico ? (
+                    <span className="text-white/35 italic">{s.diagnostico}</span>
+                  ) : (
+                    <span />
+                  )}
+                  <a
+                    href={`/coordenadores?assessorId=${s.uid}&assessorNome=${encodeURIComponent(s.nome)}`}
+                    className="text-amber-400/60 hover:text-amber-300 transition-colors shrink-0"
+                  >
+                    Ver equipe →
+                  </a>
                 </div>
               </div>
-            )}
-
-            {meusCoordenadores.length > 0 && (
-              <div>
-                <p className="text-xs font-semibold text-blue-400 mb-1.5 flex items-center gap-1">
-                  <Target size={11} /> Coordenadores Diretos ({meusCoordenadores.length})
-                </p>
-                <div className="space-y-1">
-                  {meusCoordenadores.map(c => {
-                    const cols = usuarios.filter(u => u.role === "colaborador" && u.coordenadorId === c.uid);
-                    return (
-                      <div key={c.uid}>
-                        <button onClick={() => setCoordEquipOpen(p => ({ ...p, [c.uid]: !p[c.uid] }))}
-                          className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] hover:bg-white/[0.04] text-left text-sm transition-all">
-                          <span className="text-white/30">{coordEquipOpen[c.uid] ? <ChevronDown size={13} /> : <ChevronRight size={13} />}</span>
-                          <div className="w-6 h-6 rounded-lg bg-blue-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0">{c.nome.charAt(0)}</div>
-                          <span className="text-white/80 flex-1 truncate text-xs">{c.nome}</span>
-                          <span className="text-white/30 text-[10px] shrink-0">{cols.length} militantes</span>
-                        </button>
-                        {coordEquipOpen[c.uid] && (
-                          <div className="ml-7 mt-1 space-y-1">
-                            {cols.map(col => (
-                              <CardPessoa key={col.uid} nome={col.nome} email={col.email} role="colaborador"
-                                contexto={`Militante • Coord. ${c.nome}`} />
-                            ))}
-                            {cols.length === 0 && <p className="text-xs text-white/30 italic pl-2">Nenhum militante</p>}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {meusAssessores.length === 0 && meusCoordenadores.length === 0 && (
-              <p className="text-xs text-white/30 italic">Nenhuma equipe direta registrada</p>
-            )}
+            ))}
           </div>
-        )}
-      </GlassCard>
+        </div>
+      )}
 
     </div>
   );
@@ -705,7 +740,6 @@ export default function MapaPoliticoPage() {
           <div className="flex-1 min-w-0">
             <p className="text-white font-medium text-sm">{g.nome}</p>
             <p className="text-xs text-white/40">{g.cargo}{g.politicoPartido ? ` • ${g.politicoPartido}` : ""}</p>
-            {/* Território do assessor logado */}
             {eAssessor && cidadesAssessor.length > 0 && (
               <div className="flex flex-wrap gap-1 mt-1.5">
                 {cidadesAssessor.map((c) => (
@@ -727,9 +761,7 @@ export default function MapaPoliticoPage() {
               </p>
               <div className="space-y-1">
                 {coordenadores.map((c) => {
-                  const cols = eAssessor
-                    ? usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid)
-                    : usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid);
+                  const cols = usuarios.filter((u) => u.role === "colaborador" && u.coordenadorId === c.uid);
                   return (
                     <div key={c.uid}>
                       <button onClick={() => toggleExpand(`coord_h_${c.uid}`)} className="w-full flex items-center gap-2 p-2 rounded-lg bg-white/[0.02] text-sm hover:bg-white/[0.04] text-left transition-all">
@@ -761,13 +793,13 @@ export default function MapaPoliticoPage() {
     <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
-          <MapIcon size={20} className="text-white" />
+          <BarChart3 size={20} className="text-white" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">Mapa Político</h1>
+          <h1 className="text-2xl font-bold text-white">Força Territorial</h1>
           <p className="text-sm text-white/50">
             {isPolitico(userData)
-              ? "Força política territorial • visão executiva"
+              ? "Inteligência política por município · visão executiva"
               : "Estrutura hierárquica da sua organização política"}
           </p>
         </div>
@@ -790,14 +822,13 @@ export default function MapaPoliticoPage() {
         </div>
       )}
 
-      {/* DEPUTADO FEDERAL: visão executiva territorial */}
+      {/* DEPUTADO: Força Territorial 2.0 */}
       {isPolitico(userData) && gAtual && (
-        <ViewExecutiva
+        <ViewForcaTerritorial
           gAtual={gAtual}
           gabinetes={gabinetes}
           eleitores={eleitores}
           usuarios={usuarios}
-          router={router}
         />
       )}
 
