@@ -48,7 +48,8 @@
       "Bash(node -e \"const ExcelJS=require\\('exceljs'\\); const wb=new ExcelJS.Workbook\\(\\); const ws=wb.addWorksheet\\('T'\\); ws.addConditionalFormatting\\({ref:'C3:C10', rules:[{type:'dataBar',minLength:0,maxLength:100,gradient:true,color:{argb:'FF3B82F6'}}]}\\); console.log\\('Conditional formatting + dataBar: SUPORTADO'\\)\")",
       "Bash(node -e \"const ExcelJS = require\\('exceljs'\\); console.log\\(ExcelJS.version || require\\('./node_modules/exceljs/package.json'\\).version\\)\")",
       "Bash(node -e \"console.log\\(require\\('./node_modules/jspdf/package.json'\\).version\\)\")",
-      "Bash(echo \"exit:$?\")"
+      "Bash(echo \"exit:$?\")",
+      "Bash(echo \"TSC_EXIT:$?\")"
     ]
   }
 }

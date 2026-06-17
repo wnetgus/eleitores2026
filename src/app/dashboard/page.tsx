@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [modalPendencia, setModalPendencia] = useState<string | null>(null);
   const [modalEstabDash, setModalEstabDash] = useState(false);
   const [assessoriasCriadas, setAssessoriasCriadas] = useState<Set<string>>(new Set());
+  const [coordenacoesCriadas, setCoordenacoesCriadas] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function load() {
@@ -59,11 +60,17 @@ export default function DashboardPage() {
         const gabId = userData?.campanhaId || userData?.gabineteId;
         let usuariosSnap: { docs: any[] };
         if (isSuperOrMaster(userData)) {
+          console.log("ANTES", "usuarios [superOrMaster]");
           usuariosSnap = await getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc")));
+          console.log("SUCESSO usuarios", usuariosSnap.docs.length);
         } else if (isCoordenador(userData)) {
+          console.log("ANTES", "usuarios [coordenador]");
           usuariosSnap = await getDocs(query(collection(db, "usuarios"), where("coordenadorId", "==", userData!.uid)));
+          console.log("SUCESSO usuarios", usuariosSnap.docs.length);
         } else if (gabId) {
+          console.log("ANTES", "usuarios [campanhaId]");
           usuariosSnap = await getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", gabId)));
+          console.log("SUCESSO usuarios", usuariosSnap.docs.length);
         } else {
           usuariosSnap = { docs: [] };
         }
@@ -76,14 +83,18 @@ export default function DashboardPage() {
         } else if (isCoordenador(userData)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
         } else if (isAssessor(userData)) {
+          console.log("ANTES", "usuarios [assessor → coordenadores]");
           const coordSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("assessorId", "==", userData!.uid)));
+          console.log("SUCESSO usuarios/coordenadores", coordSnap.docs.length);
           const coordIds = coordSnap.docs.map((d) => d.id);
           setMeusCoordIds(coordIds);
           if (coordIds.length > 0) {
             const eQuery = gabId
               ? query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabId))
               : query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds));
+            console.log("ANTES", "eleitores [assessor]");
             const esnap = await getDocs(eQuery);
+            console.log("SUCESSO eleitores", esnap.docs.length);
             setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
           }
           eleitoresCarregados = true;
@@ -93,13 +104,17 @@ export default function DashboardPage() {
         }
         if (!eleitoresCarregados) {
           const q = query(collection(db, "eleitores"), ...constraints);
+          console.log("ANTES", "eleitores [geral]");
           const snap = await getDocs(q);
+          console.log("SUCESSO eleitores", snap.docs.length);
           setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
         }
 
         // Buscar dados do gabinete do assessor
         if (gabId) {
+          console.log("ANTES", "campanhas [getDoc gabinete]");
           const gabSnap = await getDoc(doc(db, "campanhas", gabId));
+          console.log("SUCESSO campanhas/gabinete", gabSnap.exists() ? 1 : 0);
           if (gabSnap.exists()) {
             const gData = gabSnap.data();
             setGabineteNome(gData.nome || "");
@@ -111,11 +126,17 @@ export default function DashboardPage() {
         // Metas — usuários não-admin sem gabId não executam query sem filtro
         let mSnap: { docs: any[] } = { docs: [] };
         if (isSuperOrMaster(userData)) {
+          console.log("ANTES", "metas [superOrMaster]");
           mSnap = await getDocs(query(collection(db, "metas")));
+          console.log("SUCESSO metas", mSnap.docs.length);
         } else if (isColaborador(userData)) {
+          console.log("ANTES", "metas [colaborador]");
           mSnap = await getDocs(query(collection(db, "metas"), where("colaboradorId", "==", userData!.uid)));
+          console.log("SUCESSO metas", mSnap.docs.length);
         } else if (gabId) {
+          console.log("ANTES", "metas [gabineteId]");
           mSnap = await getDocs(query(collection(db, "metas"), where("gabineteId", "==", gabId)));
+          console.log("SUCESSO metas", mSnap.docs.length);
         }
         const metasMap: Record<string, number> = {};
         mSnap.docs.forEach((d) => {
@@ -124,27 +145,35 @@ export default function DashboardPage() {
         });
         setMetasPorColaborador(metasMap);
         if (isColaborador(userData) && userData?.coordenadorId) {
+          console.log("ANTES", "usuarios [getDoc coordenador]");
           const coordDocSnap = await getDoc(doc(db, "usuarios", userData!.coordenadorId));
+          console.log("SUCESSO usuarios/coordenador", coordDocSnap.exists() ? 1 : 0);
           const coordData = coordDocSnap?.data() || {};
           const coordPadrao = (coordData.metaPadraoEquipe as number) || 0;
           let padraoFinal = coordPadrao;
           if (!padraoFinal && coordData.assessorId) {
+            console.log("ANTES", "usuarios [getDoc assessor]");
             const assessorSnap = await getDoc(doc(db, "usuarios", coordData.assessorId));
+            console.log("SUCESSO usuarios/assessor", assessorSnap.exists() ? 1 : 0);
             padraoFinal = (assessorSnap?.data()?.metaPadraoEquipe as number) || 0;
           }
           setMinhaMeta(metasMap[userData!.uid] || padraoFinal);
         }
         if (isSuperOrMaster(userData)) {
+          console.log("ANTES", "campanhas + usuarios [Promise.all superOrMaster]");
           const [gSnap, sSnap] = await Promise.all([
             getDocs(query(collection(db, "campanhas"), orderBy("criadoEm", "desc"))),
             getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente"]))),
           ]);
+          console.log("SUCESSO campanhas", gSnap.docs.length, "| usuarios/pendentes", sSnap.docs.length);
           setGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
           setSolicitacoesPendentes(sSnap.size);
         }
         // Buscar aliados (coalizão) para político e assessor
         if ((isPolitico(userData) || isAssessor(userData)) && userData?.campanhaId) {
+          console.log("ANTES", "campanhas [parentGabineteId]");
           const filhosSnap = await getDocs(query(collection(db, "campanhas"), where("parentGabineteId", "==", userData.campanhaId)));
+          console.log("SUCESSO campanhas/filhos", filhosSnap.docs.length);
           const filhos = filhosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
           setGabinetesFilhos(filhos);
           if (filhos.length > 0) {
@@ -155,14 +184,23 @@ export default function DashboardPage() {
             setEleitoresFilhos([]);
           }
         }
-        // Assessorias criadas — para o motor perceber municípios com cobertura real
+        // Assessorias ativas — para o motor perceber municípios com cobertura real
         if (isPolitico(userData)) {
-          const aSnap = await getDocs(collection(db, "assessorias"));
+          console.log("ANTES", "assessorias");
+          const aSnap = await getDocs(query(collection(db, "assessorias"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
+          console.log("SUCESSO assessorias", aSnap.docs.length);
           setAssessoriasCriadas(new Set(aSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
+        }
+        // Coordenações ativas — para o motor perceber municípios com coordenação real
+        if (isPolitico(userData)) {
+          console.log("ANTES", "coordenacoes");
+          const cSnap = await getDocs(query(collection(db, "coordenacoes"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
+          console.log("SUCESSO coordenacoes", cSnap.docs.length);
+          setCoordenacoesCriadas(new Set(cSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
         }
 
         setUltimaAtualizacao(new Date());
-      } catch (e) { console.error(e); } finally { setLoading(false); }
+      } catch (e) { console.error("ERRO", e); } finally { setLoading(false); }
     }
     if (userData) load();
   }, [userData]);
@@ -580,13 +618,13 @@ export default function DashboardPage() {
     // Regra 1 — sem assessoria → pendência crítica + Regra 4 → alerta oportunidade
     { cidade: "Salgueiro", eleitores: 30,  fortes: 5,  medios: 10, indecisos: 10, fracos: 5,  crescimento30d: 120, possuiAssessoria: assessoriasCriadas.has("Salgueiro"), possuiCoordenacao: false, assessorResponsavel: ""               },
     // Regra 1 — sem assessoria → pendência crítica
-    { cidade: "Surubim",   eleitores: 4,   fortes: 1,  medios: 2,  indecisos: 1,  fracos: 0,  crescimento30d: 0,   possuiAssessoria: assessoriasCriadas.has("Surubim"),   possuiCoordenacao: false, assessorResponsavel: "Pedro Coelho"   },
+    { cidade: "Surubim",   eleitores: 4,   fortes: 1,  medios: 2,  indecisos: 1,  fracos: 0,  crescimento30d: 0,   possuiAssessoria: assessoriasCriadas.has("Surubim"),   possuiCoordenacao: coordenacoesCriadas.has("Surubim"),   assessorResponsavel: "Pedro Coelho"   },
     // Regra 4 — crescimento > 100 → alerta oportunidade
     { cidade: "Caetés",    eleitores: 18,  fortes: 4,  medios: 7,  indecisos: 5,  fracos: 2,  crescimento30d: 200, possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Fábio Lira"     },
     // Regra 5 — crescimento < -20 → alerta atenção
     { cidade: "Petrolina", eleitores: 60,  fortes: 10, medios: 20, indecisos: 18, fracos: 12, crescimento30d: -25, possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Pedro Coelho"   },
     // Regra 2 — assessoria sem coordenação → pendência media
-    { cidade: "Timbaúba",  eleitores: 12,  fortes: 2,  medios: 4,  indecisos: 4,  fracos: 2,  crescimento30d: 3,   possuiAssessoria: true,  possuiCoordenacao: false, assessorResponsavel: "Carlos Silva"   },
+    { cidade: "Timbaúba",  eleitores: 12,  fortes: 2,  medios: 4,  indecisos: 4,  fracos: 2,  crescimento30d: 3,   possuiAssessoria: true,  possuiCoordenacao: coordenacoesCriadas.has("Timbaúba"),  assessorResponsavel: "Carlos Silva"   },
   ] : [];
 
   const motor = isPolitico(userData) ? executarMotorTerritorial(territoriosDemo) : null;

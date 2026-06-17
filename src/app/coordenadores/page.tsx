@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -58,6 +58,8 @@ export default function CoordenadoresPage() {
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
   const [modalCriarCoord, setModalCriarCoord] = useState(false);
   const [modalEstabCoord, setModalEstabCoord] = useState(false);
+  const [salvandoCoord, setSalvandoCoord] = useState(false);
+  const [formCoord, setFormCoord] = useState({ nomeCoord: "" });
 
   useEffect(() => {
     if (userData && !canViewCoordenadores(userData)) { router.push("/dashboard"); return; }
@@ -113,6 +115,31 @@ export default function CoordenadoresPage() {
       });
       setColaboradoresCount(count);
     } catch (e) { console.error(e); } finally { setLoading(false); }
+  }
+
+  async function salvarCoordenacao() {
+    if (!formCoord.nomeCoord.trim()) { toast.error("Informe o nome do coordenador responsável."); return; }
+    if (!cidadeParam) { toast.error("Município não identificado."); return; }
+    setSalvandoCoord(true);
+    try {
+      await addDoc(collection(db, "coordenacoes"), {
+        municipio: cidadeParam,
+        campanhaId: userData?.campanhaId || userData?.gabineteId || "",
+        coordenadorId: userData?.uid ?? "",
+        coordenadorNome: formCoord.nomeCoord.trim(),
+        status: "ativa",
+        criadoEm: new Date(),
+        criadoPor: userData?.uid ?? "",
+      });
+      toast.success("Coordenação criada com sucesso!");
+      setModalCriarCoord(false);
+      router.push("/dashboard");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar. Tente novamente.");
+    } finally {
+      setSalvandoCoord(false);
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
@@ -326,6 +353,16 @@ export default function CoordenadoresPage() {
               </div>
             </div>
 
+            {/* Coordenador Responsável */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Coordenador Responsável</p>
+              <Input
+                placeholder="Nome do coordenador"
+                value={formCoord.nomeCoord}
+                onChange={(e) => setFormCoord({ nomeCoord: e.target.value })}
+              />
+            </div>
+
             {/* Município + Assessor + Situação */}
             <div className="grid grid-cols-3 gap-3">
               <div className="p-3 rounded-xl bg-white/3 border border-white/6 space-y-0.5">
@@ -409,10 +446,11 @@ export default function CoordenadoresPage() {
                 Cancelar
               </button>
               <button
-                onClick={() => { setModalCriarCoord(false); setModalEstabCoord(true); }}
-                className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition-colors"
+                onClick={salvarCoordenacao}
+                disabled={salvandoCoord}
+                className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Confirmar Coordenação
+                {salvandoCoord ? "Salvando…" : "Confirmar Coordenação"}
               </button>
             </div>
           </div>

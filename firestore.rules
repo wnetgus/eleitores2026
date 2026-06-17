@@ -158,6 +158,56 @@ service cloud.firestore {
       allow delete: if isAuth() && isAdmin();
     }
 
+    // ─── assessorias ──────────────────────────────────────────────────────────
+    match /assessorias/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow create: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          request.resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("campanhaId", "") != "" &&
+          request.resource.data.get("criadoPor", "") == request.auth.uid
+        )
+      );
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── coordenacoes ─────────────────────────────────────────────────────────
+    match /coordenacoes/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow create: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          request.resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("campanhaId", "") != "" &&
+          request.resource.data.get("criadoPor", "") == request.auth.uid
+        )
+      );
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
     // ─── atividades (log de auditoria) ────────────────────────────────────────
     match /atividades/{id} {
       allow read: if isAuth() && (

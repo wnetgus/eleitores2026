@@ -329,6 +329,7 @@ export default function AssessoresPage() {
     try {
       await addDoc(collection(db, "assessorias"), {
         municipio: cidadeParam,
+        campanhaId: userData?.campanhaId || userData?.gabineteId || "",
         assessorId: userData?.uid ?? "",
         assessorNome: formAssessoria.nomeAssessor.trim(),
         metaInicial: formAssessoria.metaInicial,
