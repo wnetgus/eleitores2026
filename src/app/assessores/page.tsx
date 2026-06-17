@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc, addDoc } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -98,6 +98,7 @@ export default function AssessoresPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const acaoParam = searchParams.get("acao");
+  const cidadeParam = searchParams.get("cidade");
   const municipiosParam = searchParams.get("municipios");
   const municipiosSemAssessoria = acaoParam === "expandir" && municipiosParam
     ? municipiosParam.split(",").map(decodeURIComponent).filter(Boolean)
@@ -113,6 +114,14 @@ export default function AssessoresPage() {
   const [excluirSaving, setExcluirSaving] = useState(false);
   const [todosGabinetes, setTodosGabinetes] = useState<Gabinete[]>([]);
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
+  const [modalFaseOp, setModalFaseOp] = useState(false);
+  const [modalCriarAssessoria, setModalCriarAssessoria] = useState(false);
+  const [formAssessoria, setFormAssessoria] = useState({
+    nomeAssessor: "",
+    metaInicial: 100,
+    estrutura: { coordenadorRegional: true, nucleoUrbano: true, nucleoRural: false, liderancas: false },
+  });
+  const [salvandoAssessoria, setSalvandoAssessoria] = useState(false);
 
   const [gabinetesMap, setGabinetesMap] = useState<Record<string, { nome: string; politicoNome: string; cargo: string }>>({});
   const [coordenaoresExec, setCoordenadoresExec] = useState<AppUser[]>([]);
@@ -311,6 +320,34 @@ export default function AssessoresPage() {
   if (!userData || !podeAcessar) return null;
   const config = getRoleConfig(userData);
 
+  async function salvarAssessoria() {
+    if (!formAssessoria.nomeAssessor.trim()) {
+      toast.error("Informe o nome do assessor responsável."); return;
+    }
+    if (!cidadeParam) { toast.error("Município não identificado."); return; }
+    setSalvandoAssessoria(true);
+    try {
+      await addDoc(collection(db, "assessorias"), {
+        municipio: cidadeParam,
+        assessorId: userData?.uid ?? "",
+        assessorNome: formAssessoria.nomeAssessor.trim(),
+        metaInicial: formAssessoria.metaInicial,
+        status: "ativa",
+        estrutura: formAssessoria.estrutura,
+        criadoEm: new Date(),
+        criadoPor: userData?.uid ?? "",
+      });
+      toast.success(`Assessoria de ${cidadeParam} criada com sucesso!`);
+      setModalCriarAssessoria(false);
+      router.push("/dashboard");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao salvar. Tente novamente.");
+    } finally {
+      setSalvandoAssessoria(false);
+    }
+  }
+
   if (isPolitico(userData)) {
     const totalBracos = statsExec.length;
     const bracosAtivos = statsExec.filter((s) => s.recentes30 > 0).length;
@@ -330,6 +367,185 @@ export default function AssessoresPage() {
           </div>
           <BuscaGlobal userData={userData} />
         </div>
+
+        {/* Modal pequeno — confirmação ESTABILIZAÇÃO */}
+        {modalFaseOp && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalFaseOp(false)}>
+            <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-5" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
+                <span className="text-sm shrink-0">⚡</span>
+                <div>
+                  <p className="text-xs font-bold text-violet-400 tracking-wider">ESTABILIZAÇÃO</p>
+                  <p className="text-[11px] text-white/40">A gravação real será habilitada após a conclusão da homologação.</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalFaseOp(false)}
+                className="w-full py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-semibold hover:bg-white/10 transition-colors"
+              >
+                Entendi
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Modal grande — pré-formulário Criar Assessoria */}
+        {modalCriarAssessoria && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalCriarAssessoria(false)}>
+            <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+
+              {/* Topo */}
+              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <span className="text-sm shrink-0">✅</span>
+                <div>
+                  <p className="text-xs font-bold text-emerald-400 tracking-wider">MODO OPERACIONAL</p>
+                  <p className="text-[11px] text-white/40">Criação real da assessoria regional. Dados serão salvos no Firestore.</p>
+                </div>
+              </div>
+
+              {/* Seção 1 — Nome do Assessor */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Nome do Assessor</p>
+                <input
+                  value={formAssessoria.nomeAssessor}
+                  onChange={(e) => setFormAssessoria((f) => ({ ...f, nomeAssessor: e.target.value }))}
+                  placeholder="Ex: Pedro Coelho"
+                  className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-red-500/50 transition-colors"
+                />
+              </div>
+
+              {/* Seção 2 — Município */}
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Município</p>
+                <input
+                  disabled
+                  value={cidadeParam ?? ""}
+                  readOnly
+                  className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white/50 cursor-not-allowed"
+                />
+              </div>
+
+              {/* Seção 3 — Meta Inicial */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Meta Inicial</p>
+                <div className="grid grid-cols-3 gap-3">
+                  {([50, 100, 200] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setFormAssessoria((f) => ({ ...f, metaInicial: v }))}
+                      className={`flex items-center gap-2.5 px-3 py-3 rounded-xl border transition-colors ${
+                        formAssessoria.metaInicial === v
+                          ? "bg-red-500/10 border-red-500/30"
+                          : "bg-white/[0.02] border-white/[0.06] hover:border-white/20"
+                      }`}
+                    >
+                      <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                        formAssessoria.metaInicial === v ? "border-red-500" : "border-white/20"
+                      }`}>
+                        {formAssessoria.metaInicial === v && <div className="w-2 h-2 rounded-full bg-red-500" />}
+                      </div>
+                      <span className={`text-sm font-medium ${formAssessoria.metaInicial === v ? "text-red-400" : "text-white/30"}`}>
+                        {v} apoiadores
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Seção 4 — Estrutura Inicial */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Estrutura Inicial</p>
+                <div className="space-y-2">
+                  {(
+                    [
+                      { key: "coordenadorRegional" as const, label: "Coordenador Regional"    },
+                      { key: "nucleoUrbano"         as const, label: "Núcleo Urbano"           },
+                      { key: "nucleoRural"          as const, label: "Núcleo Rural"            },
+                      { key: "liderancas"           as const, label: "Lideranças Comunitárias" },
+                    ]
+                  ).map(({ key, label }) => (
+                    <label key={key} className="flex items-center gap-2.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={formAssessoria.estrutura[key]}
+                        onChange={(e) => setFormAssessoria((f) => ({
+                          ...f,
+                          estrutura: { ...f.estrutura, [key]: e.target.checked },
+                        }))}
+                        className="w-4 h-4 accent-red-500"
+                      />
+                      <span className={`text-sm ${formAssessoria.estrutura[key] ? "text-white/70" : "text-white/30"}`}>{label}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              {/* Seção 5 — Resumo Executivo */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Resumo Executivo</p>
+                <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-2.5">
+                  {[
+                    { label: "Município",           value: cidadeParam ?? "—",        highlight: false },
+                    { label: "Apoiadores atuais",   value: "4",                       highlight: false },
+                    { label: "Situação",            value: "Sem Assessoria Regional", highlight: false },
+                    { label: "Prioridade",          value: "CRÍTICA",                 highlight: true  },
+                    { label: "Prazo",               value: "15 dias",                 highlight: false },
+                  ].map(({ label, value, highlight }) => (
+                    <div key={label} className="flex items-center justify-between text-sm">
+                      <span className="text-white/35">{label}</span>
+                      <span className={highlight ? "text-red-400 font-semibold text-xs tracking-wider" : "text-white/60"}>
+                        {value}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Rodapé */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={() => setModalCriarAssessoria(false)}
+                  className="px-5 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={salvarAssessoria}
+                  disabled={salvandoAssessoria}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {salvandoAssessoria ? "Salvando…" : "Confirmar Estrutura"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Banner contextual — vindo da Central de Pendências */}
+        {acaoParam === "nova" && cidadeParam && (
+          <GlassCard className="p-4 border-red-500/30 bg-red-950/40">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <span className="text-base shrink-0 mt-0.5">🔴</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-white">
+                    {cidadeParam} ainda não possui assessoria regional.
+                  </p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    Recomendação estratégica da Central de Pendências.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalCriarAssessoria(true)}
+                className="shrink-0 px-4 py-2 rounded-xl bg-red-500 text-white text-xs font-semibold hover:bg-red-600 transition-colors"
+              >
+                Criar Assessoria
+              </button>
+            </div>
+          </GlassCard>
+        )}
 
         {municipiosSemAssessoria.length > 0 && (
           <GlassCard className="p-4 border-red-500/20">

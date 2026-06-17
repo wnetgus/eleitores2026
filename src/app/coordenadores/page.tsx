@@ -30,6 +30,9 @@ export default function CoordenadoresPage() {
   const gabineteIdParam = searchParams.get("gabineteId");
   const assessorIdParam = searchParams.get("assessorId");
   const assessorNomeParam = searchParams.get("assessorNome");
+  const cidadeParam = searchParams.get("cidade");
+  const assessorParam = searchParams.get("assessor");
+  const acaoParam = searchParams.get("acao");
   const alertaEstruturaParam = searchParams.get("alertaEstrutura");
   const alertaEstruturaMunicipios = alertaEstruturaParam
     ? alertaEstruturaParam.split(",").map((par) => {
@@ -53,6 +56,8 @@ export default function CoordenadoresPage() {
   const [excluirModal, setExcluirModal] = useState<AppUser | null>(null);
   const [excluirSaving, setExcluirSaving] = useState(false);
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
+  const [modalCriarCoord, setModalCriarCoord] = useState(false);
+  const [modalEstabCoord, setModalEstabCoord] = useState(false);
 
   useEffect(() => {
     if (userData && !canViewCoordenadores(userData)) { router.push("/dashboard"); return; }
@@ -289,6 +294,152 @@ export default function CoordenadoresPage() {
         gabinetes={todosGabinetes}
         onFilter={setFiltros}
       />
+      {/* Modal pequeno ESTABILIZAÇÃO */}
+      {modalEstabCoord && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalEstabCoord(false)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
+              <span className="text-sm shrink-0">⚡</span>
+              <div>
+                <p className="text-xs font-bold text-violet-400 tracking-wider">ESTABILIZAÇÃO</p>
+                <p className="text-[11px] text-white/40">A criação real das coordenações será habilitada após a homologação final.</p>
+              </div>
+            </div>
+            <button onClick={() => setModalEstabCoord(false)} className="w-full py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-semibold hover:bg-white/10 transition-colors">
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal grande — pré-formulário Criar Coordenação */}
+      {modalCriarCoord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalCriarCoord(false)}>
+          <div className="bg-zinc-950 border border-zinc-800 rounded-3xl p-6 w-full max-w-2xl space-y-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+
+            {/* Badge */}
+            <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
+              <span className="text-sm shrink-0">⚡</span>
+              <div>
+                <p className="text-xs font-bold text-violet-400 tracking-wider">FASE OPERACIONAL</p>
+                <p className="text-[11px] text-white/40">Simulação da criação da coordenação territorial.</p>
+              </div>
+            </div>
+
+            {/* Município + Assessor + Situação */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="p-3 rounded-xl bg-white/3 border border-white/6 space-y-0.5">
+                <p className="text-[10px] text-white/30 uppercase tracking-wider">Município</p>
+                <p className="text-sm font-semibold text-white/70">{cidadeParam ?? "—"}</p>
+              </div>
+              <div className="p-3 rounded-xl bg-white/3 border border-white/6 space-y-0.5">
+                <p className="text-[10px] text-white/30 uppercase tracking-wider">Assessor</p>
+                <p className="text-sm font-semibold text-white/70">{assessorParam || "—"}</p>
+              </div>
+              <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+                <p className="text-[10px] font-bold text-red-400 tracking-wider">SEM</p>
+                <p className="text-[10px] font-bold text-red-400 tracking-wider">ESTRUTURA</p>
+              </div>
+            </div>
+
+            {/* Meta Inicial */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Meta Inicial</p>
+              <div className="grid grid-cols-4 gap-2">
+                {([10, 25, 50, 100] as const).map((v) => (
+                  <div key={v} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-not-allowed ${
+                    v === 25 ? "bg-orange-500/10 border-orange-500/30" : "bg-white/2 border-white/6"
+                  }`}>
+                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
+                      v === 25 ? "border-orange-500" : "border-white/20"
+                    }`}>
+                      {v === 25 && <div className="w-2 h-2 rounded-full bg-orange-500" />}
+                    </div>
+                    <span className={`text-sm font-medium ${v === 25 ? "text-orange-400" : "text-white/30"}`}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Estrutura */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Estrutura</p>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: "Coordenador Regional",    checked: true  },
+                  { label: "Liderança Comunitária",   checked: true  },
+                  { label: "Núcleo de Bairro",        checked: true  },
+                  { label: "Juventude",               checked: false },
+                  { label: "Mulheres",                checked: false },
+                  { label: "Rural",                   checked: false },
+                ].map(({ label, checked }) => (
+                  <label key={label} className="flex items-center gap-2 cursor-not-allowed">
+                    <input type="checkbox" defaultChecked={checked} disabled className="w-4 h-4 accent-orange-500" />
+                    <span className={`text-sm ${checked ? "text-white/60" : "text-white/25"}`}>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Cronograma */}
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Cronograma</p>
+              <div className="space-y-0">
+                {[
+                  { label: "Hoje",                    color: "text-white/60",    dot: "bg-white/30"       },
+                  { label: "Designar Coordenador",    color: "text-blue-400",    dot: "bg-blue-500"       },
+                  { label: "Criar Núcleo",            color: "text-amber-400",   dot: "bg-amber-500"      },
+                  { label: "Primeiros 25 apoiadores", color: "text-orange-400",  dot: "bg-orange-500"     },
+                  { label: "Estrutura Ativa",         color: "text-emerald-400", dot: "bg-emerald-500"    },
+                ].map(({ label, color, dot }, idx, arr) => (
+                  <div key={label} className="flex items-start gap-2">
+                    <div className="flex flex-col items-center shrink-0">
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${dot}`} />
+                      {idx < arr.length - 1 && <div className="w-px h-5 bg-white/8 my-0.5" />}
+                    </div>
+                    <p className={`text-sm mt-0 ${color}`}>{label}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Rodapé */}
+            <div className="flex gap-3 pt-1">
+              <button onClick={() => setModalCriarCoord(false)} className="px-5 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors">
+                Cancelar
+              </button>
+              <button
+                onClick={() => { setModalCriarCoord(false); setModalEstabCoord(true); }}
+                className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition-colors"
+              >
+                Confirmar Coordenação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Banner contextual — vindo da Central de Pendências */}
+      {acaoParam === "nova" && cidadeParam && (
+        <div className="bg-orange-950/40 border border-orange-500/30 rounded-2xl p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5 min-w-0">
+              <span className="text-base shrink-0 mt-0.5">🟠</span>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white">{cidadeParam} ainda não possui coordenação territorial.</p>
+                <p className="text-xs text-white/40 mt-0.5">Recomendação estratégica da Central de Pendências.</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setModalCriarCoord(true)}
+              className="shrink-0 px-4 py-2 rounded-xl bg-orange-500 text-white text-xs font-semibold hover:bg-orange-600 transition-colors"
+            >
+              Criar Coordenação
+            </button>
+          </div>
+        </div>
+      )}
+
       <GlassCard className="p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
