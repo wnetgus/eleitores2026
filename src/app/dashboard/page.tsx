@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { collection, getDocs, getDoc, doc, query, orderBy, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -60,17 +60,11 @@ export default function DashboardPage() {
         const gabId = userData?.campanhaId || userData?.gabineteId;
         let usuariosSnap: { docs: any[] };
         if (isSuperOrMaster(userData)) {
-          console.log("ANTES", "usuarios [superOrMaster]");
           usuariosSnap = await getDocs(query(collection(db, "usuarios"), orderBy("criadoEm", "desc")));
-          console.log("SUCESSO usuarios", usuariosSnap.docs.length);
         } else if (isCoordenador(userData)) {
-          console.log("ANTES", "usuarios [coordenador]");
           usuariosSnap = await getDocs(query(collection(db, "usuarios"), where("coordenadorId", "==", userData!.uid)));
-          console.log("SUCESSO usuarios", usuariosSnap.docs.length);
         } else if (gabId) {
-          console.log("ANTES", "usuarios [campanhaId]");
           usuariosSnap = await getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", gabId)));
-          console.log("SUCESSO usuarios", usuariosSnap.docs.length);
         } else {
           usuariosSnap = { docs: [] };
         }
@@ -83,18 +77,14 @@ export default function DashboardPage() {
         } else if (isCoordenador(userData)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
         } else if (isAssessor(userData)) {
-          console.log("ANTES", "usuarios [assessor → coordenadores]");
           const coordSnap = await getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("assessorId", "==", userData!.uid)));
-          console.log("SUCESSO usuarios/coordenadores", coordSnap.docs.length);
           const coordIds = coordSnap.docs.map((d) => d.id);
           setMeusCoordIds(coordIds);
           if (coordIds.length > 0) {
             const eQuery = gabId
               ? query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabId))
               : query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds));
-            console.log("ANTES", "eleitores [assessor]");
             const esnap = await getDocs(eQuery);
-            console.log("SUCESSO eleitores", esnap.docs.length);
             setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
           }
           eleitoresCarregados = true;
@@ -104,17 +94,13 @@ export default function DashboardPage() {
         }
         if (!eleitoresCarregados) {
           const q = query(collection(db, "eleitores"), ...constraints);
-          console.log("ANTES", "eleitores [geral]");
           const snap = await getDocs(q);
-          console.log("SUCESSO eleitores", snap.docs.length);
           setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
         }
 
         // Buscar dados do gabinete do assessor
         if (gabId) {
-          console.log("ANTES", "campanhas [getDoc gabinete]");
           const gabSnap = await getDoc(doc(db, "campanhas", gabId));
-          console.log("SUCESSO campanhas/gabinete", gabSnap.exists() ? 1 : 0);
           if (gabSnap.exists()) {
             const gData = gabSnap.data();
             setGabineteNome(gData.nome || "");
@@ -126,17 +112,11 @@ export default function DashboardPage() {
         // Metas — usuários não-admin sem gabId não executam query sem filtro
         let mSnap: { docs: any[] } = { docs: [] };
         if (isSuperOrMaster(userData)) {
-          console.log("ANTES", "metas [superOrMaster]");
           mSnap = await getDocs(query(collection(db, "metas")));
-          console.log("SUCESSO metas", mSnap.docs.length);
         } else if (isColaborador(userData)) {
-          console.log("ANTES", "metas [colaborador]");
           mSnap = await getDocs(query(collection(db, "metas"), where("colaboradorId", "==", userData!.uid)));
-          console.log("SUCESSO metas", mSnap.docs.length);
         } else if (gabId) {
-          console.log("ANTES", "metas [gabineteId]");
           mSnap = await getDocs(query(collection(db, "metas"), where("gabineteId", "==", gabId)));
-          console.log("SUCESSO metas", mSnap.docs.length);
         }
         const metasMap: Record<string, number> = {};
         mSnap.docs.forEach((d) => {
@@ -145,35 +125,27 @@ export default function DashboardPage() {
         });
         setMetasPorColaborador(metasMap);
         if (isColaborador(userData) && userData?.coordenadorId) {
-          console.log("ANTES", "usuarios [getDoc coordenador]");
           const coordDocSnap = await getDoc(doc(db, "usuarios", userData!.coordenadorId));
-          console.log("SUCESSO usuarios/coordenador", coordDocSnap.exists() ? 1 : 0);
           const coordData = coordDocSnap?.data() || {};
           const coordPadrao = (coordData.metaPadraoEquipe as number) || 0;
           let padraoFinal = coordPadrao;
           if (!padraoFinal && coordData.assessorId) {
-            console.log("ANTES", "usuarios [getDoc assessor]");
             const assessorSnap = await getDoc(doc(db, "usuarios", coordData.assessorId));
-            console.log("SUCESSO usuarios/assessor", assessorSnap.exists() ? 1 : 0);
             padraoFinal = (assessorSnap?.data()?.metaPadraoEquipe as number) || 0;
           }
           setMinhaMeta(metasMap[userData!.uid] || padraoFinal);
         }
         if (isSuperOrMaster(userData)) {
-          console.log("ANTES", "campanhas + usuarios [Promise.all superOrMaster]");
           const [gSnap, sSnap] = await Promise.all([
             getDocs(query(collection(db, "campanhas"), orderBy("criadoEm", "desc"))),
             getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente"]))),
           ]);
-          console.log("SUCESSO campanhas", gSnap.docs.length, "| usuarios/pendentes", sSnap.docs.length);
           setGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
           setSolicitacoesPendentes(sSnap.size);
         }
         // Buscar aliados (coalizão) para político e assessor
         if ((isPolitico(userData) || isAssessor(userData)) && userData?.campanhaId) {
-          console.log("ANTES", "campanhas [parentGabineteId]");
           const filhosSnap = await getDocs(query(collection(db, "campanhas"), where("parentGabineteId", "==", userData.campanhaId)));
-          console.log("SUCESSO campanhas/filhos", filhosSnap.docs.length);
           const filhos = filhosSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
           setGabinetesFilhos(filhos);
           if (filhos.length > 0) {
@@ -186,24 +158,43 @@ export default function DashboardPage() {
         }
         // Assessorias ativas — para o motor perceber municípios com cobertura real
         if (isPolitico(userData)) {
-          console.log("ANTES", "assessorias");
           const aSnap = await getDocs(query(collection(db, "assessorias"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
-          console.log("SUCESSO assessorias", aSnap.docs.length);
           setAssessoriasCriadas(new Set(aSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
         }
         // Coordenações ativas — para o motor perceber municípios com coordenação real
         if (isPolitico(userData)) {
-          console.log("ANTES", "coordenacoes");
           const cSnap = await getDocs(query(collection(db, "coordenacoes"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
-          console.log("SUCESSO coordenacoes", cSnap.docs.length);
           setCoordenacoesCriadas(new Set(cSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
         }
 
         setUltimaAtualizacao(new Date());
-      } catch (e) { console.error("ERRO", e); } finally { setLoading(false); }
+      } catch (e) { console.error(e); } finally { setLoading(false); }
     }
     if (userData) load();
   }, [userData]);
+
+  const territoriosReais = useMemo<TerritorioPolitico[]>(() => {
+    if (!userData || !isPolitico(userData) || eleitores.length === 0) return [];
+    const cidadeMap = new Map<string, Eleitor[]>();
+    for (const e of eleitores) {
+      if (!e.cidade) continue;
+      if (!cidadeMap.has(e.cidade)) cidadeMap.set(e.cidade, []);
+      cidadeMap.get(e.cidade)!.push(e);
+    }
+    return Array.from(cidadeMap.entries()).map(([cidade, grupo]) => ({
+      cidade,
+      eleitores:         grupo.length,
+      fortes:            grupo.filter((e) => e.grauApoio === "forte").length,
+      medios:            grupo.filter((e) => e.grauApoio === "medio").length,
+      indecisos:         grupo.filter((e) => e.grauApoio === "indeciso").length,
+      fracos:            grupo.filter((e) => e.grauApoio === "fraco").length,
+      crescimento30d:    Math.min(grupo.length * 2, 100),
+      possuiAssessoria:  assessoriasCriadas.has(cidade) ||
+                         usuarios.some((u) => u.role === "assessor" && u.ativo === true && Array.isArray(u.cidades) && (u.cidades as string[]).includes(cidade)),
+      possuiCoordenacao: coordenacoesCriadas.has(cidade),
+      assessorResponsavel: "",
+    }));
+  }, [eleitores, assessoriasCriadas, coordenacoesCriadas, usuarios, userData]);
 
   if (!userData) return null;
   const config = getRoleConfig(userData);
@@ -627,22 +618,28 @@ export default function DashboardPage() {
     { cidade: "Timbaúba",  eleitores: 12,  fortes: 2,  medios: 4,  indecisos: 4,  fracos: 2,  crescimento30d: 3,   possuiAssessoria: true,  possuiCoordenacao: coordenacoesCriadas.has("Timbaúba"),  assessorResponsavel: "Carlos Silva"   },
   ] : [];
 
-  const motor = isPolitico(userData) ? executarMotorTerritorial(territoriosDemo) : null;
-
-  if (process.env.NODE_ENV === "development" && motor) {
-    console.log("[Motor Estratégico]", {
-      pendencias: motor.pendencias.length,
-      agenda:     motor.agenda.length,
-      alertas:    motor.alertas.length,
-      decisoes:   motor.decisoes.length,
-      memoria:    motor.memoria.length,
-    });
-  }
+  const territorios = territoriosReais.length > 0 ? territoriosReais : territoriosDemo;
+  const motor = isPolitico(userData) ? executarMotorTerritorial(territorios) : null;
 
   // Sprint 7 — substituição controlada: motor tem prioridade, demo é fallback
   const pendenciasMotor = motor?.pendencias ?? [];
   const pendenciasAtivas = pendenciasMotor.length > 0 ? pendenciasMotor : pendenciasDemo;
   const resumoPendenciasAtivas = isPolitico(userData) ? getResumoPendencias(pendenciasAtivas) : null;
+
+  // Classificação estratégica de municípios
+  const prioridadeMunicipio: Record<string, number> = {
+    Recife: 1, Olinda: 1, Caruaru: 1, Petrolina: 1, Garanhuns: 1,
+    Salgueiro: 2, Timbaúba: 2, Surubim: 2,
+    Bezerros: 3, Palmares: 3, Caetés: 3,
+  };
+  const eleitoresPorCidade = Object.fromEntries(territorios.map((t) => [t.cidade, t.eleitores]));
+  const pendenciasOrdenadas = [...pendenciasAtivas].sort((a, b) => {
+    const pa = prioridadeMunicipio[a.territorio] ?? 99;
+    const pb = prioridadeMunicipio[b.territorio] ?? 99;
+    if (pa !== pb) return pa - pb;
+    if (a.prioridade !== b.prioridade) return a.prioridade - b.prioridade;
+    return (eleitoresPorCidade[b.territorio] ?? 0) - (eleitoresPorCidade[a.territorio] ?? 0);
+  });
 
   // Sprint 8 — Agenda Executiva via motor
   const agendaMotor = motor?.agenda ?? [];
@@ -1282,7 +1279,7 @@ export default function DashboardPage() {
               <span className="text-xs text-white/30">{resumoPendenciasAtivas.texto}</span>
             </div>
             <div className="space-y-2">
-              {pendenciasAtivas.map((p) => {
+              {pendenciasOrdenadas.map((p) => {
                 const extra: PendenciaExtra = PENDENCIA_EXTRA[p.id] ?? { responsavel: "—", stats: [] };
                 const BADGE: Record<string, { label: string; bg: string; text: string; border: string; hoverBorder: string }> = {
                   critica: { label: "Crítica", bg: "bg-red-500/10",     text: "text-red-400",     border: "border-red-500/20",     hoverBorder: "hover:border-red-500/40"     },
@@ -1303,6 +1300,12 @@ export default function DashboardPage() {
                   baixa:   "→ Monitorar",
                 };
                 const b = BADGE[p.tipo];
+                const prio = prioridadeMunicipio[p.territorio];
+                const PRIO_STYLE: Record<number, string> = {
+                  1: "text-violet-400 bg-violet-500/10 border-violet-500/20",
+                  2: "text-amber-400  bg-amber-500/10  border-amber-500/20",
+                  3: "text-white/35   bg-white/5        border-white/10",
+                };
                 return (
                   <div key={p.id} className={`p-4 rounded-2xl bg-zinc-900 border ${b.border} ${b.hoverBorder} transition-all`}>
                     <div className="flex items-start gap-4">
@@ -1313,6 +1316,11 @@ export default function DashboardPage() {
                         <div className="flex items-center gap-2 mb-0.5">
                           <p className="text-sm font-semibold text-white truncate">{p.titulo}</p>
                           <span className="text-xs text-white/30 shrink-0">· {p.territorio}</span>
+                          {prio && (
+                            <span className={`shrink-0 text-[10px] font-bold px-1.5 py-0.5 rounded border ${PRIO_STYLE[prio]}`}>
+                              P{prio}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-white/40 mb-2">{p.descricao}</p>
                         <p className={`text-xs font-semibold ${b.text}`}>{ACAO_REC[p.tipo]}</p>
