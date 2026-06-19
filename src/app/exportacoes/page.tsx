@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, AppUser } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { formatDate, parseDate } from "@/lib/utils";
 import { FileSpreadsheet, FileText, Upload, BarChart2, Zap, AlertTriangle, X, MapPin, Crown, Target, Flag, TrendingUp } from "lucide-react";
@@ -29,7 +29,7 @@ export default function ExportacoesPage() {
   const [filtroEscopo, setFiltroEscopo] = useState("mandato");
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessor(userData)) {
+    if (userData && !isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) {
       router.push("/dashboard");
       return;
     }

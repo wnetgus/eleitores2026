@@ -1,10 +1,21 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { AlertaExecutivo, CardAlerta } from "./CardAlerta";
 
 export type { AlertaExecutivo };
 
+function getDestinoAlerta(a: AlertaExecutivo): string {
+  const acao = a.acao.toLowerCase();
+  const cidade = encodeURIComponent(a.cidade);
+  if (acao.includes("assessoria") || acao.includes("designar")) return `/missoes?acao=nova&tipo=criar_assessoria&cidade=${cidade}&prioridade=P1`;
+  if (acao.includes("fortalecer") || acao.includes("base"))     return `/missoes?acao=nova&tipo=fortalecer_base&cidade=${cidade}&prioridade=P2`;
+  if (acao.includes("expandir") || acao.includes("expansão"))   return `/missoes?acao=nova&tipo=expandir_territorio&cidade=${cidade}&prioridade=P2`;
+  return `/missoes`;
+}
+
 export function CentralAlertas({ alertas }: { alertas: AlertaExecutivo[] }) {
+  const router = useRouter();
   if (alertas.length === 0) return null;
 
   const criticos      = alertas.filter((a) => a.tipo === "critico").length;
@@ -37,9 +48,9 @@ export function CentralAlertas({ alertas }: { alertas: AlertaExecutivo[] }) {
       </div>
 
       {/* Lista */}
-      <div className="space-y-2">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {alertas.map((a, i) => (
-          <CardAlerta key={i} alerta={a} />
+          <CardAlerta key={i} alerta={a} onAcao={() => router.push(getDestinoAlerta(a))} />
         ))}
       </div>
     </div>

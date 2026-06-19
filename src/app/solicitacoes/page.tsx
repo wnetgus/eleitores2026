@@ -7,7 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { AppUser } from "@/types";
-import { isAssessor, isSuperOrMaster } from "@/lib/permissions";
+import { isAssessor, isAssessorExecutivo, isSuperOrMaster } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -44,7 +44,7 @@ export default function SolicitacoesPage() {
   const [recusaJustificativa, setRecusaJustificativa] = useState("");
 
   useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
+    if (userData && !isSuperOrMaster(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
     load();
   }, [userData]);
 
@@ -52,7 +52,7 @@ export default function SolicitacoesPage() {
     if (!userData) return;
     try {
       let data: AppUser[] = [];
-      if (isAssessor(userData)) {
+      if (isAssessor(userData) && !isAssessorExecutivo(userData)) {
         const coordSnap = await getDocs(
           query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("assessorId", "==", userData.uid))
         );
@@ -68,9 +68,11 @@ export default function SolicitacoesPage() {
             .filter((u) => u.status === "pendente" || u.status === "recusado");
         }
       } else {
-        const snap = await getDocs(
-          query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente", "recusado"]))
-        );
+        const campanhaId = userData?.campanhaId || userData?.gabineteId;
+        const baseQ = campanhaId && !isSuperOrMaster(userData)
+          ? query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente", "recusado"]), where("campanhaId", "==", campanhaId))
+          : query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("status", "in", ["pendente", "recusado"]));
+        const snap = await getDocs(baseQ);
         data = snap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
       }
       data.sort((a, b) => new Date(b.criadoEm || 0).getTime() - new Date(a.criadoEm || 0).getTime());
@@ -186,7 +188,7 @@ export default function SolicitacoesPage() {
       <div className="animate-spin h-8 w-8 rounded-full border-2 border-emerald-500 border-t-transparent" />
     </div>
   );
-  if (!isSuperOrMaster(userData) && !isAssessor(userData)) return null;
+  if (!isSuperOrMaster(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) return null;
 
   return (
     <div className="min-h-screen bg-[#0a0a0f]">

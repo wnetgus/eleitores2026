@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
 import { TrendingUp, Target, Zap, Flag, Save, Users, MapPin, Crown, AlertTriangle } from "lucide-react";
 import { calcularSFPSimples } from "@/lib/inteligencia";
+import { registrarMemoriaAutomatica } from "@/lib/firestore";
 import toast from "react-hot-toast";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -235,6 +236,24 @@ export default function MetasPage() {
         });
       }
       toast.success("Meta definida!");
+      const newMeta = Number(formMeta.valor);
+      const colabTotal = eleitores.filter((e) => e.colaboradorId === formMeta.colaboradorId).length;
+      const prevMeta = metas[formMeta.colaboradorId] || 0;
+      const jaSatisfazia = prevMeta > 0 && colabTotal >= prevMeta;
+      if (colabTotal >= newMeta && !jaSatisfazia) {
+        const colabInfo = colaboradores.find((c) => c.uid === formMeta.colaboradorId);
+        await registrarMemoriaAutomatica({
+          campanhaId: userData?.gabineteId || userData?.campanhaId || "",
+          tipo: "conquista",
+          titulo: `Meta atingida: ${colabInfo?.nome || "Colaborador"}`,
+          descricao: `${colabInfo?.nome || "Colaborador"} atingiu a meta de ${newMeta} eleitores com ${colabTotal} cadastros registrados.`,
+          prioridade: "alta",
+          status: "concluido",
+          ...(colabInfo?.cidadePrincipal && { cidade: colabInfo.cidadePrincipal }),
+          responsavelId: colabInfo?.uid,
+          responsavelNome: colabInfo?.nome,
+        });
+      }
       setFormMeta({ colaboradorId: "", valor: "" });
       load();
     } catch (e) { toast.error("Erro ao salvar meta"); } finally { setSavingMeta(false); }

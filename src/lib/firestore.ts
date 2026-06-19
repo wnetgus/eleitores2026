@@ -15,7 +15,7 @@ import {
   getCountFromServer,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { Eleitor, Atividade, Gabinete, Candidato } from "@/types";
+import { Eleitor, Atividade, Gabinete, Candidato, MemoriaMandato } from "@/types";
 
 const colecoes = {
   eleitores: "eleitores",
@@ -24,6 +24,7 @@ const colecoes = {
   metas: "metas",
   gabinetes: "campanhas",
   candidatos: "candidatos",
+  memoriaMandato: "memoriaMandato",
 };
 
 export async function getGabinetes() {
@@ -191,4 +192,117 @@ export async function buscarEleitoresPorPeriodo(inicio: Date, fim: Date, gabinet
   const q = query(collection(db, colecoes.eleitores), ...constraints);
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Eleitor));
+}
+
+// ─── memoriaMandato ───────────────────────────────────────────────────────────
+// Schema: { campanhaId, tipo, titulo, descricao, prioridade, status,
+//           cidade?, classificacao?, motivo?, resultado?, impacto?,
+//           responsavelId?, responsavelNome?, origem?, tags?,
+//           criadoEm (serverTimestamp), atualizadoEm?, resolvidoEm? }
+// Índice necessário para buscarMemoriasMandato: campanhaId ASC + criadoEm DESC
+
+export async function criarMemoriaMandato(
+  data: Omit<MemoriaMandato, "id" | "criadoEm" | "atualizadoEm" | "resolvidoEm">
+): Promise<string> {
+  const ref = await addDoc(collection(db, colecoes.memoriaMandato), {
+    ...data,
+    criadoEm: serverTimestamp(),
+  });
+  return ref.id;
+}
+
+export async function buscarMemoriasMandato(
+  campanhaId: string,
+  filtros?: {
+    tipo?: MemoriaMandato["tipo"];
+    status?: MemoriaMandato["status"];
+    cidade?: string;
+    limite?: number;
+  }
+): Promise<MemoriaMandato[]> {
+  const constraints: any[] = [
+    where("campanhaId", "==", campanhaId),
+    orderBy("criadoEm", "desc"),
+  ];
+  if (filtros?.limite) constraints.push(limit(filtros.limite));
+  const snap = await getDocs(query(collection(db, colecoes.memoriaMandato), ...constraints));
+  let resultado = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MemoriaMandato));
+  if (filtros?.tipo) resultado = resultado.filter((m) => m.tipo === filtros.tipo);
+  if (filtros?.status) resultado = resultado.filter((m) => m.status === filtros.status);
+  if (filtros?.cidade) resultado = resultado.filter((m) => m.cidade === filtros.cidade);
+  return resultado;
+}
+
+export async function atualizarMemoriaMandato(
+  id: string,
+  data: Partial<Omit<MemoriaMandato, "id" | "campanhaId" | "criadoEm">>
+): Promise<void> {
+  await updateDoc(doc(db, colecoes.memoriaMandato, id), {
+    ...data,
+    atualizadoEm: serverTimestamp(),
+  });
+}
+
+// ─── Memória automática (gatilhos) ───────────────────────────────────────────
+// Wrapper não-crítico: nunca lança exceção — falha silenciosa é intencional.
+
+export async function registrarMemoriaAutomatica(
+  data: Omit<MemoriaMandato, "id" | "criadoEm" | "atualizadoEm" | "resolvidoEm">
+): Promise<void> {
+  if (!data.campanhaId) return; // sem campanha, sem registro — evita documento órfão
+  try {
+    await criarMemoriaMandato({
+      ...data,
+      origem: "auto",
+      tags: ["auto", ...(data.tags || [])],
+    });
+  } catch {
+    // não-crítico: memória automática falhou silenciosamente
+  }
+}
+
+// Gatilho 3 — pendência concluída (aguarda wiring ao modal do dashboard)
+export async function registrarPendenciaConcluida(params: {
+  campanhaId: string;
+  titulo: string;
+  descricao: string;
+  cidade?: string;
+  resultado?: string;
+  responsavelId?: string;
+  responsavelNome?: string;
+}): Promise<void> {
+  return registrarMemoriaAutomatica({
+    campanhaId: params.campanhaId,
+    tipo: "pendencia",
+    titulo: `Pendência resolvida: ${params.titulo}`,
+    descricao: params.descricao,
+    prioridade: "media",
+    status: "concluido",
+    ...(params.cidade && { cidade: params.cidade }),
+    ...(params.resultado && { resultado: params.resultado }),
+    ...(params.responsavelId && { responsavelId: params.responsavelId }),
+    ...(params.responsavelNome && { responsavelNome: params.responsavelNome }),
+  });
+}
+
+// Gatilho 5 — alerta resolvido (aguarda wiring ao modal do dashboard)
+export async function registrarAlertaResolvido(params: {
+  campanhaId: string;
+  titulo: string;
+  descricao: string;
+  cidade?: string;
+  responsavelId?: string;
+  responsavelNome?: string;
+}): Promise<void> {
+  return registrarMemoriaAutomatica({
+    campanhaId: params.campanhaId,
+    tipo: "alerta",
+    titulo: `Alerta resolvido: ${params.titulo}`,
+    descricao: params.descricao,
+    prioridade: "media",
+    status: "concluido",
+    ...(params.cidade && { cidade: params.cidade }),
+    ...(params.responsavelId && { responsavelId: params.responsavelId }),
+    ...(params.responsavelNome && { responsavelNome: params.responsavelNome }),
+  });
 }

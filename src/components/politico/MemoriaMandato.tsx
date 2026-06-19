@@ -38,9 +38,12 @@ export function MemoriaMandato({ eventos }: { eventos: EventoMandato[] }) {
             Histórico político e evolução estratégica da operação.
           </p>
         </div>
-        <div className="text-right shrink-0 space-y-0.5">
-          <p className="text-[10px] text-white/20">Primeiro registro: <span className="text-white/35">{primeiro.data}</span></p>
-          <p className="text-[10px] text-white/20">Última atualização: <span className="text-white/35">{ultimo.data}</span></p>
+        <div className="text-right shrink-0 space-y-1">
+          <a href="/memoria-mandato" className="block text-[11px] text-white/35 hover:text-white/70 transition-colors font-medium">
+            Ver histórico completo →
+          </a>
+          <p className="text-[10px] text-white/20">Primeiro: <span className="text-white/35">{primeiro.data}</span></p>
+          <p className="text-[10px] text-white/20">Último: <span className="text-white/35">{ultimo.data}</span></p>
         </div>
       </div>
 

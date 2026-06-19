@@ -6,7 +6,7 @@ import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppUser, UserRole, ROLE_CONFIG, Gabinete } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isAssessor, isPolitico, canViewCoordenadores, canManageUsers } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isAssessor, isAssessorExecutivo, isPolitico, canViewCoordenadores, canManageUsers } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -17,7 +17,7 @@ import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOper
 import { Target, UserPlus, Shield, Mail, MapPin, Pencil, Power, Users, Filter, X, Building2, ChevronRight, Trash2, Search, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate, sugerirEmail } from "@/lib/utils";
-import { registrarAtividade } from "@/lib/firestore";
+import { registrarAtividade, registrarMemoriaAutomatica } from "@/lib/firestore";
 import { estados, getCidades } from "@/lib/estados-cidades";
 import { Modal } from "@/components/ui/Modal";
 
@@ -89,9 +89,19 @@ export default function CoordenadoresPage() {
             setGabineteContexto({ id: gabineteIdParam, nome: g.nome, cargo: g.cargo?.replace(/_/g, " ") });
           }
         }
+      } else if (isAssessorExecutivo(userData) && userData?.campanhaId) {
+        // Executivo vê assessores da sua campanha para poder transferir coordenadores
+        const aSnap = await getDocs(
+          query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", userData.campanhaId))
+        );
+        setAssessoresDisponiveis(aSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
       }
       const constraints: any[] = [where("role", "==", "coordenador")];
-      if (isAssessor(userData) && userData?.uid) {
+      if (isAssessorExecutivo(userData) && userData?.campanhaId) {
+        // Executivo vê todos os coordenadores da campanha
+        constraints.push(where("campanhaId", "==", userData.campanhaId));
+        constraints.push(orderBy("criadoEm", "desc"));
+      } else if (isAssessor(userData) && userData?.uid) {
         constraints.push(where("assessorId", "==", userData.uid));
       } else if (!isSuperOrMaster(userData) && userData?.campanhaId) {
         constraints.push(where("campanhaId", "==", userData.campanhaId));
@@ -118,6 +128,7 @@ export default function CoordenadoresPage() {
   }
 
   async function salvarCoordenacao() {
+    if (!podeGerenciar) { toast.error("Ação restrita ao Assessor Executivo."); return; }
     if (!formCoord.nomeCoord.trim()) { toast.error("Informe o nome do coordenador responsável."); return; }
     if (!cidadeParam) { toast.error("Município não identificado."); return; }
     setSalvandoCoord(true);
@@ -132,6 +143,17 @@ export default function CoordenadoresPage() {
         criadoPor: userData?.uid ?? "",
       });
       toast.success("Coordenação criada com sucesso!");
+      await registrarMemoriaAutomatica({
+        campanhaId: userData?.campanhaId || userData?.gabineteId || "",
+        tipo: "conquista",
+        titulo: `Coordenação criada em ${cidadeParam}`,
+        descricao: `Coordenação territorial estabelecida em ${cidadeParam} por ${formCoord.nomeCoord.trim()}.`,
+        prioridade: "media",
+        status: "aberto",
+        cidade: cidadeParam ?? undefined,
+        responsavelId: userData?.uid,
+        responsavelNome: userData?.nome,
+      });
       setModalCriarCoord(false);
       router.push("/dashboard");
     } catch (err) {
@@ -153,7 +175,10 @@ export default function CoordenadoresPage() {
       await createAuthUser(form.email, form.password, {
         email: form.email, nome: form.nome, role: "coordenador", estado: form.estado, cidadePrincipal: form.cidadePrincipal, regiao: form.regiao,
         campanhaId, gabineteId: campanhaId, criadoEm: new Date(), ativo: true, criadoPor: userData?.uid,
-        ...(isAssessor(userData) ? { assessorId: userData!.uid } : form.assessorId ? { assessorId: form.assessorId } : {}),
+        ...(isAssessor(userData) ? { assessorId: userData!.uid }
+           : isAssessorExecutivo(userData) && form.assessorId ? { assessorId: form.assessorId }
+           : form.assessorId ? { assessorId: form.assessorId }
+           : {}),
       });
       await registrarAtividade({ acao: "criar_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Criou coordenador ${form.nome}` });
       toast.success("Coordenador criado!");
@@ -165,6 +190,7 @@ export default function CoordenadoresPage() {
   }
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
+    if (!podeGerenciar) { toast.error("Sem permissão para esta ação."); return; }
     try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Coordenador ${ativo ? "desativado" : "ativado"}`); loadCoordenadores(); } catch (e) { toast.error("Erro"); }
   }
 
@@ -221,7 +247,7 @@ export default function CoordenadoresPage() {
   }, [coordenadores, filtros, assessorIdParam]);
 
   if (!userData || !canViewCoordenadores(userData)) return null;
-  const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
+  const podeGerenciar = isSuperOrMaster(userData) || isAssessorExecutivo(userData);
   const config = getRoleConfig(userData);
 
   return (
@@ -550,7 +576,7 @@ export default function CoordenadoresPage() {
                 )}
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-white/30">Criado em: {formatDate(c.criadoEm)}</span>
-                  {userData?.uid !== c.uid && (
+                  {podeGerenciar && userData?.uid !== c.uid && (
                     <button onClick={() => handleToggleStatus(c.uid, c.ativo)} className={`${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
                       {c.ativo ? "Desativar" : "Ativar"}
                     </button>

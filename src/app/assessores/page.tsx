@@ -6,7 +6,7 @@ import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { AppUser, Gabinete, Eleitor, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isPrefeito, isAssessor, isPolitico, canViewAssessores, canManageUsers } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isPrefeito, isAssessor, isAssessorExecutivo, isPolitico, canViewAssessores, canManageUsers } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,7 @@ import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOper
 import { Shield, UserPlus, Mail, Pencil, Building2, Trash2, MapPin, Users, TrendingUp, TrendingDown, X, Plus, AlertTriangle } from "lucide-react";
 import toast from "react-hot-toast";
 import { formatDate, sugerirEmail, parseDate } from "@/lib/utils";
-import { registrarAtividade } from "@/lib/firestore";
+import { registrarAtividade, registrarMemoriaAutomatica } from "@/lib/firestore";
 import { Modal } from "@/components/ui/Modal";
 
 // ── Tag input para cidades ────────────────────────────────────────────────────
@@ -127,8 +127,8 @@ export default function AssessoresPage() {
   const [coordenaoresExec, setCoordenadoresExec] = useState<AppUser[]>([]);
   const [eleitoresExec, setEleitoresExec] = useState<Eleitor[]>([]);
   const [ordenacao, setOrdenacao] = useState<"forca" | "criticos" | "crescimento" | "estagnados" | "sem-base" | "sem-coord">("forca");
-  const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessor(userData);
-  const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);
+  const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessorExecutivo(userData) || isAssessor(userData);
+  const podeGerenciar = isSuperOrMaster(userData) || isAssessorExecutivo(userData);
 
   useEffect(() => {
     if (userData && !podeAcessar) { router.push("/dashboard"); return; }
@@ -171,7 +171,7 @@ export default function AssessoresPage() {
         const gSnap = await getDocs(collection(db, "campanhas"));
         setTodosGabinetes(gSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Gabinete)));
       }
-      if (userData && isPolitico(userData)) {
+      if (userData && (isPolitico(userData) || isAssessorExecutivo(userData))) {
         const scopeId = userData?.gabineteId || userData?.campanhaId;
         if (scopeId) {
           const fieldName = userData?.gabineteId ? "gabineteId" : "campanhaId";
@@ -210,6 +210,7 @@ export default function AssessoresPage() {
   }
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
+    if (!podeGerenciar) { toast.error("Sem permissão para esta ação."); return; }
     try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Assessor ${ativo ? "desativado" : "ativado"}`); loadAssessores(); } catch (e) { toast.error("Erro"); }
   }
 
@@ -242,7 +243,7 @@ export default function AssessoresPage() {
   }
 
   const statsExec = useMemo(() => {
-    if (!userData || !isPolitico(userData)) return [];
+    if (!userData || (!isPolitico(userData) && !isAssessorExecutivo(userData))) return [];
     const agora = Date.now();
     return assessores.map((a) => {
       const meusCoords = coordenaoresExec.filter((c) => c.assessorId === a.uid);
@@ -321,6 +322,7 @@ export default function AssessoresPage() {
   const config = getRoleConfig(userData);
 
   async function salvarAssessoria() {
+    if (!podeGerenciar) { toast.error("Ação restrita ao Assessor Executivo."); return; }
     if (!formAssessoria.nomeAssessor.trim()) {
       toast.error("Informe o nome do assessor responsável."); return;
     }
@@ -339,6 +341,17 @@ export default function AssessoresPage() {
         criadoPor: userData?.uid ?? "",
       });
       toast.success(`Assessoria de ${cidadeParam} criada com sucesso!`);
+      await registrarMemoriaAutomatica({
+        campanhaId: userData?.campanhaId || userData?.gabineteId || "",
+        tipo: "expansao",
+        titulo: `Assessoria criada em ${cidadeParam}`,
+        descricao: `Assessoria regional estabelecida em ${cidadeParam} por ${formAssessoria.nomeAssessor.trim()}.`,
+        prioridade: "media",
+        status: "aberto",
+        cidade: cidadeParam ?? undefined,
+        responsavelId: userData?.uid,
+        responsavelNome: userData?.nome,
+      });
       setModalCriarAssessoria(false);
       router.push("/dashboard");
     } catch (err) {
@@ -349,7 +362,7 @@ export default function AssessoresPage() {
     }
   }
 
-  if (isPolitico(userData)) {
+  if (isPolitico(userData) || isAssessorExecutivo(userData)) {
     const totalBracos = statsExec.length;
     const bracosAtivos = statsExec.filter((s) => s.recentes30 > 0).length;
     const totalEleitoresCobertos = statsExec.reduce((sum, s) => sum + s.totalEleitores, 0);
@@ -827,7 +840,7 @@ export default function AssessoresPage() {
                   )}
                   <div className="flex items-center justify-between text-xs pt-1">
                     <span className="text-white/30">Criado em: {formatDate(c.criadoEm)}</span>
-                    {userData?.uid !== c.uid && (
+                    {podeGerenciar && userData?.uid !== c.uid && (
                       <button onClick={() => handleToggleStatus(c.uid, c.ativo)} className={`${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
                         {c.ativo ? "Desativar" : "Ativar"}
                       </button>

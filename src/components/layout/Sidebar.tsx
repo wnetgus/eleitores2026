@@ -25,6 +25,7 @@ import {
   Eye,
   Map,
   Clock,
+  BookOpen,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,7 +34,7 @@ import { auth } from "@/lib/firebase";
 import { db } from "@/lib/firebase";
 import { useRouter } from "next/navigation";
 import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
-import { isSuperAdmin, isAdminMaster, isPolitico, isPrefeito, isVereador, isAssessor, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
+import { isSuperAdmin, isAdminMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo, isCoordenador, isColaborador, getRoleConfig } from "@/lib/permissions";
 import { ROLE_CONFIG } from "@/types";
 
 const superAdminMenu = [
@@ -57,11 +58,27 @@ const superAdminMenu = [
 const politicoMenu = [
   { href: "/dashboard", label: "Centro de Mandato", icon: Crown },
   { href: "/mapa-politico", label: "Força Territorial", icon: Map },
-  { href: "/assessores", label: "Assessores", icon: Shield },
-  { href: "/eleitores", label: "Base Eleitoral", icon: TrendingUp },
-  { href: "/relatorios", label: "Inteligência Política", icon: Zap },
+  { href: "/missoes", label: "Missões", icon: Zap },
+  { href: "/relatorios", label: "Inteligência Política", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas de Expansão", icon: Target },
+  { href: "/memoria-mandato", label: "Memória do Mandato", icon: BookOpen },
+];
+
+const assessorExecutivoMenu = [
+  { href: "/dashboard",       label: "Gabinete Executivo",   icon: Crown         },
+  { href: "/missoes",         label: "Missões",              icon: Zap           },
+  { href: "/mapa-politico",   label: "Força Territorial",    icon: Map           },
+  { href: "/assessores",      label: "Assessores Regionais", icon: Shield        },
+  { href: "/coordenadores",   label: "Coordenadores",        icon: Target        },
+  { href: "/colaboradores",   label: "Mobilizadores",        icon: Users         },
+  { href: "/solicitacoes",    label: "Solicitações",         icon: Clock         },
+  { href: "/eleitores",       label: "Base Eleitoral",       icon: TrendingUp    },
+  { href: "/relatorios",      label: "Relatórios",           icon: BarChart3     },
+  { href: "/exportacoes",     label: "Exportações",          icon: FileSpreadsheet },
+  { href: "/metas",           label: "Metas",                icon: Flag          },
+  { href: "/memoria-mandato", label: "Memória do Mandato",   icon: BookOpen      },
+  { href: "/logs",            label: "Auditoria",            icon: Activity      },
 ];
 
 const prefeitoMenu = [
@@ -149,7 +166,7 @@ export function Sidebar() {
         }
       } catch {}
     }
-    if (userData && (isSuperAdmin(userData) || isAdminMaster(userData) || isAssessor(userData))) {
+    if (userData && (isSuperAdmin(userData) || isAdminMaster(userData) || isAssessorExecutivo(userData) || isAssessor(userData))) {
       loadPendentes();
     }
     if (userData) {
@@ -174,6 +191,7 @@ export function Sidebar() {
   else if (isPolitico(userData)) menuItems = politicoMenu;
   else if (isPrefeito(userData)) menuItems = prefeitoMenu;
   else if (isVereador(userData)) menuItems = vereadorMenu;
+  else if (isAssessorExecutivo(userData)) menuItems = assessorExecutivoMenu;
   else if (isAssessor(userData)) menuItems = assessorMenu;
   else if (isCoordenador(userData)) menuItems = coordenadorMenu;
   else menuItems = colaboradorMenu;
@@ -241,7 +259,7 @@ export function Sidebar() {
               </Link>
             );
           })}
-          {isAssessor(userData) && userData?.gabineteId && (
+          {(isAssessorExecutivo(userData) || isAssessor(userData)) && userData?.gabineteId && (
             <Link
               href={`/gabinete/${userData.gabineteId}`}
               onClick={() => setMobileOpen(false)}
@@ -261,7 +279,7 @@ export function Sidebar() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white/90 font-medium truncate">{userData.nome}</p>
-                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>{isAdmin ? "Admin" : isPoliticoRole ? "Político" : isAssessor(userData) ? "Articulação Regional" : "Operador"} • {roleInfo.label}</p>
+                <p className={`text-[10px] ${roleInfo.text} uppercase tracking-wider`}>{isAdmin ? "Admin" : isPoliticoRole ? "Político" : isAssessorExecutivo(userData) ? "Executivo" : isAssessor(userData) ? "Regional" : "Operador"} • {roleInfo.label}</p>
                 {hierarquia.coordenador && <p className="text-[10px] text-white/40 truncate">Coordenação: {hierarquia.coordenador}</p>}
                 {hierarquia.assessor && <p className="text-[10px] text-white/30 truncate">Assessoria: {hierarquia.assessor}</p>}
                 {isAssessor(userData) && (userData?.cidadePrincipal || userData?.cidade) && (

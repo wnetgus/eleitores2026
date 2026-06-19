@@ -5,7 +5,7 @@ import { collection, getDocs, query, orderBy, where, doc, getDoc } from "firebas
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Gabinete, Eleitor, AppUser } from "@/types";
-import { isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, getRoleConfig } from "@/lib/permissions";
+import { isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo, getRoleConfig } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
@@ -179,8 +179,8 @@ function ViewForcaTerritorial({
     if (semAssessor.length > 0)
       criticos.push({
         msg: `${semAssessor.length} ${semAssessor.length === 1 ? "município com eleitores sem assessoria regional" : "municípios com eleitores sem assessoria regional"}`,
-        link: `/assessores?acao=expandir&municipios=${semAssessor.map(c => encodeURIComponent(c.cidade)).join(",")}`,
-        linkLabel: "Designar assessoria",
+        link: `/missoes?acao=nova&tipo=criar_assessoria&cidade=${encodeURIComponent(semAssessor[0]?.cidade ?? "")}&prioridade=P1`,
+        linkLabel: "Criar Missão →",
       });
 
     const emQueda = cidadesStats.filter(c => c.ic?.direcao === "queda" || c.ic?.direcao === "retraindo");
@@ -310,6 +310,23 @@ function ViewForcaTerritorial({
       {/* ── 2. ALERTAS ESTRATÉGICOS ── */}
       {(alertas.criticos.length > 0 || alertas.atencao.length > 0 || alertas.oportunidades.length > 0) && (
         <div className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            {alertas.criticos.length > 0 && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                🔴 {alertas.criticos.length} crítico{alertas.criticos.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            {alertas.atencao.length > 0 && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                ⚠ {alertas.atencao.length} atenção
+              </span>
+            )}
+            {alertas.oportunidades.length > 0 && (
+              <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                ⚡ {alertas.oportunidades.length} oportunidade{alertas.oportunidades.length !== 1 ? "s" : ""}
+              </span>
+            )}
+          </div>
           {alertas.criticos.map((a, i) => (
             <div key={`c${i}`} className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm border bg-red-500/8 border-red-500/20 text-red-400">
               <AlertTriangle size={15} className="shrink-0" />
@@ -373,19 +390,26 @@ function ViewForcaTerritorial({
             <p className="text-white/20 text-xs mt-1">Cadastre eleitores ou defina os territórios dos assessores</p>
           </GlassCard>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
             {cidadesSorted.map(({ cidade, eleitoresData, assessor, coordenadoresData, sfp, ic, recentes30, pctForte, temAssessor, temCoordenador, scoreT }) => {
-              const scoreCor    = scoreT >= 70 ? "text-emerald-400" : scoreT >= 40 ? "text-amber-400" : "text-red-400";
-              const scoreBg     = scoreT >= 70 ? "bg-emerald-500/10" : scoreT >= 40 ? "bg-amber-500/10" : "bg-red-500/10";
-              const cardBorder  = scoreT >= 70 ? "border-emerald-500/15" : scoreT >= 40 ? "border-amber-500/15" : "border-red-500/15";
-              const scoreLabel  = scoreT >= 85 ? "Forte" : scoreT >= 70 ? "Boa" : scoreT >= 50 ? "Atenção" : scoreT >= 30 ? "Fraca" : "Crítica";
+              const scoreCor   = scoreT >= 70 ? "text-emerald-400" : scoreT >= 40 ? "text-amber-400" : "text-red-400";
+              const scoreBg    = scoreT >= 70 ? "bg-emerald-500/10" : scoreT >= 40 ? "bg-amber-500/10" : "bg-red-500/10";
+              const cardBorder = scoreT >= 70 ? "border-emerald-500/15" : scoreT >= 40 ? "border-amber-500/15" : "border-red-500/15";
+              const scoreLabel = scoreT >= 85 ? "Forte" : scoreT >= 70 ? "Boa" : scoreT >= 50 ? "Atenção" : scoreT >= 30 ? "Fraca" : "Crítica";
+              const PRIO_MUN: Record<string, number> = { Recife: 1, Olinda: 1, Caruaru: 1, Petrolina: 1, Garanhuns: 1, Salgueiro: 2, Timbaúba: 2, Surubim: 2, Bezerros: 3, Palmares: 3, Caetés: 3 };
+              const PRIO_STYLE: Record<number, string> = { 1: "text-red-400 bg-red-500/10 border-red-500/20", 2: "text-amber-400 bg-amber-500/10 border-amber-500/20", 3: "text-white/35 bg-white/5 border-white/10" };
+              const prio = PRIO_MUN[cidade];
               return (
-                <div key={cidade} className={`p-4 rounded-xl border ${cardBorder} bg-white/[0.02] space-y-3 hover:border-white/[0.10] transition-colors`}>
+                <div key={cidade} className={`p-4 rounded-xl border ${cardBorder} bg-white/2 space-y-3 hover:border-white/10 transition-colors`}>
 
+                  {/* Header: cidade + P1/P2/P3 + score */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                       <MapPin size={13} className="text-amber-400 shrink-0 mt-0.5" />
                       <p className="text-white font-semibold text-sm">{cidade}</p>
+                      {prio && (
+                        <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${PRIO_STYLE[prio]}`}>P{prio}</span>
+                      )}
                     </div>
                     <div className={`flex flex-col items-end shrink-0 px-2 py-1 rounded-lg ${scoreBg}`}>
                       <div className="flex items-baseline gap-0.5">
@@ -396,39 +420,56 @@ function ViewForcaTerritorial({
                     </div>
                   </div>
 
+                  {/* SFP + IC resumido */}
                   <div className="flex items-center gap-2 flex-wrap">
                     {sfp ? (
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sfp.bg} ${sfp.cor}`}>SFP {sfp.label}</span>
                     ) : (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/30">SFP — poucos dados</span>
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/30">SFP —</span>
                     )}
-                    {ic && <span className={`text-xs font-semibold ml-auto ${ic.cor}`}>{ic.seta} {ic.label}</span>}
+                    {ic && (
+                      <span className={`text-xs font-semibold ml-auto ${ic.cor}`}>
+                        {ic.seta} {ic.variacao > 0 ? "+" : ""}{ic.variacao}% (30d)
+                      </span>
+                    )}
                   </div>
 
-                  <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/[0.05]">
+                  {/* Stats: Eleitores | +30d | Coords | Força */}
+                  <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-white/5">
                     <div className="text-center">
                       <p className="text-white font-bold text-base leading-tight">{eleitoresData.length}</p>
-                      <p className="text-white/30 text-[10px] mt-0.5">eleitores</p>
+                      <p className="text-white/30 text-[9px] mt-0.5">eleitores</p>
                     </div>
-                    <div className="text-center border-x border-white/[0.05]">
+                    <div className="text-center border-x border-white/5">
+                      <p className={`font-bold text-base leading-tight ${recentes30 > 0 ? "text-blue-400" : "text-white/30"}`}>
+                        {recentes30 > 0 ? `+${recentes30}` : "—"}
+                      </p>
+                      <p className="text-white/30 text-[9px] mt-0.5">novos 30d</p>
+                    </div>
+                    <div className="text-center border-r border-white/5">
                       <p className="text-white font-bold text-base leading-tight">{coordenadoresData.length}</p>
-                      <p className="text-white/30 text-[10px] mt-0.5">coords</p>
+                      <p className="text-white/30 text-[9px] mt-0.5">coords</p>
                     </div>
                     <div className="text-center">
                       <p className={`font-bold text-base leading-tight ${pctForte >= 40 ? "text-emerald-400" : pctForte >= 20 ? "text-amber-400" : eleitoresData.length > 0 ? "text-red-400" : "text-white/30"}`}>
                         {eleitoresData.length > 0 ? `${pctForte}%` : "—"}
                       </p>
-                      <p className="text-white/30 text-[10px] mt-0.5">apoio forte</p>
+                      <p className="text-white/30 text-[9px] mt-0.5">força</p>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/[0.04]">
+                  {/* Rodapé: cobertura */}
+                  <div className="flex items-center justify-between text-xs pt-1 border-t border-white/4">
                     <div className="flex items-center gap-2">
-                      <span className={temAssessor    ? "text-emerald-400" : "text-red-400/70"  }>{temAssessor    ? "✓" : "✗"} Assessor</span>
-                      <span className={temCoordenador ? "text-emerald-400" : "text-amber-400/70"}>{temCoordenador ? "✓" : "✗"} Coord</span>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded ${temAssessor ? "text-emerald-400 bg-emerald-500/10" : "text-red-400/70 bg-red-500/5"}`}>
+                        {temAssessor ? "✓" : "✗"} Assessor
+                      </span>
+                      <span className={`text-[11px] px-1.5 py-0.5 rounded ${temCoordenador ? "text-emerald-400 bg-emerald-500/10" : "text-amber-400/70 bg-amber-500/5"}`}>
+                        {temCoordenador ? "✓" : "✗"} Coord
+                      </span>
                     </div>
                     {assessor && (
-                      <span className="text-white/35 text-[11px] truncate max-w-[100px]">{assessor.nome.split(" ")[0]}</span>
+                      <span className="text-white/35 text-[11px] truncate max-w-25">{assessor.nome.split(" ")[0]}</span>
                     )}
                   </div>
                 </div>
@@ -468,20 +509,26 @@ function ViewForcaTerritorial({
                   </div>
                 )}
 
-                <div className="grid grid-cols-3 gap-2 pt-1 border-t border-white/[0.05]">
+                <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-white/5">
                   <div className="text-center">
                     <p className="text-white font-bold text-lg leading-tight">{s.totalEleitores}</p>
-                    <p className="text-white/30 text-xs mt-0.5">eleitores</p>
+                    <p className="text-white/30 text-[10px] mt-0.5">eleitores</p>
                   </div>
-                  <div className="text-center border-x border-white/[0.05]">
+                  <div className="text-center border-x border-white/5">
                     <p className="text-white font-bold text-lg leading-tight">{s.totalCoords}</p>
-                    <p className="text-white/30 text-xs mt-0.5">coords</p>
+                    <p className="text-white/30 text-[10px] mt-0.5">coords</p>
                   </div>
-                  <div className="text-center">
+                  <div className="text-center border-r border-white/5">
                     <p className={`font-bold text-lg leading-tight ${s.forca >= 40 ? "text-emerald-400" : s.forca >= 20 ? "text-amber-400" : s.totalEleitores > 0 ? "text-red-400" : "text-white/30"}`}>
                       {s.totalEleitores > 0 ? `${s.forca}%` : "—"}
                     </p>
-                    <p className="text-white/30 text-xs mt-0.5">força</p>
+                    <p className="text-white/30 text-[10px] mt-0.5">força</p>
+                  </div>
+                  <div className="text-center">
+                    <p className={`font-bold text-lg leading-tight ${s.tendencia > 5 ? "text-emerald-400" : s.tendencia >= -5 ? "text-white/50" : "text-red-400"}`}>
+                      {s.tendencia > 0 ? "+" : ""}{s.tendencia}%
+                    </p>
+                    <p className="text-white/30 text-[10px] mt-0.5">tendência</p>
                   </div>
                 </div>
 
@@ -520,7 +567,7 @@ export default function MapaPoliticoPage() {
   const [gabineteAtual, setGabineteAtual] = useState<Gabinete | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isVereador(userData) || isAssessor(userData);
+  const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isVereador(userData) || isAssessorExecutivo(userData) || isAssessor(userData);
 
   useEffect(() => {
     if (userData && !podeAcessar) { router.push("/dashboard"); return; }

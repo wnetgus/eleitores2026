@@ -6,7 +6,8 @@ import { collection, getDocs, getDoc, doc, query, orderBy, where } from "firebas
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo, isCoordenador, isColaborador } from "@/lib/permissions";
+import { DashboardExecutivo } from "./DashboardExecutivo";
 import { getPartyColors, exportRelatorioExecutivo } from "@/lib/reports";
 import { buscarEleitoresPorGabinetes } from "@/lib/firestore";
 import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter, AlertTriangle, Bell, Clock, Eye, PlusCircle, FileSpreadsheet, Settings } from "lucide-react";
@@ -57,6 +58,9 @@ export default function DashboardPage() {
   useEffect(() => {
     async function load() {
       try {
+        // Executivo tem DashboardExecutivo próprio — não carrega dados aqui
+        if (isAssessorExecutivo(userData)) { setLoading(false); return; }
+
         const gabId = userData?.campanhaId || userData?.gabineteId;
         let usuariosSnap: { docs: any[] };
         if (isSuperOrMaster(userData)) {
@@ -158,13 +162,17 @@ export default function DashboardPage() {
         }
         // Assessorias ativas — para o motor perceber municípios com cobertura real
         if (isPolitico(userData)) {
-          const aSnap = await getDocs(query(collection(db, "assessorias"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
-          setAssessoriasCriadas(new Set(aSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
+          try {
+            const aSnap = await getDocs(query(collection(db, "assessorias"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
+            setAssessoriasCriadas(new Set(aSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
+          } catch (e) { console.error("assessorias:", e); setAssessoriasCriadas(new Set()); }
         }
         // Coordenações ativas — para o motor perceber municípios com coordenação real
         if (isPolitico(userData)) {
-          const cSnap = await getDocs(query(collection(db, "coordenacoes"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
-          setCoordenacoesCriadas(new Set(cSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
+          try {
+            const cSnap = await getDocs(query(collection(db, "coordenacoes"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
+            setCoordenacoesCriadas(new Set(cSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
+          } catch (e) { console.error("coordenacoes:", e); setCoordenacoesCriadas(new Set()); }
         }
 
         setUltimaAtualizacao(new Date());
@@ -188,15 +196,32 @@ export default function DashboardPage() {
       medios:            grupo.filter((e) => e.grauApoio === "medio").length,
       indecisos:         grupo.filter((e) => e.grauApoio === "indeciso").length,
       fracos:            grupo.filter((e) => e.grauApoio === "fraco").length,
-      crescimento30d:    Math.min(grupo.length * 2, 100),
+      crescimento30d: (() => {
+        const agora = Date.now();
+        const ultimos30 = grupo.filter((e) => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000).length;
+        const prev30    = grupo.filter((e) => { const t = parseDate(e.criadoEm).getTime(); return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000; }).length;
+        return prev30 > 0 ? Math.round(((ultimos30 - prev30) / prev30) * 100) : ultimos30 > 0 ? 100 : 0;
+      })(),
       possuiAssessoria:  assessoriasCriadas.has(cidade) ||
-                         usuarios.some((u) => u.role === "assessor" && u.ativo === true && Array.isArray(u.cidades) && (u.cidades as string[]).includes(cidade)),
-      possuiCoordenacao: coordenacoesCriadas.has(cidade),
+                         usuarios.some((u) => u.role === "assessor" && u.ativo === true && (
+                           (Array.isArray(u.cidades) && (u.cidades as string[]).includes(cidade)) ||
+                           (u as any).cidade === cidade ||
+                           (u as any).cidadePrincipal === cidade
+                         )),
+      possuiCoordenacao: coordenacoesCriadas.has(cidade) ||
+                         usuarios.some((u) => u.role === "coordenador" && u.ativo === true && (
+                           (u as any).cidadePrincipal === cidade ||
+                           (u as any).cidade === cidade
+                         )),
       assessorResponsavel: "",
     }));
   }, [eleitores, assessoriasCriadas, coordenacoesCriadas, usuarios, userData]);
 
   if (!userData) return null;
+
+  // Assessor Executivo tem dashboard próprio — não usa o fluxo genérico abaixo
+  if (isAssessorExecutivo(userData)) return <DashboardExecutivo userData={userData} />;
+
   const config = getRoleConfig(userData);
   const roleInfo = ROLE_CONFIG[userData.role];
 
@@ -573,10 +598,10 @@ export default function DashboardPage() {
   ] : [];
 
   const alertasDemo: AlertaExecutivo[] = isPolitico(userData) ? [
-    { tipo: "critico",      titulo: "30 dias sem evolução",      descricao: "Garanhuns permanece sem recuperação.",  cidade: "Garanhuns", responsavel: "Carla Neves",    tempo: "há 2 horas", acao: "Abrir plano"           },
-    { tipo: "oportunidade", titulo: "57 indecisos disponíveis",  descricao: "Recife apresenta alto potencial.",      cidade: "Recife",    responsavel: "Marcos Andrade", tempo: "há 4 horas", acao: "Intensificar conversão" },
-    { tipo: "sucesso",      titulo: "Estrutura consolidada",     descricao: "Olinda atingiu estabilidade.",          cidade: "Olinda",    responsavel: "Marcos Andrade", tempo: "ontem",      acao: "Visualizar"            },
-    { tipo: "atencao",      titulo: "Meta abaixo do esperado",   descricao: "Petrolina caiu para 8% de força.",     cidade: "Petrolina", responsavel: "Pedro Coelho",   tempo: "há 1 dia",   acao: "Revisar meta"          },
+    { tipo: "critico",      titulo: "30 dias sem evolução",      descricao: "Garanhuns permanece sem recuperação.",  cidade: "Garanhuns", responsavel: "Carla Neves",    tempo: "há 2 horas", acao: "Abrir plano",           classificacao: "P1", cobertura: 0,   potencialEleitoral: "+48 eleitores"  },
+    { tipo: "oportunidade", titulo: "57 indecisos disponíveis",  descricao: "Recife apresenta alto potencial.",      cidade: "Recife",    responsavel: "Marcos Andrade", tempo: "há 4 horas", acao: "Intensificar conversão", classificacao: "P1", cobertura: 85,  potencialEleitoral: "+57 eleitores"  },
+    { tipo: "sucesso",      titulo: "Estrutura consolidada",     descricao: "Olinda atingiu estabilidade.",          cidade: "Olinda",    responsavel: "Marcos Andrade", tempo: "ontem",      acao: "Visualizar",            classificacao: "P2", cobertura: 100                                       },
+    { tipo: "atencao",      titulo: "Meta abaixo do esperado",   descricao: "Petrolina caiu para 8% de força.",     cidade: "Petrolina", responsavel: "Pedro Coelho",   tempo: "há 1 dia",   acao: "Revisar meta",          classificacao: "P1", cobertura: 40,  potencialEleitoral: "+32 eleitores"  },
   ] : [];
 
   const agendaDemo: AgendaItem[] = isPolitico(userData) ? [
@@ -591,11 +616,20 @@ export default function DashboardPage() {
     { cidade: "Olinda",    titulo: "Estrutura Consolidada",         descricao: "Operação funcionando.",            responsavel: "Marcos Andrade", criadoEm: "05/06/2026", prazoDias: 5,  status: "concluida",    historico: ["Assessoria criada", "Coordenação criada", "Estrutura ativa"           ] },
   ] : [];
 
-  const execucaoDemo: ExecucaoItem[] = isPolitico(userData) ? [
+  // Execução real — derivada dos territórios reais (assessorias + coordenações)
+  const execucaoReal: ExecucaoItem[] = territoriosReais.map((t) => ({
+    cidade:      t.cidade,
+    status:      (!t.possuiAssessoria ? "atrasada" : !t.possuiCoordenacao ? "em_andamento" : "concluida") as ExecucaoItem["status"],
+    responsavel: t.assessorResponsavel || "—",
+    descricao:   !t.possuiAssessoria ? "Sem assessoria regional" : !t.possuiCoordenacao ? "Aguardando coordenação" : "Estrutura ativa",
+    dias:        0,
+  }));
+  const execucaoDemo: ExecucaoItem[] = isPolitico(userData) && execucaoReal.length === 0 ? [
     { cidade: "Olinda",   status: "concluida",    responsavel: "Marcos Andrade", descricao: "Assessoria consolidada",          dias: 5  },
     { cidade: "Surubim",  status: "em_andamento", responsavel: "Pedro Coelho",   descricao: "Criando assessoria regional",     dias: 15 },
     { cidade: "Timbaúba", status: "atrasada",     responsavel: "Carlos Silva",   descricao: "Coordenação ainda não criada",    dias: 20 },
   ] : [];
+  const execucaoAtiva: ExecucaoItem[] = execucaoReal.length > 0 ? execucaoReal : execucaoDemo;
   // territoriosDemo: dados representativos dos 10 municípios do cenário executivo.
   // Projetados para gerar pendencias=4, agenda=4, alertas=3, decisoes=4, memoria=4.
   const territoriosDemo: TerritorioPolitico[] = isPolitico(userData) ? [
@@ -623,7 +657,10 @@ export default function DashboardPage() {
 
   // Sprint 7 — substituição controlada: motor tem prioridade, demo é fallback
   const pendenciasMotor = motor?.pendencias ?? [];
-  const pendenciasAtivas = pendenciasMotor.length > 0 ? pendenciasMotor : pendenciasDemo;
+  // Com dados reais, o motor é autoridade absoluta — mesmo que retorne vazio (município resolvido)
+  const pendenciasAtivas = territoriosReais.length > 0
+    ? pendenciasMotor
+    : (pendenciasMotor.length > 0 ? pendenciasMotor : pendenciasDemo);
   const resumoPendenciasAtivas = isPolitico(userData) ? getResumoPendencias(pendenciasAtivas) : null;
 
   // Classificação estratégica de municípios
@@ -657,11 +694,11 @@ export default function DashboardPage() {
   const memoriaMotor = motor?.memoria ?? [];
   const memoriaAtiva = memoriaMotor.length > 0 ? memoriaMotor : eventosDemo;
 
-  type PendenciaExtra = { responsavel: string; stats?: { label: string; value: string }[]; assessor?: string };
+  type PendenciaExtra = { responsavel: string; stats?: { label: string; value: string }[]; assessor?: string; impacto?: { eleitores: string; assessores?: string; coordenacoes?: string }; prazo?: string };
   const PENDENCIA_EXTRA: Record<string, PendenciaExtra> = {
-    "Força Territorial-Surubim-Designar Assessoria": { responsavel: "Pedro Coelho", stats: [{ label: "Apoiadores", value: "4" }] },
-    "Base Eleitoral-Garanhuns-Recuperar Base":        { responsavel: "Carla Neves",  stats: [{ label: "Base Forte", value: "8%" }, { label: "Indecisos", value: "24" }, { label: "Tendência", value: "+91%" }] },
-    "Força Territorial-Timbaúba-Criar Coordenação":   { responsavel: "Carlos Silva", assessor: "Carlos Silva", stats: [{ label: "Apoiadores", value: "0" }] },
+    "Força Territorial-Surubim-Designar Assessoria": { responsavel: "Pedro Coelho", stats: [{ label: "Apoiadores", value: "4" }],                                                                                        impacto: { eleitores: "+350 eleitores", assessores: "+1 assessor", coordenacoes: "+1 coordenação" }, prazo: "15 dias" },
+    "Base Eleitoral-Garanhuns-Recuperar Base":        { responsavel: "Carla Neves",  stats: [{ label: "Base Forte", value: "8%" }, { label: "Indecisos", value: "24" }, { label: "Tendência", value: "+91%" }],           impacto: { eleitores: "+120 eleitores" },                                                           prazo: "60 dias" },
+    "Força Territorial-Timbaúba-Criar Coordenação":   { responsavel: "Carlos Silva", assessor: "Carlos Silva", stats: [{ label: "Apoiadores", value: "0" }],                                                             impacto: { eleitores: "+80 eleitores", coordenacoes: "+1 coordenação" },                            prazo: "30 dias" },
   };
 
   return (
@@ -820,8 +857,54 @@ export default function DashboardPage() {
         </GlassCard>
       )}
 
-      {/* CABEÇALHO: Gabinete Político (Assessor, Político, Prefeito, Vereador) */}
-      {(isAssessor(userData) || isPolitico(userData) || isPrefeito(userData) || isVereador(userData)) && gabineteNome && (
+      {/* CABEÇALHO: Deputado Federal — premium */}
+      {isPolitico(userData) && gabineteNome && (
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg shrink-0" style={{ background: `#${getPartyColors(gabinetePartido).p}` }}>
+              {gabineteNome.charAt(0)}
+            </div>
+            <div>
+              <p className="text-[11px] text-white/30 mb-0.5">
+                {(() => { const h = new Date().getHours(); return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"; })()},{" "}
+                <span className="text-white/50">{userData.nome.split(" ")[0]}</span>
+              </p>
+              <h1 className="text-xl font-bold text-white leading-tight">{gabineteNome}</h1>
+              <p className="text-sm text-white/40">
+                {gabineteCargo}{gabinetePartido ? ` · ${gabinetePartido}` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            {indiceSaudeTerritorial > 0 && (
+              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
+                indiceSaudeTerritorial >= 70 ? "bg-emerald-500/10 border-emerald-500/20" :
+                indiceSaudeTerritorial >= 45 ? "bg-amber-500/10  border-amber-500/20"  :
+                                               "bg-red-500/10    border-red-500/20"
+              }`}>
+                <span className={`text-[10px] uppercase tracking-wider font-medium ${
+                  indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
+                  indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
+                }`}>IST</span>
+                <span className={`text-xl font-bold leading-none ${
+                  indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
+                  indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
+                }`}>{indiceSaudeTerritorial}</span>
+                <span className="text-[10px] text-white/25">/100</span>
+              </div>
+            )}
+            <div className="text-right">
+              <p className={`text-xs font-medium ${roleInfo.text}`}>{roleInfo.label}</p>
+              <p className="text-[11px] text-white/25 mt-0.5">
+                {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CABEÇALHO: Assessor, Prefeito, Vereador */}
+      {(isAssessor(userData) || isPrefeito(userData) || isVereador(userData)) && gabineteNome && (
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold text-lg" style={{ background: `#${getPartyColors(gabinetePartido).p}` }}>
             {gabineteNome.charAt(0)}
@@ -833,7 +916,7 @@ export default function DashboardPage() {
             </p>
           </div>
           <div className="text-right">
-            <p className="text-xs text-white/40">{isPolitico(userData) ? "Político" : "Operador"}</p>
+            <p className="text-xs text-white/40">Operador</p>
             <p className="text-sm text-white/80 font-medium">{userData.nome}</p>
             <p className={`text-xs ${roleInfo.text}`}>{roleInfo.label}</p>
           </div>
@@ -990,16 +1073,32 @@ export default function DashboardPage() {
               <AlertTriangle size={16} className="text-violet-400" />
               <h3 className="text-white font-semibold">Prioridades Estratégicas</h3>
             </div>
-            <div className="space-y-3">
-              {prioridades.map((p, i) => (
-                <div key={i} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03]">
-                  <span className="text-xl shrink-0">{p.emoji}</span>
-                  <div className="min-w-0">
-                    <p className={`text-sm font-semibold ${p.cor}`}>{p.titulo}</p>
-                    <p className="text-xs text-white/40 mt-0.5">{p.descricao}</p>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              {prioridades.map((p, i) => {
+                const prio = prioridadeMunicipio[p.titulo];
+                const PRIO_STYLE: Record<number, string> = {
+                  1: "text-red-400 bg-red-500/10 border-red-500/20",
+                  2: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+                  3: "text-white/35 bg-white/5 border-white/10",
+                };
+                return (
+                  <div key={i} className="flex items-start gap-3 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.10] transition-all">
+                    <span className="text-xl shrink-0 mt-0.5">{p.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                        <p className={`text-sm font-semibold ${p.cor}`}>{p.titulo}</p>
+                        {prio && (
+                          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${PRIO_STYLE[prio]}`}>P{prio}</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-white/40">{p.descricao}</p>
+                      <a href="/mapa-politico" className="inline-block text-[11px] text-violet-400/60 hover:text-violet-300 mt-2 transition-colors">
+                        Analisar →
+                      </a>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </GlassCard>
         );
@@ -1027,28 +1126,111 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* MOTOR ESTRATÉGICO — card de validação (somente leitura) */}
+      {/* INTELIGÊNCIA EXECUTIVA — título de seção */}
       {isPolitico(userData) && motor && (
-        <div className="p-4 bg-zinc-900/50 border border-zinc-800 rounded-2xl">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="text-base">🧠</span>
-            <h3 className="text-white font-semibold text-sm">Motor Estratégico</h3>
-            <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-white/30 border border-white/10">validação</span>
-          </div>
-          <div className="grid grid-cols-5 gap-2 text-center">
-            {([
-              { label: "Pendências", value: motor.pendencias.length },
-              { label: "Agenda",     value: motor.agenda.length     },
-              { label: "Alertas",    value: motor.alertas.length    },
-              { label: "Decisões",   value: motor.decisoes.length   },
-              { label: "Memória",    value: motor.memoria.length    },
-            ] as const).map(({ label, value }) => (
-              <div key={label} className="p-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                <p className="text-lg font-bold text-white">{value}</p>
-                <p className="text-[10px] text-white/30 mt-0.5">{label}</p>
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-sm">⚡</span>
+          <h2 className="text-white font-semibold">Inteligência Executiva</h2>
+          <span className="text-[10px] text-white/25 ml-1 italic">motor territorial ativo</span>
+        </div>
+      )}
+
+      {/* SCORECARDS EXECUTIVOS — Inteligência Política */}
+      {isPolitico(userData) && motor && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+          {/* Pendências */}
+          <div className="p-4 rounded-2xl bg-zinc-900 border border-red-500/20 hover:border-red-500/35 transition-all">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">Pendências</p>
+              <span className="text-base">🔴</span>
+            </div>
+            <p className="text-3xl font-bold text-white mb-3">{pendenciasAtivas.length}</p>
+            <div className="space-y-1.5 pt-2.5 border-t border-white/5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/30">Críticas</span>
+                <span className="text-[10px] font-bold text-red-400">{pendenciasAtivas.filter((p) => p.tipo === "critica").length}</span>
               </div>
-            ))}
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/30">Médias</span>
+                <span className="text-[10px] font-bold text-amber-400">{pendenciasAtivas.filter((p) => p.tipo === "alta" || p.tipo === "media").length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/30">Baixas</span>
+                <span className="text-[10px] font-bold text-emerald-400">{pendenciasAtivas.filter((p) => p.tipo === "baixa").length}</span>
+              </div>
+            </div>
           </div>
+
+          {/* Alertas */}
+          <div className="p-4 rounded-2xl bg-zinc-900 border border-amber-500/20 hover:border-amber-500/35 transition-all">
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">Alertas</p>
+              <span className="text-base">🔔</span>
+            </div>
+            <p className="text-3xl font-bold text-white mb-3">{alertasAtivos.length}</p>
+            <div className="space-y-1.5 pt-2.5 border-t border-white/5">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/30">Críticos</span>
+                <span className="text-[10px] font-bold text-red-400">{alertasAtivos.filter((a) => a.tipo === "critico").length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/30">Oportunidades</span>
+                <span className="text-[10px] font-bold text-blue-400">{alertasAtivos.filter((a) => a.tipo === "oportunidade").length}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/30">Atenção</span>
+                <span className="text-[10px] font-bold text-amber-400">{alertasAtivos.filter((a) => a.tipo === "atencao").length}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Municípios P1 */}
+          {(() => {
+            const p1Cities = Object.entries(prioridadeMunicipio).filter(([, p]) => p === 1).map(([c]) => c);
+            const p1ComCobertura = p1Cities.filter((c) => territorios.some((t) => t.cidade === c && t.possuiAssessoria)).length;
+            const coberturaP1 = p1Cities.length > 0 ? Math.round((p1ComCobertura / p1Cities.length) * 100) : 0;
+            return (
+              <div className="p-4 rounded-2xl bg-zinc-900 border border-violet-500/20 hover:border-violet-500/35 transition-all">
+                <div className="flex items-center justify-between mb-2.5">
+                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">Municípios P1</p>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border text-violet-400 bg-violet-500/10 border-violet-500/20">P1</span>
+                </div>
+                <p className="text-3xl font-bold text-white mb-3">{p1Cities.length}</p>
+                <div className="space-y-2 pt-2.5 border-t border-white/5">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-white/30">Cobertura</span>
+                    <span className={`text-[10px] font-bold ${coberturaP1 >= 80 ? "text-emerald-400" : coberturaP1 >= 50 ? "text-amber-400" : "text-red-400"}`}>{coberturaP1}%</span>
+                  </div>
+                  <div className="h-1 rounded-full bg-white/5 overflow-hidden">
+                    <div className={`h-full rounded-full transition-all ${coberturaP1 >= 80 ? "bg-emerald-500" : coberturaP1 >= 50 ? "bg-amber-500" : "bg-red-500"}`} style={{ width: `${coberturaP1}%` }} />
+                  </div>
+                  <p className="text-[10px] text-white/20">{p1ComCobertura}/{p1Cities.length} com assessoria</p>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Crescimento */}
+          <div className={`p-4 rounded-2xl bg-zinc-900 border transition-all ${crescimento30dPolitico >= 0 ? "border-emerald-500/20 hover:border-emerald-500/35" : "border-red-500/20 hover:border-red-500/35"}`}>
+            <div className="flex items-center justify-between mb-2.5">
+              <p className="text-[10px] text-white/30 uppercase tracking-wider font-medium">Crescimento</p>
+              <span className="text-base">{crescimento30dPolitico >= 0 ? "📈" : "📉"}</span>
+            </div>
+            <p className={`text-3xl font-bold mb-3 ${crescimento30dPolitico > 0 ? "text-emerald-400" : crescimento30dPolitico < 0 ? "text-red-400" : "text-white"}`}>
+              {crescimento30dPolitico > 0 ? "+" : ""}{crescimento30dPolitico}%
+            </p>
+            <div className="space-y-1.5 pt-2.5 border-t border-white/5">
+              <p className="text-[10px] text-white/30">Últimos 30 dias</p>
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] text-white/25">{cadastros30d} cadastros</span>
+                <span className={`text-[10px] font-medium ${crescimento30dPolitico > 0 ? "text-emerald-400/70" : crescimento30dPolitico < 0 ? "text-red-400/70" : "text-white/30"}`}>
+                  {crescimento30dPolitico > 0 ? "↑ Expansão" : crescimento30dPolitico < 0 ? "↓ Retração" : "→ Estável"}
+                </span>
+              </div>
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -1067,13 +1249,11 @@ export default function DashboardPage() {
                     : "bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-5"}
                   onClick={(e) => e.stopPropagation()}
                 >
-                  {/* Badge Fase Operacional */}
-                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
-                    <span className="text-sm shrink-0">⚡</span>
-                    <div>
-                      <p className="text-xs font-bold text-violet-400 tracking-wider">FASE OPERACIONAL</p>
-                      <p className="text-[11px] text-white/40">Esta ação estará disponível na próxima etapa do sistema.</p>
-                    </div>
+                  {/* Identificador do território */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-white/25 uppercase tracking-wider">Território</span>
+                    <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">{p.territorio}</span>
+                    {(() => { const pr = prioridadeMunicipio[p.territorio]; const s = { 1: "text-red-400 bg-red-500/10 border-red-500/20", 2: "text-amber-400 bg-amber-500/10 border-amber-500/20", 3: "text-white/35 bg-white/5 border-white/10" } as Record<number, string>; return pr ? <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${s[pr]}`}>P{pr}</span> : null; })()}
                   </div>
 
                   {/* Modal: Designar Assessoria (critica) */}
@@ -1106,10 +1286,10 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex gap-3">
                         <button
-                          onClick={() => { setModalPendencia(null); router.push(`/assessores?cidade=${p.territorio}&acao=nova`); }}
+                          onClick={() => { setModalPendencia(null); router.push(`/missoes?acao=nova&tipo=criar_assessoria&cidade=${encodeURIComponent(p.territorio)}&prioridade=P1`); }}
                           className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
                         >
-                          Ir para Assessoria →
+                          Criar Missão — {p.territorio} →
                         </button>
                         <button onClick={() => setModalPendencia(null)} className="px-5 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors">Cancelar</button>
                       </div>
@@ -1213,10 +1393,10 @@ export default function DashboardPage() {
                       {/* Rodapé */}
                       <div className="flex gap-3">
                         <button
-                          onClick={() => { setModalPendencia(null); setModalEstabDash(true); }}
+                          onClick={() => { setModalPendencia(null); router.push(`/eleitores?cidade=${encodeURIComponent(p.territorio)}`); }}
                           className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
                         >
-                          Confirmar Plano
+                          Ver Eleitores de {p.territorio} →
                         </button>
                         <button onClick={() => setModalPendencia(null)} className="px-5 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors">Cancelar</button>
                       </div>
@@ -1252,10 +1432,10 @@ export default function DashboardPage() {
                       </div>
                       <div className="flex gap-3">
                         <button
-                          onClick={() => { setModalPendencia(null); router.push(`/coordenadores?cidade=${encodeURIComponent(p.territorio)}&assessor=${encodeURIComponent(extra.assessor ?? "")}&acao=nova`); }}
+                          onClick={() => { setModalPendencia(null); router.push(`/missoes?acao=nova&tipo=criar_coordenacao&cidade=${encodeURIComponent(p.territorio)}&prioridade=P2`); }}
                           className="flex-1 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-semibold hover:bg-orange-600 transition-colors"
                         >
-                          Ir para Coordenadores →
+                          Criar Missão — {p.territorio} →
                         </button>
                         <button onClick={() => setModalPendencia(null)} className="px-5 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors">Cancelar</button>
                       </div>
@@ -1278,7 +1458,7 @@ export default function DashboardPage() {
               </div>
               <span className="text-xs text-white/30">{resumoPendenciasAtivas.texto}</span>
             </div>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
               {pendenciasOrdenadas.map((p) => {
                 const extra: PendenciaExtra = PENDENCIA_EXTRA[p.id] ?? { responsavel: "—", stats: [] };
                 const BADGE: Record<string, { label: string; bg: string; text: string; border: string; hoverBorder: string }> = {
@@ -1325,9 +1505,19 @@ export default function DashboardPage() {
                         <p className="text-xs text-white/40 mb-2">{p.descricao}</p>
                         <p className={`text-xs font-semibold ${b.text}`}>{ACAO_REC[p.tipo]}</p>
                         <p className="text-xs text-white/25 mt-1">Responsável: {extra.responsavel}</p>
+                        {extra.impacto && (
+                          <div className="mt-2.5 pt-2 border-t border-white/5">
+                            <p className="text-[10px] text-white/25 uppercase tracking-wider mb-1.5">Impacto estimado</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">👥 {extra.impacto.eleitores}</span>
+                              {extra.impacto.assessores && <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20">👤 {extra.impacto.assessores}</span>}
+                              {extra.impacto.coordenacoes && <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-400 border border-violet-500/20">🗂 {extra.impacto.coordenacoes}</span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className="text-xs text-white/25 mb-1.5">15 dias</p>
+                        <p className="text-xs text-white/25 mb-1.5">{extra.prazo ?? "15 dias"}</p>
                         <button
                           onClick={() => setModalPendencia(p.id)}
                           className={`text-xs font-semibold px-3 py-1.5 rounded-xl transition-all ${b.bg} ${b.text} hover:opacity-80`}
@@ -1345,18 +1535,18 @@ export default function DashboardPage() {
       )}
 
       {/* CENTRAL DE ACOMPANHAMENTO — deputado */}
-      {isPolitico(userData) && execucaoDemo.length > 0 && (
-        <PainelExecucao items={execucaoDemo} />
+      {isPolitico(userData) && execucaoAtiva.length > 0 && (
+        <PainelExecucao items={execucaoAtiva} prioridadeMunicipio={prioridadeMunicipio} />
       )}
 
       {/* CENTRAL DE DECISÕES — deputado */}
       {isPolitico(userData) && decisoesAtivas.length > 0 && (
-        <CentralDecisoes decisoes={decisoesAtivas} />
+        <CentralDecisoes decisoes={decisoesAtivas} prioridadeMunicipio={prioridadeMunicipio} />
       )}
 
       {/* AGENDA EXECUTIVA — deputado */}
       {isPolitico(userData) && agendaAtiva.length > 0 && (
-        <AgendaExecutiva items={agendaAtiva} />
+        <AgendaExecutiva items={agendaAtiva} prioridadeMunicipio={prioridadeMunicipio} />
       )}
 
       {/* CENTRAL DE ALERTAS — deputado */}

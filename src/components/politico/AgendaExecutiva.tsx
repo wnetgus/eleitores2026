@@ -15,16 +15,17 @@ const GROUPS: {
   { status: "concluida",   icon: "🟢", label: "CONCLUÍDAS",  badgeLabel: "FINALIZADA" },
 ];
 
-export function AgendaExecutiva({ items }: { items: AgendaItem[] }) {
+export function AgendaExecutiva({ items, prioridadeMunicipio }: { items: AgendaItem[]; prioridadeMunicipio?: Record<string, number> }) {
   if (items.length === 0) return null;
 
-  const criticas  = items.filter((i) => i.prioridade === "critica").length;
+  const criticas   = items.filter((i) => i.prioridade === "critica").length;
   const concluidas = items.filter((i) => i.status === "concluida").length;
+  const estaSemana = items.filter((i) => i.status === "esta_semana").length;
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-base">📅</span>
@@ -37,12 +38,21 @@ export function AgendaExecutiva({ items }: { items: AgendaItem[] }) {
             Prioridades políticas e ações recomendadas para o mandato.
           </p>
         </div>
-        <div className="text-right shrink-0 space-y-0.5">
+        <div className="flex items-center gap-2 flex-wrap">
           {criticas > 0 && (
-            <p className="text-xs text-red-400/70">{criticas} crítica{criticas !== 1 ? "s" : ""}</p>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+              🔴 {criticas} crítica{criticas !== 1 ? "s" : ""}
+            </span>
+          )}
+          {estaSemana > 0 && (
+            <span className="text-xs px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+              🟡 {estaSemana} esta semana
+            </span>
           )}
           {concluidas > 0 && (
-            <p className="text-xs text-emerald-400/60">{concluidas} concluída{concluidas !== 1 ? "s" : ""}</p>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              ✅ {concluidas} concluída{concluidas !== 1 ? "s" : ""}
+            </span>
           )}
         </div>
       </div>
@@ -51,16 +61,20 @@ export function AgendaExecutiva({ items }: { items: AgendaItem[] }) {
       {GROUPS.map((group) => {
         const groupItems = items.filter((i) => i.status === group.status);
         if (groupItems.length === 0) return null;
+        const isHoje = group.status === "hoje";
         return (
-          <div key={group.status}>
+          <div
+            key={group.status}
+            className={isHoje ? "p-3 rounded-2xl bg-red-950/20 border border-red-500/20" : ""}
+          >
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-sm">{group.icon}</span>
               <p className="text-xs font-bold text-white/50 uppercase tracking-wider">{group.label}</p>
               <span className="text-xs text-white/20">({groupItems.length})</span>
             </div>
-            <div className="space-y-2">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {groupItems.map((item) => (
-                <CardAgenda key={`${item.cidade}-${item.titulo}`} item={item} badgeLabel={group.badgeLabel} />
+                <CardAgenda key={`${item.cidade}-${item.titulo}`} item={item} badgeLabel={group.badgeLabel} prioridadeMunicipio={prioridadeMunicipio} />
               ))}
             </div>
           </div>

@@ -6,7 +6,7 @@ import { collection, getDocs, query, orderBy, where, limit, doc, getDoc, updateD
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Gabinete, Eleitor, AppUser, Atividade, Candidato } from "@/types";
-import { isSuperOrMaster, isPolitico, isAssessor, getRoleConfig } from "@/lib/permissions";
+import { isSuperOrMaster, isPolitico, isAssessor, isAssessorExecutivo, getRoleConfig } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -44,7 +44,7 @@ export default function PainelGabinetePage() {
 
   useEffect(() => {
     if (!userData) return;
-    const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isAssessor(userData);
+    const podeAcessar = isSuperOrMaster(userData) || isPolitico(userData) || isAssessorExecutivo(userData) || isAssessor(userData);
     if (!podeAcessar) { router.push("/dashboard"); return; }
     if (id) loadAll();
   }, [userData, id]);

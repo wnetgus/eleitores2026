@@ -25,8 +25,16 @@ export function isVereador(user: AppUser | null): boolean {
   return can(user, "vereador");
 }
 
+export function isAssessorExecutivo(user: AppUser | null): boolean {
+  return can(user, "assessor_executivo");
+}
+
 export function isAssessor(user: AppUser | null): boolean {
   return can(user, "assessor");
+}
+
+export function isAssessorOuExecutivo(user: AppUser | null): boolean {
+  return isAssessor(user) || isAssessorExecutivo(user);
 }
 
 export function isCoordenador(user: AppUser | null): boolean {
@@ -38,7 +46,7 @@ export function isColaborador(user: AppUser | null): boolean {
 }
 
 export function isPoliticoOuAssessor(user: AppUser | null): boolean {
-  return can(user, "politico") || can(user, "prefeito") || can(user, "vereador") || can(user, "assessor");
+  return can(user, "politico") || can(user, "prefeito") || can(user, "vereador") || can(user, "assessor") || can(user, "assessor_executivo");
 }
 
 export function isSuperOrMaster(user: AppUser | null): boolean {
@@ -50,39 +58,39 @@ export function canManageGabinetes(user: AppUser | null): boolean {
 }
 
 export function canManageUsers(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user);
+  return isSuperOrMaster(user) || isAssessorExecutivo(user) || isAssessor(user);
 }
 
 export function canManageColaboradores(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user) || isCoordenador(user);
+  return isSuperOrMaster(user) || isAssessorExecutivo(user) || isAssessor(user) || isCoordenador(user);
 }
 
 export function canExportData(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isCoordenador(user);
+  return isSuperOrMaster(user) || isAssessorExecutivo(user) || isAssessor(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isCoordenador(user);
 }
 
 export function canDeleteRecords(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user);
+  return isSuperOrMaster(user) || isAssessorExecutivo(user) || isAssessor(user);
 }
 
 export function canViewAllRecords(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user);
+  return isSuperOrMaster(user) || isAssessorExecutivo(user) || isAssessor(user);
 }
 
 export function canViewLogs(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isAssessor(user);
+  return isSuperOrMaster(user) || isAssessorExecutivo(user) || isAssessor(user);
 }
 
 export function canViewAssessores(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessor(user);
+  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessorExecutivo(user) || isAssessor(user);
 }
 
 export function canViewCoordenadores(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessor(user);
+  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessorExecutivo(user) || isAssessor(user);
 }
 
 export function canViewColaboradores(user: AppUser | null): boolean {
-  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessor(user) || isCoordenador(user);
+  return isSuperOrMaster(user) || isPolitico(user) || isPrefeito(user) || isVereador(user) || isAssessorExecutivo(user) || isAssessor(user) || isCoordenador(user);
 }
 
 import { ROLE_CONFIG } from "@/types";

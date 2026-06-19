@@ -19,7 +19,11 @@
     "seed:v3:reset": "node scripts/seed-cenario-v3.mjs --reset",
     "fix:orfaos": "node scripts/religar-colaboradores-orfaos.mjs",
     "seed:exec": "node scripts/seed-cenario-exec.mjs",
-    "seed:exec:reset": "node scripts/seed-cenario-exec.mjs --reset"
+    "seed:exec:reset": "node scripts/seed-cenario-exec.mjs --reset",
+    "seed:v4": "node scripts/seed-cenario-v4.mjs",
+    "seed:v4:reset": "node scripts/seed-cenario-v4.mjs --reset",
+    "fix:assessor-exec": "node scripts/fix-assessor-executivo.mjs",
+    "audit:fase6": "node scripts/audit-fase6.mjs"
   },
   "dependencies": {
     "date-fns": "^4.1.0",

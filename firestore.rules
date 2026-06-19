@@ -21,6 +21,15 @@ service cloud.firestore {
       return d.get("campanhaId", d.get("gabineteId", ""));
     }
 
+    function camposProtegidosSelf() {
+      return ["role", "campanhaId", "gabineteId", "assessorId",
+              "coordenadorId", "criadoPor", "criadoEm"].toSet();
+    }
+
+    function camposProtegidosAssessor() {
+      return ["role", "campanhaId", "gabineteId", "coordenadorId"].toSet();
+    }
+
     // ─── campanhas ────────────────────────────────────────────────────────────
     match /campanhas/{id} {
       allow read: if isAuth() && (
@@ -33,8 +42,15 @@ service cloud.firestore {
 
     // ─── usuarios ─────────────────────────────────────────────────────────────
     match /usuarios/{uid} {
-      // get individual sempre permitido (necessário para lookups internos)
-      allow get: if isAuth();
+      // get individual: restrito à própria campanha ou hierarquia direta
+      allow get: if isAuth() && (
+        request.auth.uid == uid ||
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha() ||
+        resource.data.get("gabineteId", "") == myCampanha() ||
+        resource.data.get("assessorId", "") == request.auth.uid ||
+        resource.data.get("coordenadorId", "") == request.auth.uid
+      );
       allow list: if isAuth() && (
         isAdmin() ||
         resource.data.get("campanhaId", "") == myCampanha() ||
@@ -50,15 +66,24 @@ service cloud.firestore {
           request.resource.data.get("status", "") == "pendente" &&
           request.resource.data.get("coordenadorId", "") == request.auth.uid &&
           request.resource.data.get("campanhaId", "") == myCampanha()
+        ) ||
+        // assessor_executivo pode criar assessores scoped à própria campanha
+        (
+          me().get("role", "") == "assessor_executivo" &&
+          request.resource.data.get("role", "") in ["assessor", "coordenador"] &&
+          request.resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("campanhaId", "") != ""
         )
       );
       allow update: if isAuth() && (
-        request.auth.uid == uid ||
+        (request.auth.uid == uid &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(camposProtegidosSelf())) ||
         isAdmin() ||
-        (me().get("role", "") == "assessor" && (
+        (me().get("role", "") in ["assessor_executivo", "assessor"] && (
           resource.data.get("campanhaId", "") == myCampanha() ||
           resource.data.get("gabineteId", "") == myCampanha()
-        )) ||
+        ) &&
+        !request.resource.data.diff(resource.data).affectedKeys().hasAny(camposProtegidosAssessor())) ||
         // coordenador corrigindo e reenviando própria solicitação recusada
         (
           me().get("role", "") == "coordenador" &&
@@ -71,9 +96,9 @@ service cloud.firestore {
       );
       allow delete: if isAuth() && (
         isAdmin() ||
-        // assessor: exclui coordenadores e colaboradores (inclui pendente/aprovado) da própria campanha
+        // assessor_executivo / assessor: exclui coordenadores e colaboradores da própria campanha
         (
-          me().get("role", "") == "assessor" &&
+          me().get("role", "") in ["assessor_executivo", "assessor"] &&
           resource.data.get("role", "") in ["coordenador", "colaborador"] &&
           (
             resource.data.get("campanhaId", "") == myCampanha() ||
@@ -116,7 +141,7 @@ service cloud.firestore {
       allow update: if isAuth() && (
         isAdmin() ||
         (resource.data.get("campanhaId", "") == myCampanha() && (
-          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] ||
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] ||
           resource.data.get("colaboradorId", "") == request.auth.uid ||
           resource.data.get("coordenadorId", "") == request.auth.uid
         ))
@@ -135,7 +160,7 @@ service cloud.firestore {
       );
       allow create, update: if isAuth() && (
         isAdmin() ||
-        (me().get("role", "") in ["assessor", "coordenador"] && (
+        (me().get("role", "") in ["assessor_executivo", "assessor", "coordenador"] && (
           request.resource.data.get("gabineteId", "") == myCampanha() ||
           request.resource.data.get("campanhaId", "") == myCampanha()
         ))
@@ -152,8 +177,37 @@ service cloud.firestore {
       );
       allow create, update: if isAuth() && (
         isAdmin() ||
-        (me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+        (me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
          request.resource.data.get("gabineteId", "") == myCampanha())
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── missoes ──────────────────────────────────────────────────────────────
+    match /missoes/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow create: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "assessor_executivo"] &&
+          request.resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("campanhaId", "") != ""
+        )
+      );
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "assessor_executivo"] &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        ) ||
+        (
+          me().get("role", "") == "assessor" &&
+          resource.data.get("campanhaId", "") == myCampanha() &&
+          resource.data.get("responsavelId", "") == request.auth.uid
+        )
       );
       allow delete: if isAuth() && isAdmin();
     }
@@ -167,7 +221,7 @@ service cloud.firestore {
       allow create: if isAuth() && (
         isAdmin() ||
         (
-          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
           request.resource.data.get("campanhaId", "") == myCampanha() &&
           request.resource.data.get("campanhaId", "") != "" &&
           request.resource.data.get("criadoPor", "") == request.auth.uid
@@ -176,7 +230,7 @@ service cloud.firestore {
       allow update: if isAuth() && (
         isAdmin() ||
         (
-          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
           resource.data.get("campanhaId", "") == myCampanha()
         )
       );
@@ -192,7 +246,7 @@ service cloud.firestore {
       allow create: if isAuth() && (
         isAdmin() ||
         (
-          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
           request.resource.data.get("campanhaId", "") == myCampanha() &&
           request.resource.data.get("campanhaId", "") != "" &&
           request.resource.data.get("criadoPor", "") == request.auth.uid
@@ -201,8 +255,33 @@ service cloud.firestore {
       allow update: if isAuth() && (
         isAdmin() ||
         (
-          me().get("role", "") in ["politico", "prefeito", "vereador", "assessor"] &&
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
           resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
+    // ─── memoriaMandato ───────────────────────────────────────────────────────
+    match /memoriaMandato/{id} {
+      allow read: if isAuth() && (
+        isAdmin() ||
+        resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow create: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
+          request.resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("campanhaId", "") != ""
+        )
+      );
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] &&
+          resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("campanhaId", "") == resource.data.get("campanhaId", "")
         )
       );
       allow delete: if isAuth() && isAdmin();

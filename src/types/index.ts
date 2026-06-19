@@ -1,4 +1,26 @@
-export type UserRole = "super_admin" | "admin_master" | "politico" | "prefeito" | "vereador" | "assessor" | "coordenador" | "colaborador";
+export type UserRole = "super_admin" | "admin_master" | "politico" | "prefeito" | "vereador" | "assessor_executivo" | "assessor" | "coordenador" | "colaborador";
+
+export type MissaoTipo = "criar_assessoria" | "criar_coordenacao" | "fortalecer_base" | "expandir_territorio" | "reestruturar_regiao";
+export type MissaoStatus = "pendente" | "aceita" | "em_execucao" | "concluida" | "cancelada";
+
+export interface Missao {
+  id?: string;
+  campanhaId: string;
+  origem: "deputado";
+  tipo: MissaoTipo;
+  titulo: string;
+  descricao?: string;
+  cidade: string;
+  prioridade: "P1" | "P2" | "P3";
+  status: MissaoStatus;
+  responsavelId?: string;
+  responsavelNome?: string;
+  criadoPorId?: string;
+  criadoPorNome?: string;
+  criadoEm: any;
+  concluidoEm?: any;
+  resultado?: string;
+}
 export type TipoDocumento = "titulo" | "cpf" | "rg";
 export type NivelPolitico = "municipal" | "estadual" | "federal";
 export type CicloEleitoral = "municipal_2028" | "estadual_federal_2026";
@@ -16,6 +38,7 @@ export interface AppUser {
   equipe?: string;
   coordenadorId?: string;
   assessorId?: string;
+  assessorExecutivoId?: string;
   estado?: string;
   cidadePrincipal?: string;
   cidades?: string[];
@@ -133,6 +156,28 @@ export interface Meta {
   fim: Date;
 }
 
+export interface MemoriaMandato {
+  id?: string;
+  campanhaId: string;
+  tipo: "decisao" | "pendencia" | "alerta" | "conquista" | "expansao";
+  titulo: string;
+  descricao: string;
+  cidade?: string;
+  classificacao?: "P1" | "P2" | "P3";
+  prioridade: "alta" | "media" | "baixa";
+  status: "aberto" | "concluido" | "cancelado";
+  motivo?: string;
+  resultado?: string;
+  impacto?: string;
+  responsavelId?: string;
+  responsavelNome?: string;
+  origem?: "dashboard" | "pendencia" | "alerta" | "manual" | "auto";
+  tags?: string[];
+  criadoEm: any;
+  atualizadoEm?: any;
+  resolvidoEm?: any;
+}
+
 export interface Estado {
   sigla: string;
   nome: string;
@@ -165,17 +210,6 @@ export const ROLE_CONFIG: Record<string, { label: string; color: string; border:
     icon: "👑",
     gradient: "from-orange-500 to-orange-700",
     menuTitle: "Admin Master",
-  },
-  admin: {
-    label: "Administrador",
-    color: "from-purple-600 to-purple-800",
-    border: "border-purple-500/30",
-    bg: "bg-purple-500/10",
-    text: "text-purple-400",
-    badge: "bg-purple-500/20 text-purple-400",
-    icon: "👑",
-    gradient: "from-purple-500 to-purple-700",
-    menuTitle: "Administrador",
   },
   politico: {
     label: "Político",
@@ -210,8 +244,19 @@ export const ROLE_CONFIG: Record<string, { label: string; color: string; border:
     gradient: "from-amber-500 to-amber-700",
     menuTitle: "Meu Mandato",
   },
+  assessor_executivo: {
+    label: "Assessor Executivo",
+    color: "from-violet-600 to-violet-800",
+    border: "border-violet-500/30",
+    bg: "bg-violet-500/10",
+    text: "text-violet-400",
+    badge: "bg-violet-500/20 text-violet-400",
+    icon: "⚡",
+    gradient: "from-violet-500 to-violet-700",
+    menuTitle: "Gabinete Executivo",
+  },
   assessor: {
-    label: "Assessor Parlamentar",
+    label: "Assessor Regional",
     color: "from-purple-600 to-purple-800",
     border: "border-purple-500/30",
     bg: "bg-purple-500/10",
@@ -219,7 +264,7 @@ export const ROLE_CONFIG: Record<string, { label: string; color: string; border:
     badge: "bg-purple-500/20 text-purple-400",
     icon: "🏛️",
     gradient: "from-purple-500 to-purple-700",
-    menuTitle: "Gabinete",
+    menuTitle: "Assessoria Regional",
   },
   coordenador: {
     label: "Coordenador",
