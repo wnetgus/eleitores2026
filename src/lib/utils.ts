@@ -42,6 +42,22 @@ export function mascaraCEP(valor: string): string {
   return digits.replace(/^(\d{5})(\d)/, "$1-$2");
 }
 
+export function validarCPF(cpf: string): boolean {
+  const digits = cpf.replace(/\D/g, "");
+  if (digits.length !== 11) return false;
+  if (/^(\d)\1+$/.test(digits)) return false; // sequências iguais: 111.111.111-11
+  let sum = 0;
+  for (let i = 0; i < 9; i++) sum += parseInt(digits[i]) * (10 - i);
+  let r = (sum * 10) % 11;
+  if (r === 10 || r === 11) r = 0;
+  if (r !== parseInt(digits[9])) return false;
+  sum = 0;
+  for (let i = 0; i < 10; i++) sum += parseInt(digits[i]) * (11 - i);
+  r = (sum * 10) % 11;
+  if (r === 10 || r === 11) r = 0;
+  return r === parseInt(digits[10]);
+}
+
 export function mascaraDocumento(tipo: string, valor: string): string {
   if (tipo === "cpf") return mascaraCPF(valor);
   return valor.replace(/\D/g, "");

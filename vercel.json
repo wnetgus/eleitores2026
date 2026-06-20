@@ -2,5 +2,11 @@
   "framework": "nextjs",
   "buildCommand": "next build",
   "outputDirectory": ".next",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "crons": [
+    {
+      "path": "/api/admin/backup",
+      "schedule": "0 3 * * *"
+    }
+  ]
 }

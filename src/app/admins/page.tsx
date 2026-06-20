@@ -168,7 +168,7 @@ export default function AdminsPage() {
           <p className="text-white/60 text-sm">
             Tem certeza que deseja excluir <strong className="text-white">{excluirModal?.nome}</strong>?
           </p>
-          <p className="text-red-400/70 text-xs">Esta ação remove o usuário do Firebase Auth e do Firestore. Não é reversível.</p>
+          <p className="text-red-400/70 text-xs">Esta ação remove permanentemente o acesso e os dados do usuário. Não é reversível.</p>
           <div className="flex gap-3 pt-2">
             <Button onClick={handleExcluir} loading={excluirSaving} className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30">Excluir</Button>
             <Button variant="ghost" onClick={() => setExcluirModal(null)} className="flex-1">Cancelar</Button>

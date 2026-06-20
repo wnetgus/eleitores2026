@@ -202,6 +202,9 @@ export default function CoordenadoresPage() {
 
   async function handleEdit() {
     if (!editModal) return;
+    if (isAssessor(userData) && editModal.assessorId !== userData!.uid) {
+      toast.error("Você só pode editar coordenadores da sua equipe."); return;
+    }
     try {
       await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, email: editForm.email, estado: editForm.estado, cidadePrincipal: editForm.cidadePrincipal, regiao: editForm.regiao });
       await registrarAtividade({ acao: "editou_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Editou coordenador ${editModal.nome}` });
@@ -211,6 +214,9 @@ export default function CoordenadoresPage() {
 
   async function handleExcluir() {
     if (!excluirModal) return;
+    if (isAssessor(userData) && excluirModal.assessorId !== userData!.uid) {
+      toast.error("Você só pode excluir coordenadores da sua equipe."); setExcluirModal(null); return;
+    }
     setExcluirSaving(true);
     try {
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));

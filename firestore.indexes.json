@@ -223,6 +223,73 @@
         { "fieldPath": "campanhaId", "order": "ASCENDING" },
         { "fieldPath": "criadoEm", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "missoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "missoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "responsavelId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "missoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "eleitores",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "assessorId", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "_solicitacoes_lgpd",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "_solicitacoes_lgpd",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "_erros",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "criadoEm", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "usuarios",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "role", "order": "ASCENDING" },
+        { "fieldPath": "campanhaId", "order": "ASCENDING" },
+        { "fieldPath": "ativo", "order": "ASCENDING" }
+      ]
     }
   ]
 }

@@ -13,6 +13,10 @@ export type TerritorioPolitico = {
   possuiAssessoria: boolean;
   possuiCoordenacao: boolean;
   assessorResponsavel: string;
+  // Campos opcionais para regras avançadas (Sprint 11)
+  diasSemNovoCadastro?: number;   // dias sem novo eleitor registrado
+  colaboradoresCount?: number;     // total de colaboradores ativos no território
+  novosEleitores30d?: number;      // novos eleitores cadastrados nos últimos 30 dias
 };
 
 // ── Tipos de saída (estruturalmente compatíveis com os componentes politico/) ──
@@ -82,6 +86,40 @@ export function executarMotorTerritorial(territorios: TerritorioPolitico[]): Mot
   const decisoes: MotorDecisao[] = [];
   const memoria: MotorEvento[] = [];
   const hoje = dataHoje();
+
+  const totalCampanha = territorios.reduce((s, t) => s + t.eleitores, 0);
+
+  // REGRA 6 — dependência crítica: assessor com >60% dos eleitores da campanha
+  if (totalCampanha > 0) {
+    const porAssessor: Record<string, number> = {};
+    for (const t of territorios) {
+      const a = t.assessorResponsavel || "indefinido";
+      porAssessor[a] = (porAssessor[a] || 0) + t.eleitores;
+    }
+    for (const [assessor, qtd] of Object.entries(porAssessor)) {
+      if (qtd / totalCampanha > 0.6) {
+        const pct = Math.round((qtd / totalCampanha) * 100);
+        pendencias.push(criarPendencia({
+          tipo: "alta",
+          titulo: "Dependência Crítica de Assessor",
+          descricao: `${assessor} concentra ${pct}% dos eleitores da campanha — risco alto se o assessor sair ou perder desempenho.`,
+          territorio: "Campanha",
+          origem: "Inteligência Política",
+          destino: "/assessores",
+          acao: "Redistribuir territórios",
+        }));
+        alertas.push({
+          tipo: "atencao",
+          titulo: `Concentração Crítica: ${assessor}`,
+          descricao: `${pct}% dos eleitores sob único responsável. Distribua territórios para reduzir risco.`,
+          cidade: "Campanha",
+          responsavel: assessor,
+          tempo: "Esta semana",
+          acao: "Redistribuir territórios",
+        });
+      }
+    }
+  }
 
   for (const t of territorios) {
     const resp = t.assessorResponsavel || "A definir";
@@ -230,6 +268,67 @@ export function executarMotorTerritorial(territorios: TerritorioPolitico[]): Mot
         responsavel: resp,
         tempo: "Urgente",
         acao: "Investigar retração",
+      });
+    }
+
+    // REGRA 7 — abandono silencioso (município sem novo cadastro em 45+ dias)
+    if (t.eleitores > 0 && t.diasSemNovoCadastro !== undefined && t.diasSemNovoCadastro > 45) {
+      pendencias.push(criarPendencia({
+        tipo: "alta",
+        titulo: "Território em Abandono",
+        descricao: `${t.cidade} não recebe novos cadastros há ${t.diasSemNovoCadastro} dias. Base existente sem expansão.`,
+        territorio: t.cidade,
+        origem: "Força Territorial",
+        destino: "/colaboradores",
+        acao: "Reativar mobilização",
+      }));
+      alertas.push({
+        tipo: "atencao",
+        titulo: `Abandono Silencioso: ${t.cidade}`,
+        descricao: `${t.diasSemNovoCadastro} dias sem nenhum cadastro novo. Equipe pode estar inativa.`,
+        cidade: t.cidade,
+        responsavel: resp,
+        tempo: `${t.diasSemNovoCadastro}d sem cadastro`,
+        acao: "Reativar mobilização",
+      });
+    }
+
+    // REGRA 8 — equipe improdutiva (3+ colaboradores, 0 novos eleitores em 30 dias)
+    if (
+      t.colaboradoresCount !== undefined &&
+      t.novosEleitores30d !== undefined &&
+      t.colaboradoresCount >= 3 &&
+      t.novosEleitores30d === 0
+    ) {
+      pendencias.push(criarPendencia({
+        tipo: "alta",
+        titulo: "Equipe Improdutiva",
+        descricao: `${t.cidade} tem ${t.colaboradoresCount} colaboradores mas nenhum cadastro nos últimos 30 dias.`,
+        territorio: t.cidade,
+        origem: "Força Territorial",
+        destino: "/colaboradores",
+        acao: "Avaliar equipe",
+      }));
+      agenda.push({
+        cidade: t.cidade,
+        titulo: "Avaliar Produtividade da Equipe",
+        descricao: `${t.colaboradoresCount} colaboradores sem produção em 30 dias. Investigar motivo.`,
+        responsavel: resp,
+        prioridade: "alta",
+        status: "esta_semana",
+      });
+    }
+
+    // REGRA 9 — município descoberto sem eleitores (expansão potencial)
+    if (!t.possuiAssessoria && t.eleitores === 0) {
+      alertas.push({
+        tipo: "oportunidade",
+        titulo: `Território Inexplorado: ${t.cidade}`,
+        descricao: `Município sem cobertura e sem eleitores. Avalie potencial de expansão.`,
+        cidade: t.cidade,
+        responsavel: "Sem responsável",
+        tempo: "Planejamento",
+        acao: "Analisar expansão",
       });
     }
   }

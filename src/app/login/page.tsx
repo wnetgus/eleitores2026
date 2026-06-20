@@ -118,6 +118,13 @@ export default function LoginPage() {
               Acesso autorizado apenas para membros da equipe
             </p>
           </div>
+
+          <p className="mt-4 text-center text-xs text-white/20">
+            Ao acessar, você concorda com nossa{" "}
+            <a href="/privacidade" className="text-white/40 underline hover:text-white/60 transition-colors">
+              Política de Privacidade
+            </a>
+          </p>
         </div>
       </div>
     </div>

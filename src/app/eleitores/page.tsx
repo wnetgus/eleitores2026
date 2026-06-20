@@ -2,12 +2,12 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, getDocs, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, query, where, orderBy } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { cadastrarEleitor, buscarEleitores, verificarDocumentoDuplicado, registrarAtividade, excluirEleitor, buscarCandidatos } from "@/lib/firestore";
 import { estados, getCidades, getBairros } from "@/lib/estados-cidades";
 import { Eleitor, Candidato, AppUser } from "@/types";
-import { formatDate, parseDate, mascaraCPF, mascaraTelefone, mascaraCEP, mascaraDocumento } from "@/lib/utils";
+import { formatDate, parseDate, mascaraCPF, mascaraTelefone, mascaraCEP, mascaraDocumento, validarCPF } from "@/lib/utils";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
@@ -20,7 +20,7 @@ import { EditarEleitorModal } from "@/components/forms/EditarEleitorModal";
 import { EmptyState } from "@/components/ui/EmptyState";
 
 import toast from "react-hot-toast";
-import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador, isPolitico } from "@/lib/permissions";
+import { isSuperOrMaster, isAssessor, isAssessorExecutivo, isAssessorOuExecutivo, isCoordenador, isColaborador, isPolitico } from "@/lib/permissions";
 import { calcularSFPSimples } from "@/lib/inteligencia";
 
 const grauOptions = [
@@ -53,7 +53,7 @@ const formInitial = {
   nomeCompleto: "", tipoDocumento: "titulo" as const, documento: "",
   telefone: "", cep: "", logradouro: "", numero: "", complemento: "",
   estado: "", cidade: "", bairro: "", grauApoio: "", voto: "", candidatoId: "",
-  motivoPrincipal: "", observacoes: "",
+  motivoPrincipal: "", observacoes: "", consentimentoLGPD: false,
 };
 
 function salvarRascunho(dados: typeof formInitial) {
@@ -97,8 +97,35 @@ export default function EleitoresPage() {
   const [expandirForm, setExpandirForm] = useState(false);
   const [responsavelCoordenadorId, setResponsavelCoordenadorId] = useState("");
   const [responsavelColaboradorId, setResponsavelColaboradorId] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<{ id: string; nome: string } | null>(null);
 
-  useEffect(() => { loadEleitores(); loadUsuarios(); }, [userData]);
+  // Real-time listener para colaborador e coordenador; getDocs para roles de maior escopo
+  useEffect(() => {
+    if (!userData) return;
+    loadUsuarios();
+
+    if (isColaborador(userData)) {
+      setLoading(true);
+      const q = query(collection(db, "eleitores"), where("colaboradorId", "==", userData.uid), orderBy("criadoEm", "desc"));
+      const unsub = onSnapshot(q, (snap) => {
+        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        setLoading(false);
+      }, (e) => { console.error(e); setLoading(false); });
+      return () => unsub();
+    }
+
+    if (isCoordenador(userData)) {
+      setLoading(true);
+      const q = query(collection(db, "eleitores"), where("coordenadorId", "==", userData.uid), orderBy("criadoEm", "desc"));
+      const unsub = onSnapshot(q, (snap) => {
+        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        setLoading(false);
+      }, (e) => { console.error(e); setLoading(false); });
+      return () => unsub();
+    }
+
+    loadEleitores();
+  }, [userData]);
 
   async function loadUsuarios() {
     if (!userData) return;
@@ -148,6 +175,12 @@ export default function EleitoresPage() {
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
         return;
       }
+      if (isAssessor(userData)) {
+        const q = query(collection(db, "eleitores"), where("campanhaId", "==", userData!.campanhaId), where("assessorId", "==", userData!.uid), orderBy("criadoEm", "desc"));
+        const snap = await getDocs(q);
+        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        return;
+      }
       const campanhaId = isSuperOrMaster(userData) ? undefined : userData?.campanhaId;
       const colaboradorId = isColaborador(userData) ? userData?.uid : undefined;
       // Guard: não-admin sem filtro algum → race condition, aguarda próxima resolução do userData
@@ -160,7 +193,7 @@ export default function EleitoresPage() {
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
 
-  const isOperacional = !!(userData && (isColaborador(userData) || isCoordenador(userData) || isAssessor(userData) || isSuperOrMaster(userData)));
+  const isOperacional = !!(userData && (isColaborador(userData) || isCoordenador(userData) || isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)));
 
   function handleEstadoChange(sigla: string) {
     setForm((f) => ({ ...f, estado: sigla, cidade: "", bairro: "" }));
@@ -195,7 +228,17 @@ export default function EleitoresPage() {
       toast.error("Preencha nome, cidade, bairro e grau de apoio");
       return;
     }
-    if ((isAssessor(userData) || isCoordenador(userData)) && !responsavelColaboradorId) {
+    if (!form.consentimentoLGPD) {
+      toast.error("O eleitor deve autorizar o uso dos dados (LGPD)");
+      return;
+    }
+    if ((form.tipoDocumento as string) === "cpf" && form.documento) {
+      if (!validarCPF(form.documento)) {
+        toast.error("CPF inválido — verifique os dígitos");
+        return;
+      }
+    }
+    if ((isAssessorOuExecutivo(userData) || isCoordenador(userData)) && !responsavelColaboradorId) {
       toast.error("Selecione o colaborador responsável");
       return;
     }
@@ -214,7 +257,7 @@ export default function EleitoresPage() {
         observacoes: form.observacoes,
         colaboradorId: isColaborador(userData) ? userData.uid : responsavelColaboradorId,
         colaboradorNome: isColaborador(userData) ? userData.nome : (todosColaboradores.find((c) => c.uid === responsavelColaboradorId)?.nome || ""),
-        coordenadorId: isCoordenador(userData) ? userData.uid : (isAssessor(userData) || isSuperOrMaster(userData)) ? responsavelCoordenadorId : (userData.coordenadorId || ""),
+        coordenadorId: isCoordenador(userData) ? userData.uid : (isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) ? responsavelCoordenadorId : (userData.coordenadorId || ""),
       };
       if (form.telefone) eleitorData.telefone = form.telefone;
       if (form.cep) eleitorData.cep = form.cep;
@@ -224,6 +267,8 @@ export default function EleitoresPage() {
       if (form.voto) eleitorData.voto = form.voto;
       if (form.candidatoId) eleitorData.candidatoId = form.candidatoId;
       if (form.motivoPrincipal) eleitorData.motivoPrincipal = form.motivoPrincipal;
+      eleitorData.consentimentoLGPD = true;
+      eleitorData.consentimentoRegistradoEm = new Date();
       if (isCoordenador(userData)) eleitorData.coordenadorNome = userData.nome;
       else if ((isAssessor(userData) || isSuperOrMaster(userData)) && responsavelCoordenadorId)
         eleitorData.coordenadorNome = todosCoordenadores.find((c) => c.uid === responsavelCoordenadorId)?.nome || "";
@@ -237,9 +282,13 @@ export default function EleitoresPage() {
     } catch (e) { console.error("ERRO AO CADASTRAR ELEITOR:", e); toast.error("Erro ao cadastrar eleitor"); } finally { setSaving(false); }
   }
 
-  async function handleExcluir(id: string, nome: string) {
-    if (!confirm(`Excluir ${nome}?`)) return;
-    try { await excluirEleitor(id); toast.success("Eleitor excluído"); loadEleitores(); } catch (e) { toast.error("Erro ao excluir"); }
+  function handleExcluir(id: string, nome: string) {
+    setConfirmDelete({ id, nome });
+  }
+
+  async function executarExclusao() {
+    if (!confirmDelete) return;
+    try { await excluirEleitor(confirmDelete.id); toast.success("Eleitor excluído"); loadEleitores(); } catch { toast.error("Erro ao excluir"); } finally { setConfirmDelete(null); }
   }
 
   const docLabel = form.tipoDocumento === "titulo" ? "Título Eleitoral" : form.tipoDocumento === "cpf" ? "CPF" : "RG";
@@ -276,7 +325,7 @@ export default function EleitoresPage() {
   }, [eleitoresFiltrados, grauPill]);
 
   const resumoCoordenadores = useMemo(() => {
-    if (!userData || (!isAssessor(userData) && !isSuperOrMaster(userData))) return [];
+    if (!userData || (!isAssessorOuExecutivo(userData) && !isSuperOrMaster(userData))) return [];
     if (eleitoresFiltrados.length === 0) return [];
     const agora30d = Date.now() - 30 * 86400000;
     const mapa: Record<string, { nome: string; total: number; fortes: number; indecisos: number; recentes: number }> = {};
@@ -292,6 +341,7 @@ export default function EleitoresPage() {
   }, [eleitoresFiltrados, userData]);
 
   const meusCoordenadroes = useMemo(() => {
+    if (isAssessorExecutivo(userData)) return todosCoordenadores;
     if (isAssessor(userData)) return todosCoordenadores.filter((c) => c.assessorId === userData!.uid);
     if (isSuperOrMaster(userData)) return todosCoordenadores;
     return [];
@@ -662,7 +712,7 @@ export default function EleitoresPage() {
               <Input label="Bairro *" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
             )}
             <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => setForm({ ...form, grauApoio: e.target.value })} options={grauOptions} />
-            {(isAssessor(userData) || isSuperOrMaster(userData)) && (
+            {(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && (
               <Select
                 label="Coordenador Responsável *"
                 value={responsavelCoordenadorId}
@@ -670,13 +720,13 @@ export default function EleitoresPage() {
                 options={[{ value: "", label: "Selecione o coordenador..." }, ...meusCoordenadroes.map((c) => ({ value: c.uid, label: c.nome }))]}
               />
             )}
-            {(isAssessor(userData) || isCoordenador(userData) || isSuperOrMaster(userData)) && (
+            {(isAssessorOuExecutivo(userData) || isCoordenador(userData) || isSuperOrMaster(userData)) && (
               <Select
                 label="Colaborador Responsável *"
                 value={responsavelColaboradorId}
                 onChange={(e) => setResponsavelColaboradorId(e.target.value)}
                 options={[{ value: "", label: colaboradoresResponsaveis.length === 0 ? (isCoordenador(userData) ? "Sem colaboradores ativos" : "Selecione um coordenador primeiro...") : "Selecione o colaborador..." }, ...colaboradoresResponsaveis.map((c) => ({ value: c.uid, label: c.nome }))]}
-                disabled={(isAssessor(userData) || isSuperOrMaster(userData)) && !responsavelCoordenadorId}
+                disabled={(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && !responsavelCoordenadorId}
               />
             )}
           </div>
@@ -733,6 +783,23 @@ export default function EleitoresPage() {
               )}
             </div>
           )}
+
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+            <input
+              type="checkbox"
+              id="consentimento-lgpd"
+              checked={form.consentimentoLGPD}
+              onChange={(e) => setForm({ ...form, consentimentoLGPD: e.target.checked })}
+              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-emerald-500 cursor-pointer accent-emerald-500 shrink-0"
+            />
+            <label htmlFor="consentimento-lgpd" className="text-xs text-amber-200/70 leading-relaxed cursor-pointer">
+              O eleitor autoriza o uso de seus dados pessoais para fins de mobilização eleitoral, em conformidade com a{" "}
+              <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline hover:text-amber-300">
+                Política de Privacidade
+              </a>{" "}
+              (LGPD — Lei 13.709/2018). <span className="text-amber-400">*</span>
+            </label>
+          </div>
 
           <div className="flex items-center gap-3">
             <Button type="submit" loading={saving} className="w-full md:w-auto">
@@ -873,6 +940,21 @@ export default function EleitoresPage() {
           onClose={() => setEditingEleitor(null)}
           onSaved={loadEleitores}
         />
+      )}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setConfirmDelete(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <p className="text-white font-semibold">Excluir eleitor?</p>
+              <p className="text-sm text-white/50 mt-1">{confirmDelete.nome}</p>
+            </div>
+            <p className="text-xs text-white/40">Esta ação não pode ser desfeita.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)} className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-semibold hover:bg-white/10 transition-colors">Cancelar</button>
+              <button onClick={executarExclusao} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors">Excluir</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

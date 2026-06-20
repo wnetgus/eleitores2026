@@ -6,7 +6,7 @@ import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Eleitor, AppUser, Gabinete, UserRole, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isAssessor, isCoordenador, isColaborador, canManageColaboradores, canViewColaboradores, isSuperOrMaster } from "@/lib/permissions";
+import { getRoleConfig, isAssessor, isAssessorExecutivo, isAssessorOuExecutivo, isCoordenador, isColaborador, canManageColaboradores, canViewColaboradores, isSuperOrMaster } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
@@ -93,7 +93,20 @@ export default function ColaboradoresPage() {
           }
         }
       }
-      // Assessor: coordenadores próprios + todos colaboradores/eleitores do gabinete
+      // Assessor executivo: todos coordenadores da campanha
+      if (isAssessorExecutivo(userData)) {
+        const gabId = userData!.campanhaId || userData!.gabineteId || "";
+        const [coordSnap, usnap, esnap] = await Promise.all([
+          gabId ? getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", gabId))) : Promise.resolve({ docs: [] as any[] }),
+          gabId ? getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", gabId))) : Promise.resolve({ docs: [] as any[] }),
+          gabId ? getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", gabId), orderBy("criadoEm", "desc"))) : Promise.resolve({ docs: [] as any[] }),
+        ]);
+        setCoordenadoresDisponiveis(coordSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setColaboradores(usnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+        setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        return;
+      }
+      // Assessor regional: apenas coordenadores da sua equipe
       if (isAssessor(userData)) {
         const gabId = userData!.campanhaId || userData!.gabineteId || "";
         const [coordSnap, usnap, esnap] = await Promise.all([
@@ -161,7 +174,8 @@ export default function ColaboradoresPage() {
     if (!userData) return;
     if (!form.email || !form.nome) { toast.error("Preencha nome e email", { duration: 4000 }); return; }
     if (!isCoordenador(userData) && (!form.password || form.password.length < 6)) { toast.error("Senha deve ter no mínimo 6 caracteres", { duration: 4000 }); return; }
-    if (isAssessor(userData) && !form.coordenadorId) { toast.error("Selecione um Coordenador Responsável", { duration: 4000 }); return; }
+    if (isAssessorOuExecutivo(userData) && coordenadoresDisponiveis.length === 0) { toast.error("Não há coordenadores disponíveis. Cadastre um coordenador antes de adicionar colaboradores.", { duration: 5000 }); return; }
+    if (isAssessorOuExecutivo(userData) && !form.coordenadorId) { toast.error("Selecione um Coordenador Responsável", { duration: 4000 }); return; }
     if (isSuperOrMaster(userData) && !gabineteIdParam && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o colaborador", { duration: 4000 }); return; }
     setSaving(true);
     try {
@@ -444,7 +458,7 @@ export default function ColaboradoresPage() {
                 options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
               />
             )}
-            {(isAssessor(userData) || gabineteContexto) && coordenadoresDisponiveis.length > 0 && (
+            {(isAssessorOuExecutivo(userData) || gabineteContexto) && coordenadoresDisponiveis.length > 0 && (
               <Select
                 label="Coordenador Responsável *"
                 value={form.coordenadorId}

@@ -3,6 +3,8 @@
 import { useState, useEffect } from "react";
 import { Eleitor, Candidato } from "@/types";
 import { atualizarEleitor, registrarAtividade, buscarCandidatos } from "@/lib/firestore";
+import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { estados, getCidades, getBairros } from "@/lib/estados-cidades";
 import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
@@ -223,6 +225,34 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
         <div className="flex gap-3 pt-2">
           <Button onClick={handleSave} loading={saving} className="flex-1">Salvar Alterações</Button>
           <Button variant="ghost" onClick={onClose} className="flex-1">Cancelar</Button>
+        </div>
+
+        <div className="pt-2 border-t border-white/[0.06]">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!userData || !eleitor.id) return;
+              try {
+                await addDoc(collection(db, "_solicitacoes_lgpd"), {
+                  eleitorId: eleitor.id,
+                  eleitorNome: eleitor.nomeCompleto,
+                  documento: eleitor.documento || "",
+                  tipo: "exclusao",
+                  status: "pendente",
+                  solicitadoPorId: userData.uid,
+                  solicitadoPorNome: userData.nome,
+                  campanhaId: eleitor.campanhaId,
+                  criadoEm: serverTimestamp(),
+                });
+                await registrarAtividade({ acao: "solicitar_exclusao_lgpd", usuarioId: userData.uid, usuarioNome: userData.nome, usuarioRole: userData.role, detalhes: `Solicitou exclusão LGPD para ${eleitor.nomeCompleto}` });
+                toast.success("Solicitação de exclusão registrada. O responsável irá processar em até 48h.");
+                onClose();
+              } catch { toast.error("Erro ao registrar solicitação"); }
+            }}
+            className="w-full text-xs text-white/20 hover:text-red-400/60 transition-colors py-1"
+          >
+            Solicitar exclusão de dados deste eleitor (LGPD)
+          </button>
         </div>
       </div>
     </Modal>

@@ -18,6 +18,11 @@ export interface Missao {
   criadoPorId?: string;
   criadoPorNome?: string;
   criadoEm: any;
+  delegadoPor?: string;
+  delegadoPorNome?: string;
+  delegadoEm?: any;
+  concluidoPor?: string;
+  concluidoPorNome?: string;
   concluidoEm?: any;
   resultado?: string;
 }
@@ -117,6 +122,8 @@ export interface Eleitor {
   atualizadoEm?: Date;
   editadoPor?: string;
   editadoPorNome?: string;
+  consentimentoLGPD?: boolean;
+  grauApoioHistorico?: { grau: string; registradoEm: Date }[];
 }
 
 export interface Atividade {

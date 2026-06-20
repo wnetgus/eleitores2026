@@ -294,8 +294,36 @@ service cloud.firestore {
         resource.data.get("gabineteId", "") == myCampanha() ||
         resource.data.get("campanhaId", "") == myCampanha()
       );
-      allow create: if isAuth();
+      allow create: if isAuth() && (
+        request.resource.data.get("campanhaId", "") == myCampanha() ||
+        request.resource.data.get("gabineteId", "") == myCampanha()
+      );
       allow update, delete: if isAuth() && isAdmin();
+    }
+
+    // ─── coleções administrativas (prefixo _) ─────────────────────────────────
+
+    // Erros de runtime — gravados pelo ErrorBoundary client-side
+    match /_erros/{id} {
+      allow create: if isAuth();
+      allow read, update, delete: if isAuth() && isAdmin();
+    }
+
+    // Solicitações de exclusão LGPD (Art. 18 — direito ao esquecimento)
+    match /_solicitacoes_lgpd/{id} {
+      allow create: if isAuth() && (
+        isAdmin() ||
+        request.resource.data.get("campanhaId", "") == myCampanha()
+      );
+      allow read: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") == "assessor_executivo" &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
+      allow update: if isAuth() && isAdmin();
+      allow delete: if isAuth() && isAdmin();
     }
   }
 }

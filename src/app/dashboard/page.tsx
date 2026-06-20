@@ -74,6 +74,16 @@ export default function DashboardPage() {
         }
         setUsuarios(usuariosSnap.docs.map((d: any) => ({ uid: d.id, ...d.data() } as AppUser)));
 
+        // Redirecionar para onboarding se politico sem assessores (primeira vez)
+        if (isPolitico(userData)) {
+          const temAssessores = usuariosSnap.docs.some((d: any) => d.data().role === "assessor");
+          if (!temAssessores && typeof window !== "undefined" && !localStorage.getItem("onboarding_completo")) {
+            router.push("/onboarding");
+            setLoading(false);
+            return;
+          }
+        }
+
         const constraints: any[] = [orderBy("criadoEm", "desc")];
         let eleitoresCarregados = false;
         if (isColaborador(userData)) {
@@ -214,6 +224,14 @@ export default function DashboardPage() {
                            (u as any).cidade === cidade
                          )),
       assessorResponsavel: "",
+      diasSemNovoCadastro: (() => {
+        const datas = grupo.map((e) => parseDate(e.criadoEm).getTime()).filter(Boolean);
+        if (datas.length === 0) return 0;
+        const ultimo = Math.max(...datas);
+        return Math.floor((Date.now() - ultimo) / 86400000);
+      })(),
+      colaboradoresCount: usuarios.filter((u) => u.role === "colaborador" && (u as any).cidadePrincipal === cidade).length,
+      novosEleitores30d: grupo.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 30 * 86400000).length,
     }));
   }, [eleitores, assessoriasCriadas, coordenacoesCriadas, usuarios, userData]);
 
@@ -573,9 +591,10 @@ export default function DashboardPage() {
 
   const indiceSaudeTerritorial = isPolitico(userData) && eleitoresFiltrados.length > 0 ? (() => {
     const total = eleitoresFiltrados.length;
-    const pctForte = eleitoresFiltrados.filter((e) => e.grauApoio === "forte").length / total;
+    const sfp = calcularSFPSimples(eleitoresFiltrados);
+    const pctSFP = sfp ? Math.min(1, sfp.score / 3.0) : 0;
     const d30 = eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).getTime() > Date.now() - 30 * 86400000).length;
-    const qualidade      = Math.min(40, Math.round(pctForte * 100 * 0.4));
+    const qualidade      = Math.min(40, Math.round(pctSFP * 100 * 0.4));
     const crescScore     = crescimento30dPolitico > 20 ? 25 : crescimento30dPolitico > 5 ? 18 : crescimento30dPolitico > 0 ? 10 : 0;
     const diversScore    = Math.round((1 - concentracaoRisco / 100) * 20);
     const atividadeScore = Math.min(15, Math.round((d30 / total) * 15));
@@ -657,10 +676,35 @@ export default function DashboardPage() {
 
   // Sprint 7 — substituição controlada: motor tem prioridade, demo é fallback
   const pendenciasMotor = motor?.pendencias ?? [];
+
+  const pendenciasAssessoresInativos = isPolitico(userData)
+    ? usuarios
+        .filter((u) => {
+          if (u.role !== "assessor") return false;
+          if (u.ativo === false) return false;
+          const ua = (u as any).ultimaAtividade;
+          if (!ua) return false;
+          const ts: number = ua?.toMillis?.() ?? new Date(ua).getTime();
+          return Date.now() - ts > 30 * 86400000;
+        })
+        .map((u) =>
+          criarPendencia({
+            tipo: "alta",
+            titulo: "Assessor Inativo",
+            descricao: `${u.nome} sem atividade há mais de 30 dias.`,
+            territorio: (u as any).cidadePrincipal || "—",
+            origem: "Inteligência Política",
+            destino: "/assessores",
+            acao: "Reativar Assessor",
+          })
+        )
+    : [];
+
   // Com dados reais, o motor é autoridade absoluta — mesmo que retorne vazio (município resolvido)
-  const pendenciasAtivas = territoriosReais.length > 0
-    ? pendenciasMotor
-    : (pendenciasMotor.length > 0 ? pendenciasMotor : pendenciasDemo);
+  const pendenciasAtivas = ordenarPendencias([
+    ...(territoriosReais.length > 0 ? pendenciasMotor : (pendenciasMotor.length > 0 ? pendenciasMotor : pendenciasDemo)),
+    ...pendenciasAssessoresInativos,
+  ]);
   const resumoPendenciasAtivas = isPolitico(userData) ? getResumoPendencias(pendenciasAtivas) : null;
 
   // Classificação estratégica de municípios
@@ -1123,6 +1167,14 @@ export default function DashboardPage() {
               Entendi
             </button>
           </div>
+        </div>
+      )}
+
+      {/* BANNER DEMO — visível quando não há eleitores reais */}
+      {isPolitico(userData) && territoriosReais.length === 0 && (
+        <div className="flex items-center gap-2.5 px-4 py-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+          <span>⚠️</span>
+          <span>Visualização demonstrativa — adicione eleitores para ver a inteligência territorial com dados reais.</span>
         </div>
       )}
 

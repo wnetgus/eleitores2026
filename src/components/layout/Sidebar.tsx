@@ -111,6 +111,7 @@ const assessorMenu = [
   { href: "/relatorios", label: "Inteligência Regional", icon: BarChart3 },
   { href: "/exportacoes", label: "Exportações", icon: FileSpreadsheet },
   { href: "/metas", label: "Metas", icon: Flag },
+  { href: "/configuracoes", label: "Configurações", icon: Settings },
 ];
 
 const coordenadorMenu = [

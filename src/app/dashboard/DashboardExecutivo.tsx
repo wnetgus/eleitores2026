@@ -8,6 +8,7 @@ import { Eleitor } from "@/types";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { parseDate } from "@/lib/utils";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Crown, Zap, Users, Target, TrendingUp, Bell,
   BarChart3, ChevronRight, MapPin, Clock, CheckCircle,
@@ -27,12 +28,14 @@ interface AssessorStats {
   coordenadores: number;
   colaboradores: number;
   crescimento30d: number;
+  novosEleitores7d: number;
   performance: number;
   diagnostico: string;
   ativo: boolean;
 }
 
 export function DashboardExecutivo({ userData }: Props) {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [assessores, setAssessores] = useState<AppUser[]>([]);
   const [coordenadores, setCoordenadores] = useState<AppUser[]>([]);
@@ -67,8 +70,16 @@ export function DashboardExecutivo({ userData }: Props) {
           getDoc(doc(db, "campanhas", campanhaId)),
         ]);
 
-      if (assessSnap.status === "fulfilled")
-        setAssessores(assessSnap.value.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+      if (assessSnap.status === "fulfilled") {
+        const lista = assessSnap.value.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser));
+        setAssessores(lista);
+        // Redirecionar para onboarding se executivo sem assessores (primeira vez)
+        if (lista.length === 0 && typeof window !== "undefined" && !localStorage.getItem("onboarding_completo")) {
+          router.push("/onboarding");
+          setLoading(false);
+          return;
+        }
+      }
       if (coordSnap.status === "fulfilled")
         setCoordenadores(coordSnap.value.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
       if (colabSnap.status === "fulfilled")
@@ -134,6 +145,9 @@ export function DashboardExecutivo({ userData }: Props) {
       const recentes30 = meusEleit.filter(
         (e) => parseDate(e.criadoEm).getTime() > agora - 30 * 86400000
       ).length;
+      const novosEleitores7d = meusEleit.filter(
+        (e) => parseDate(e.criadoEm).getTime() > agora - 7 * 86400000
+      ).length;
       const prev30 = meusEleit.filter((e) => {
         const t = parseDate(e.criadoEm).getTime();
         return t > agora - 60 * 86400000 && t <= agora - 30 * 86400000;
@@ -166,6 +180,7 @@ export function DashboardExecutivo({ userData }: Props) {
         coordenadores: meusCoords.length,
         colaboradores: meusColabs.length,
         crescimento30d,
+        novosEleitores7d,
         performance: Math.min(perf, 100),
         diagnostico,
         ativo: a.ativo !== false,
@@ -313,6 +328,70 @@ export function DashboardExecutivo({ userData }: Props) {
               </Link>
             </div>
           </div>
+
+          {/* ── Fila de Decisão ── */}
+          {(() => {
+            const decisoes = [
+              solicitacoesPendentes > 0 && {
+                urgente: true,
+                icone: "📋",
+                label: `${solicitacoesPendentes} aprovação${solicitacoesPendentes > 1 ? "ões" : ""} pendente${solicitacoesPendentes > 1 ? "s" : ""}`,
+                sub: "Mobilizadores aguardando ativação",
+                href: "/solicitacoes",
+              },
+              missaoStats.atrasadas > 0 && {
+                urgente: true,
+                icone: "⚡",
+                label: `${missaoStats.atrasadas} missão${missaoStats.atrasadas > 1 ? "ões" : ""} atrasada${missaoStats.atrasadas > 1 ? "s" : ""}`,
+                sub: "Mais de 7 dias sem conclusão",
+                href: "/missoes",
+              },
+              cidadesSemAssessor.length > 0 && {
+                urgente: false,
+                icone: "📍",
+                label: `${cidadesSemAssessor.length} município${cidadesSemAssessor.length > 1 ? "s" : ""} sem assessoria`,
+                sub: cidadesSemAssessor.slice(0, 2).join(", ") + (cidadesSemAssessor.length > 2 ? ` +${cidadesSemAssessor.length - 2}` : ""),
+                href: "/assessores",
+              },
+              missaoStats.pendentes > 0 && {
+                urgente: false,
+                icone: "🎯",
+                label: `${missaoStats.pendentes} missão${missaoStats.pendentes > 1 ? "ões" : ""} aguardando início`,
+                sub: "Pendentes de aceite pelos assessores",
+                href: "/missoes",
+              },
+            ].filter(Boolean) as { urgente: boolean; icone: string; label: string; sub: string; href: string }[];
+
+            if (decisoes.length === 0) return null;
+            return (
+              <section>
+                <p className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">
+                  O QUE FAZER AGORA — {decisoes.length} item{decisoes.length > 1 ? "s" : ""}
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {decisoes.map((d, i) => (
+                    <Link
+                      key={i}
+                      href={d.href}
+                      className={`flex items-start gap-3 p-4 rounded-2xl border transition-all hover:brightness-110 ${
+                        d.urgente
+                          ? "bg-red-500/8 border-red-500/25 hover:bg-red-500/12"
+                          : "bg-amber-500/6 border-amber-500/20 hover:bg-amber-500/10"
+                      }`}
+                    >
+                      <span className="text-xl shrink-0">{d.icone}</span>
+                      <div className="min-w-0">
+                        <p className={`text-sm font-semibold leading-snug ${d.urgente ? "text-red-300" : "text-amber-300"}`}>
+                          {d.label}
+                        </p>
+                        <p className="text-[10px] text-white/30 mt-0.5 truncate">{d.sub}</p>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            );
+          })()}
 
           {/* ── Equipe do Gabinete ── */}
           <section>
@@ -495,8 +574,9 @@ export function DashboardExecutivo({ userData }: Props) {
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">
                           <span className="text-[10px] text-white/25">{a.eleitores} eleit.</span>
-                          <span className="text-[10px] text-white/25">{a.coordenadores} coords.</span>
-                          <span className="text-[10px] text-white/25">{a.colaboradores} mobs.</span>
+                          <span className={`text-[10px] font-semibold ${a.novosEleitores7d > 0 ? "text-emerald-400/80" : "text-white/20"}`}>
+                            {a.novosEleitores7d > 0 ? `+${a.novosEleitores7d} esta semana` : "0 esta semana"}
+                          </span>
                           <span className="text-[10px] text-white/20">{a.cidadePrincipal}</span>
                           {a.diagnostico !== "Operacional" && a.diagnostico !== "Inativo (30d)" && (
                             <span className="text-[10px] text-amber-400/70">{a.diagnostico}</span>

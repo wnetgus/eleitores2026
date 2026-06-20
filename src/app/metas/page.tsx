@@ -6,7 +6,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, AppUser, Meta, ROLE_CONFIG } from "@/types";
-import { getRoleConfig, isSuperOrMaster, isPolitico, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
+import { getRoleConfig, isSuperOrMaster, isPolitico, isAssessor, isAssessorExecutivo, isAssessorOuExecutivo, isCoordenador, isColaborador } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -44,6 +44,7 @@ function fmtAtividade(dias: number): string {
 type ColabStat = Omit<AppUser, "status"> & {
   total: number; metaVal: number; metaTipo: "individual" | "padrao" | "sem_meta";
   prog: number; diasSemAtividade: number; status: keyof typeof STATUS_CONFIG;
+  diasParaConcluir: number | null;
 };
 
 export default function MetasPage() {
@@ -68,7 +69,7 @@ export default function MetasPage() {
   const [politicoAssessorCidades, setPoliticoAssessorCidades] = useState<Record<string, string[]>>({});
   const [assessoresList, setAssessoresList] = useState<AppUser[]>([]);
 
-  const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessor(userData) || isCoordenador(userData);
+  const podeGerenciarMetas = isSuperOrMaster(userData) || isAssessorOuExecutivo(userData) || isCoordenador(userData);
 
   useEffect(() => {
     if (!userData) return;
@@ -150,6 +151,23 @@ export default function MetasPage() {
             setPoliticoAssessorNomes(am);
             setPoliticoAssessorCidades(ac);
             setAssessoresList(assessorSnap.docs.map(d => ({ uid: d.id, ...d.data() } as AppUser)));
+          }
+        }
+
+        // Assessor executivo: carrega coordInfoMap de toda a campanha para coordStats
+        if (isAssessorExecutivo(userData!)) {
+          const gabIdExec = userData!.campanhaId || userData!.gabineteId;
+          if (gabIdExec) {
+            const coordSnap = await getDocs(query(
+              collection(db, "usuarios"),
+              where("role", "==", "coordenador"),
+              where("campanhaId", "==", gabIdExec)
+            ));
+            const infoMap: Record<string, { nome: string; metaPadrao: number }> = {};
+            coordSnap.docs.forEach((d) => {
+              infoMap[d.id] = { nome: d.data().nome || "", metaPadrao: (d.data().metaPadraoEquipe as number) || 0 };
+            });
+            setCoordInfoMap(infoMap);
           }
         }
       }
@@ -332,8 +350,25 @@ export default function MetasPage() {
       frases.push("📋 Nenhum cadastro realizado ainda.");
     }
     if (minhaMeta > 0) {
-      if (faltam === 0) frases.push("🎯 Meta atingida! Continue cadastrando para superar o objetivo.");
-      else frases.push(`🎯 Faltam ${faltam} para atingir sua meta.`);
+      if (faltam === 0) {
+        frases.push("🎯 Meta atingida! Continue cadastrando para superar o objetivo.");
+      } else {
+        frases.push(`🎯 Faltam ${faltam} para atingir sua meta.`);
+        const pace = Number(mediaDia);
+        if (pace > 0) {
+          const diasRestantes = Math.ceil(faltam / pace);
+          const dataConclusao = new Date(Date.now() + diasRestantes * 86400000);
+          const dtStr = dataConclusao.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+          const emoji = diasRestantes <= 30 ? "✅" : diasRestantes <= 90 ? "🎯" : "⚠";
+          if (diasRestantes <= 365) {
+            frases.push(`${emoji} No ritmo atual (${pace.toFixed(1)}/dia), você chegará à meta em ${dtStr}.`);
+          } else {
+            frases.push(`⚠ No ritmo atual, a meta levará mais de 1 ano. Intensifique os cadastros.`);
+          }
+        } else if (total === 0) {
+          frases.push("📋 Inicie os cadastros para que o ritmo seja calculado.");
+        }
+      }
     }
     if (total > 0) {
       const pctForte = Math.round((fortesCt / total) * 100);
@@ -362,7 +397,11 @@ export default function MetasPage() {
         const prog = metaVal > 0 ? Math.round((total / metaVal) * 100) : 0;
         const lastTs = meus.reduce((max, e) => Math.max(max, parseDate(e.criadoEm).getTime()), 0);
         const diasSemAtividade = lastTs > 0 ? Math.floor((Date.now() - lastTs) / 86400000) : 999;
-        return { ...c, total, metaVal, metaTipo, prog, diasSemAtividade, status: getCoordStatus(prog, metaVal) };
+        const diasAtivos = new Set(meus.map((e) => parseDate(e.criadoEm).toDateString())).size;
+        const pace = diasAtivos > 0 ? total / diasAtivos : 0;
+        const faltamC = metaVal > total ? metaVal - total : 0;
+        const diasParaConcluir = pace > 0 && faltamC > 0 ? Math.ceil(faltamC / pace) : null;
+        return { ...c, total, metaVal, metaTipo, prog, diasSemAtividade, status: getCoordStatus(prog, metaVal), diasParaConcluir };
       }).sort((a, b) => b.prog - a.prog)
     : [];
 
@@ -385,7 +424,7 @@ export default function MetasPage() {
   const coordStats: {
     coordId: string; nome: string; total: number; metaTotal: number;
     prog: number; diasSemAtividade: number; numColabs: number; rank: number;
-  }[] = !isAssessor(userData) ? [] : Object.entries(coordInfoMap)
+  }[] = !isAssessorOuExecutivo(userData) ? [] : Object.entries(coordInfoMap)
     .map(([coordId, ci]) => {
       const colabs = colaboradores.filter((c) => c.coordenadorId === coordId);
       const total = eleitores.filter((e) => e.coordenadorId === coordId).length;
@@ -1247,12 +1286,19 @@ export default function MetasPage() {
                       </span>
                     </div>
                     {c.metaVal > 0 ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
-                          <div className={`h-full rounded-full ${sc.bar}`} style={{ width: `${Math.min(100, c.prog)}%` }} />
+                      <>
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full ${sc.bar}`} style={{ width: `${Math.min(100, c.prog)}%` }} />
+                          </div>
+                          <span className="text-xs text-white/30 shrink-0">{c.total}/{c.metaVal}</span>
                         </div>
-                        <span className="text-xs text-white/30 shrink-0">{c.total}/{c.metaVal}</span>
-                      </div>
+                        {c.diasParaConcluir !== null && c.prog < 100 && (
+                          <p className="text-[10px] text-white/25 mt-0.5">
+                            Projeção: {c.diasParaConcluir <= 0 ? "já atingiu" : `+${c.diasParaConcluir}d`}
+                          </p>
+                        )}
+                      </>
                     ) : (
                       <span className="text-xs text-white/20">{c.total} cadastros · sem meta</span>
                     )}
@@ -1269,8 +1315,8 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {/* BRIEFING DE PERFORMANCE — assessor */}
-      {isAssessor(userData) && coordStats.length > 0 && (
+      {/* BRIEFING DE PERFORMANCE — assessor/executivo */}
+      {isAssessorOuExecutivo(userData) && coordStats.length > 0 && (
         <GlassCard className="p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={18} className="text-purple-400" />
@@ -1344,8 +1390,8 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {/* META PADRÃO DA ASSESSORIA — mantida intacta */}
-      {isAssessor(userData) && colaboradores.length > 0 && (
+      {/* META PADRÃO DA ASSESSORIA */}
+      {isAssessorOuExecutivo(userData) && colaboradores.length > 0 && (
         <GlassCard className="p-5">
           <div className="flex items-center gap-2 mb-2">
             <Users size={18} className="text-purple-400" />
