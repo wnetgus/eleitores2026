@@ -10,7 +10,7 @@ import { parseDate } from "@/lib/utils";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Crown, Zap, Users, Target, TrendingUp, Bell,
+  Crown, Zap, Bell,
   BarChart3, ChevronRight, MapPin, Clock, CheckCircle,
   Shield, AlertTriangle,
 } from "lucide-react";
@@ -270,19 +270,17 @@ export function DashboardExecutivo({ userData }: Props) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] lg:pl-[260px]">
-        <div className="p-4 md:p-6 lg:p-8 pt-20 lg:pt-8 max-w-7xl mx-auto animate-pulse space-y-6">
-          <div className="h-10 w-72 bg-white/5 rounded-xl" />
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[0,1,2,3].map((i) => <div key={i} className="h-24 bg-white/5 rounded-2xl" />)}
-          </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            {[0,1,2,3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl" />)}
-          </div>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="h-64 bg-white/5 rounded-2xl" />
-            <div className="h-64 bg-white/5 rounded-2xl" />
-          </div>
+      <div className="animate-pulse space-y-6">
+        <div className="h-10 w-72 bg-white/5 rounded-xl" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[0,1,2,3].map((i) => <div key={i} className="h-24 bg-white/5 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[0,1,2,3].map((i) => <div key={i} className="h-20 bg-white/5 rounded-2xl" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="h-64 bg-white/5 rounded-2xl" />
+          <div className="h-64 bg-white/5 rounded-2xl xl:col-span-2" />
         </div>
       </div>
     );
@@ -295,9 +293,7 @@ export function DashboardExecutivo({ userData }: Props) {
   const colaboradoresAtiv = colaboradores.filter((c) => c.ativo !== false && c.status !== "pendente").length;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] lg:pl-[260px]">
-      <div className="p-4 md:p-6 lg:p-8 pt-20 lg:pt-8 max-w-7xl mx-auto">
-        <div className="space-y-6 animate-in">
+    <div className="space-y-6 animate-in">
 
           {/* ── Cabeçalho ── */}
           <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -455,7 +451,7 @@ export function DashboardExecutivo({ userData }: Props) {
           </section>
 
           {/* ── Alertas + Ranking ── */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
 
             {/* Alertas */}
             <GlassCard>
@@ -511,7 +507,7 @@ export function DashboardExecutivo({ userData }: Props) {
             </GlassCard>
 
             {/* Ranking de Assessores */}
-            <GlassCard>
+            <GlassCard className="xl:col-span-2">
               <div className="flex items-center gap-2 mb-4">
                 <BarChart3 size={15} className="text-violet-400" />
                 <h3 className="text-sm font-semibold text-white">Desempenho dos Assessores</h3>
@@ -534,7 +530,7 @@ export function DashboardExecutivo({ userData }: Props) {
                   </Link>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+                <div className="space-y-3 max-h-140 overflow-y-auto pr-1">
                   {assessorStats.map((a, i) => (
                     <div key={a.uid} className="flex items-center gap-3">
                       <span className="text-xs font-bold text-white/15 w-4 shrink-0">{i + 1}</span>
@@ -674,8 +670,6 @@ export function DashboardExecutivo({ userData }: Props) {
             </div>
           </section>
 
-        </div>
-      </div>
     </div>
   );
 }

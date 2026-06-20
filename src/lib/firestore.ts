@@ -221,16 +221,23 @@ export async function buscarMemoriasMandato(
     limite?: number;
   }
 ): Promise<MemoriaMandato[]> {
-  const constraints: any[] = [
-    where("campanhaId", "==", campanhaId),
-    orderBy("criadoEm", "desc"),
-  ];
-  if (filtros?.limite) constraints.push(limit(filtros.limite));
-  const snap = await getDocs(query(collection(db, colecoes.memoriaMandato), ...constraints));
+  // Sem orderBy no servidor — evita dependência de índice composto não implantado.
+  // A ordenação é feita client-side após a query simples por campanhaId.
+  const snap = await getDocs(query(
+    collection(db, colecoes.memoriaMandato),
+    where("campanhaId", "==", campanhaId)
+  ));
   let resultado = snap.docs.map((d) => ({ id: d.id, ...d.data() } as MemoriaMandato));
+  // Ordenar por criadoEm desc client-side
+  resultado.sort((a, b) => {
+    const ta = (a.criadoEm as any)?.toMillis?.() ?? new Date(a.criadoEm as any).getTime() ?? 0;
+    const tb = (b.criadoEm as any)?.toMillis?.() ?? new Date(b.criadoEm as any).getTime() ?? 0;
+    return tb - ta;
+  });
   if (filtros?.tipo) resultado = resultado.filter((m) => m.tipo === filtros.tipo);
   if (filtros?.status) resultado = resultado.filter((m) => m.status === filtros.status);
   if (filtros?.cidade) resultado = resultado.filter((m) => m.cidade === filtros.cidade);
+  if (filtros?.limite) resultado = resultado.slice(0, filtros.limite);
   return resultado;
 }
 

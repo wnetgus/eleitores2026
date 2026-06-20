@@ -328,10 +328,10 @@ export default function EleitoresPage() {
     if (!userData || (!isAssessorOuExecutivo(userData) && !isSuperOrMaster(userData))) return [];
     if (eleitoresFiltrados.length === 0) return [];
     const agora30d = Date.now() - 30 * 86400000;
-    const mapa: Record<string, { nome: string; total: number; fortes: number; indecisos: number; recentes: number }> = {};
+    const mapa: Record<string, { chave: string; nome: string; total: number; fortes: number; indecisos: number; recentes: number }> = {};
     for (const e of eleitoresFiltrados) {
       const chave = e.coordenadorId || e.coordenadorNome || "__sem__";
-      if (!mapa[chave]) mapa[chave] = { nome: e.coordenadorNome || "Sem coordenador", total: 0, fortes: 0, indecisos: 0, recentes: 0 };
+      if (!mapa[chave]) mapa[chave] = { chave, nome: e.coordenadorNome || "Sem coordenador", total: 0, fortes: 0, indecisos: 0, recentes: 0 };
       mapa[chave].total++;
       if (e.grauApoio === "forte") mapa[chave].fortes++;
       if (e.grauApoio === "indeciso") mapa[chave].indecisos++;
@@ -839,7 +839,7 @@ export default function EleitoresPage() {
               </thead>
               <tbody>
                 {resumoCoordenadores.map((c) => (
-                  <tr key={c.nome} className="border-b border-white/[0.03] text-xs">
+                  <tr key={c.chave} className="border-b border-white/[0.03] text-xs">
                     <td className="py-2.5 px-2 text-white/70 font-medium">{c.nome}</td>
                     <td className="py-2.5 px-2 text-white/60 text-right">{c.total}</td>
                     <td className="py-2.5 px-2 text-emerald-400 text-right">{c.fortes}</td>

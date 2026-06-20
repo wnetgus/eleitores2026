@@ -544,12 +544,12 @@ export default function CoordenadoresPage() {
                 const qtdColab = colaboradoresCount[c.uid] || 0;
                 return (
               <div key={c.uid} className="p-4 bg-white/[0.03] rounded-xl border border-white/[0.06] space-y-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold">{c.nome.charAt(0)}</div>
-                    <div>
-                      <p className="text-white font-medium text-sm">{c.nome}</p>
-                      <div className="flex items-center gap-1"><Mail size={12} className="text-white/30" /><p className="text-xs text-white/40">{c.email}</p></div>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white font-bold shrink-0">{c.nome.charAt(0)}</div>
+                    <div className="min-w-0">
+                      <p className="text-white font-medium text-sm truncate">{c.nome}</p>
+                      <div className="flex items-center gap-1"><Mail size={12} className="text-white/30 shrink-0" /><p className="text-xs text-white/40 truncate">{c.email}</p></div>
                       {(c.cidadePrincipal || c.cidade) && (
                         <div className="flex items-center gap-1 mt-0.5">
                           <MapPin size={11} className="text-white/20 shrink-0" />
@@ -560,7 +560,7 @@ export default function CoordenadoresPage() {
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     {podeGerenciar && <button onClick={() => openEdit(c)} className="text-white/30 hover:text-blue-400 transition-colors" title="Editar"><Pencil size={14} /></button>}
                     {podeGerenciar && userData?.uid !== c.uid && (
                       <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
