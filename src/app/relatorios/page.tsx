@@ -60,7 +60,7 @@ export default function RelatoriosPage() {
         const data = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
         setEleitores(data);
         setFiltered(data);
-        if (isPolitico(userData) && gabId) {
+        if ((isPolitico(userData) || isAssessorOuExecutivo(userData)) && gabId) {
           const [uSnap1, uSnap2] = await Promise.all([
             getDocs(query(collection(db, "usuarios"), where("campanhaId", "==", gabId))),
             getDocs(query(collection(db, "usuarios"), where("gabineteId", "==", gabId))),
@@ -199,8 +199,8 @@ export default function RelatoriosPage() {
 
   if (loading) return <div className="flex justify-center py-20"><svg className="animate-spin h-8 w-8 text-emerald-500" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg></div>;
 
-  // Deputado federal: Central de Decisão Política
-  if (userData && isPolitico(userData)) {
+  // Deputado federal e Assessor Executivo: Central de Decisão Política
+  if (userData && (isPolitico(userData) || isAssessorOuExecutivo(userData))) {
     const agora = Date.now();
     const indecisos = eleitores.filter((e) => e.grauApoio === "indeciso").length;
 

@@ -597,7 +597,7 @@ export default function MissoesPage() {
         origem:        "deputado",
         tipo:          form.tipo,
         titulo:        TITULO_AUTO[form.tipo](form.cidade.trim()),
-        descricao:     form.descricao.trim() || undefined,
+        ...(form.descricao.trim() ? { descricao: form.descricao.trim() } : {}),
         cidade:        form.cidade.trim(),
         prioridade:    form.prioridade,
         status:        "pendente",
@@ -651,15 +651,20 @@ export default function MissoesPage() {
 
   async function concluirMissao(missao: Missao, resultado: string) {
     if (!missao.id) return;
-    await updateDoc(doc(db, "missoes", missao.id), {
-      status:            "concluida",
-      concluidoEm:       Timestamp.now(),
-      concluidoPor:      userData?.uid ?? "",
-      concluidoPorNome:  userData?.nome ?? "",
-      resultado,
-    });
-    setModalExec(null);
-    await loadData();
+    try {
+      await updateDoc(doc(db, "missoes", missao.id), {
+        status:            "concluida",
+        concluidoEm:       Timestamp.now(),
+        concluidoPor:      userData?.uid ?? "",
+        concluidoPorNome:  userData?.nome ?? "",
+        resultado,
+      });
+      setModalExec(null);
+      await loadData();
+    } catch (e) {
+      console.error(e);
+      toast.error("Erro ao concluir missão.");
+    }
   }
 
   const missoesFiltradas = useMemo(() =>
@@ -685,8 +690,7 @@ export default function MissoesPage() {
   ];
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-white pb-20">
-      <div className="max-w-6xl mx-auto px-4 pt-6 lg:pt-8 space-y-6">
+    <div className="space-y-6 animate-in">
 
         {/* Header */}
         <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -794,8 +798,6 @@ export default function MissoesPage() {
             ))}
           </div>
         )}
-      </div>
-
       {/* Modal: Criar Missão (Deputado) */}
       {modalCriar && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setModalCriar(false)}>

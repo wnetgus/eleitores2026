@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo, useRef } from "react";
-import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc, addDoc } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, doc, setDoc, updateDoc, getDoc, deleteDoc, addDoc, limit } from "firebase/firestore";
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -140,7 +140,7 @@ export default function AssessoresPage() {
       const sugestao = sugerirEmail(form.nome, "assessor");
       if (sugestao) setForm((f) => ({ ...f, email: sugestao }));
     }
-  }, [form.nome]);
+  }, [form.nome, emailManual]);
 
   async function loadGabinetesMap() {
     try {
@@ -177,7 +177,7 @@ export default function AssessoresPage() {
           const fieldName = userData?.gabineteId ? "gabineteId" : "campanhaId";
           const [coordSnap, elSnap] = await Promise.all([
             getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where(fieldName, "==", scopeId))),
-            getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", scopeId))),
+            getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", scopeId), limit(1000))),
           ]);
           setCoordenadoresExec(coordSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
           setEleitoresExec(elSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
@@ -636,7 +636,7 @@ export default function AssessoresPage() {
             <svg className="animate-spin h-6 w-6 text-amber-500" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {statsExecOrdenados.map((s) => {
               const badge = (() => {
                 if (s.totalEleitores === 0 && s.totalCoords === 0)

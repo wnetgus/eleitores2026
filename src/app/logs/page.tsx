@@ -168,7 +168,7 @@ export default function LogsPage() {
                 <h3 className="text-white font-semibold">Registro de Atividades</h3>
                 <span className="ml-auto text-xs text-white/30">{atividades.length} registros</span>
               </div>
-              <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              <div className="space-y-2">
                 {atividades.map((a) => (
                   <div key={a.id} className="flex items-start gap-3 p-3 bg-white/[0.02] rounded-xl hover:bg-white/[0.04] transition-colors">
                     <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
@@ -209,7 +209,7 @@ export default function LogsPage() {
               <p className="text-xs text-white/30 mb-4">
                 Solicitações enviadas via plataforma ao abrigo do Art. 18 da Lei 13.709/2018 (LGPD). Prazo de processamento: 48h.
               </p>
-              <div className="space-y-3 max-h-[540px] overflow-y-auto">
+              <div className="space-y-3">
                 {solicitacoes.map((s) => (
                   <div key={s.id} className={`p-4 rounded-xl border ${
                     s.status === "pendente" ? "bg-amber-500/5 border-amber-500/20" :
@@ -276,7 +276,7 @@ export default function LogsPage() {
                 <h3 className="text-white font-semibold">Erros de Runtime</h3>
                 <span className="ml-auto text-xs text-white/30">{erros.length} registros</span>
               </div>
-              <div className="space-y-3 max-h-[540px] overflow-y-auto">
+              <div className="space-y-3">
                 {erros.map((e) => (
                   <div key={e.id} className="p-4 rounded-xl bg-red-500/5 border border-red-500/15">
                     <div className="flex items-start justify-between gap-3">

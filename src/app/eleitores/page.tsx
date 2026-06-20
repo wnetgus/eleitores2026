@@ -218,7 +218,7 @@ export default function EleitoresPage() {
         }));
         if (siglaEstado) setCidadesDisponiveis(getCidades(siglaEstado));
       }
-    } catch {} finally { setBuscandoCep(false); }
+    } catch { toast.error("Não foi possível buscar o CEP."); } finally { setBuscandoCep(false); }
   }
 
   async function handleSubmit(e: React.FormEvent) {

@@ -65,7 +65,7 @@ export default function ColaboradoresPage() {
       const sugestao = sugerirEmail(form.nome, "colaborador");
       if (sugestao) setForm((f) => ({ ...f, email: sugestao }));
     }
-  }, [form.nome]);
+  }, [form.nome, emailManual]);
 
   async function loadData() {
     try {
@@ -166,7 +166,7 @@ export default function ColaboradoresPage() {
         }));
         setCidadesDisponiveis(getCidades(siglaEstado));
       }
-    } catch {} finally { setBuscandoCep(false); }
+    } catch { toast.error("Não foi possível buscar o CEP."); } finally { setBuscandoCep(false); }
   }
 
   async function handleCreate(e: React.FormEvent) {

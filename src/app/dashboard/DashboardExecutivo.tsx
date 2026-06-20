@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, limit } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { AppUser, Missao } from "@/types";
 import { Eleitor } from "@/types";
@@ -64,7 +64,7 @@ export function DashboardExecutivo({ userData }: Props) {
           getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", campanhaId))),
-          getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId))),
+          getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), limit(1000))),
           getDocs(query(collection(db, "missoes"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", campanhaId), where("status", "==", "pendente"))),
           getDoc(doc(db, "campanhas", campanhaId)),
@@ -530,7 +530,7 @@ export function DashboardExecutivo({ userData }: Props) {
                   </Link>
                 </div>
               ) : (
-                <div className="space-y-3 max-h-140 overflow-y-auto pr-1">
+                <div className="space-y-3 pr-1">
                   {assessorStats.map((a, i) => (
                     <div key={a.uid} className="flex items-center gap-3">
                       <span className="text-xs font-bold text-white/15 w-4 shrink-0">{i + 1}</span>
