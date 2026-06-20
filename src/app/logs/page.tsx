@@ -46,6 +46,7 @@ export default function LogsPage() {
   const [solicitacoes, setSolicitacoes] = useState<SolicitacaoLGPD[]>([]);
   const [erros, setErros] = useState<ErroLog[]>([]);
   const [loading, setLoading] = useState(true);
+  const [confirmacaoLGPD, setConfirmacaoLGPD] = useState<SolicitacaoLGPD | null>(null);
 
   const isAdmin = isSuperOrMaster(userData);
 
@@ -243,7 +244,7 @@ export default function LogsPage() {
                     {(isAdmin || isAssessorExecutivo(userData)) && s.status === "pendente" && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-white/[0.05]">
                         <Button
-                          onClick={() => processarLGPD(s, "processado")}
+                          onClick={() => setConfirmacaoLGPD(s)}
                           className="flex-1 text-xs py-1.5 bg-red-500/15 text-red-400 hover:bg-red-500/25 border border-red-500/20"
                         >
                           <Trash2 size={12} /> Excluir dados do eleitor
@@ -305,6 +306,44 @@ export default function LogsPage() {
             </GlassCard>
           )}
         </>
+      )}
+
+      {/* Modal de confirmação de exclusão LGPD */}
+      {confirmacaoLGPD && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div className="bg-zinc-900 border border-red-500/30 rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-2.5">
+              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
+                <Trash2 size={18} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Confirmar exclusão permanente</p>
+                <p className="text-xs text-red-400/70">Esta ação não pode ser desfeita</p>
+              </div>
+            </div>
+            <p className="text-sm text-white/70">
+              Tem certeza que deseja excluir permanentemente os dados de{" "}
+              <strong className="text-white">{confirmacaoLGPD.eleitorNome}</strong>?
+            </p>
+            <p className="text-xs text-white/30">
+              O registro será removido definitivamente do sistema em conformidade com o Art. 18 da LGPD.
+            </p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => setConfirmacaoLGPD(null)}
+                className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => { processarLGPD(confirmacaoLGPD, "processado"); setConfirmacaoLGPD(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
+              >
+                Excluir permanentemente
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

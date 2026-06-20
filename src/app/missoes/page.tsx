@@ -94,13 +94,22 @@ function CardMissao({
 
       {/* Meta */}
       <div className="flex items-center justify-between text-xs text-white/30">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           {missao.criadoPorNome && (
             <span>Criada por: <span className="text-white/50">{missao.criadoPorNome}</span></span>
           )}
           {missao.responsavelNome && (
             <span>Responsável: <span className="text-white/50">{missao.responsavelNome}</span></span>
           )}
+          {missao.prazo && (() => {
+            const diasRestantes = Math.ceil((new Date(missao.prazo + "T00:00:00").getTime() - Date.now()) / 86400000);
+            const atrasada = diasRestantes < 0;
+            return (
+              <span className={atrasada ? "text-red-400 font-medium" : diasRestantes <= 3 ? "text-amber-400" : "text-white/40"}>
+                {atrasada ? `Atrasada · ${Math.abs(diasRestantes)}d` : `Prazo · ${diasRestantes}d (${new Date(missao.prazo + "T00:00:00").toLocaleDateString("pt-BR")})`}
+              </span>
+            );
+          })()}
         </div>
         {missao.resultado && (
           <span className="text-emerald-400/70 text-[10px]">{missao.resultado}</span>
@@ -519,7 +528,8 @@ export default function MissoesPage() {
     cidade: string;
     prioridade: "P1" | "P2" | "P3";
     descricao: string;
-  }>({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "" });
+    prazo: string;
+  }>({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
 
   const canCreateMission  = isPolitico(userData) || isAssessorExecutivo(userData) || isSuperOrMaster(userData);
   const canExecuteMission = isAssessorExecutivo(userData) || isAssessor(userData) || isSuperOrMaster(userData);
@@ -598,6 +608,7 @@ export default function MissoesPage() {
         tipo:          form.tipo,
         titulo:        TITULO_AUTO[form.tipo](form.cidade.trim()),
         ...(form.descricao.trim() ? { descricao: form.descricao.trim() } : {}),
+        ...(form.prazo ? { prazo: form.prazo } : {}),
         cidade:        form.cidade.trim(),
         prioridade:    form.prioridade,
         status:        "pendente",
@@ -607,7 +618,7 @@ export default function MissoesPage() {
       });
       toast.success("Missão criada e delegada ao Assessor Executivo!");
       setModalCriar(false);
-      setForm({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "" });
+      setForm({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
       await loadData();
     } catch (e) {
       console.error(e);
@@ -854,6 +865,19 @@ export default function MissoesPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+
+              {/* Prazo */}
+              <div>
+                <label className="text-xs text-white/40 block mb-1">Prazo (opcional)</label>
+                <input
+                  type="date"
+                  value={form.prazo}
+                  onChange={(e) => setForm((f) => ({ ...f, prazo: e.target.value }))}
+                  min={new Date().toISOString().split("T")[0]}
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/50"
+                  style={{ colorScheme: "dark" }}
+                />
               </div>
 
               {/* Descrição */}

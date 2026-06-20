@@ -26,7 +26,6 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password);
       toast.success("Login realizado com sucesso!");
-      router.push("/dashboard");
     } catch (error: any) {
       const messages: Record<string, string> = {
         "auth/user-not-found": "Usuário não encontrado",
@@ -75,7 +74,7 @@ export default function LoginPage() {
             <p className="text-white/50 text-sm mt-1">Plataforma de Gestão Política</p>
           </div>
 
-          <div className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); doLogin(); }} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-white/70 mb-1.5">Email</label>
               <input
@@ -110,9 +109,8 @@ export default function LoginPage() {
               </button>
             </div>
             <button
-              type="button"
+              type="submit"
               disabled={loading}
-              onClick={doLogin}
               className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-medium text-sm
                 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-50 disabled:cursor-not-allowed
                 flex items-center justify-center gap-2"
@@ -132,7 +130,7 @@ export default function LoginPage() {
             >
               Esqueci minha senha
             </button>
-          </div>
+          </form>
 
           <div className="mt-6 p-4 bg-white/[0.03] rounded-xl border border-white/[0.06]">
             <p className="text-xs text-white/40 text-center">

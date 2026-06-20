@@ -630,18 +630,6 @@ export default function RelatoriosPage() {
                   ))}
                 </div>
 
-                <div className="pt-1 border-t border-white/[0.06] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-white/30 uppercase tracking-wider">Próximas Ações</p>
-                    <span className="text-[9px] text-white/15 italic">Fase 2</span>
-                  </div>
-                  {["Reunir assessor", "Criar meta territorial", "Reforçar coordenação", "Expandir município"].map(acao => (
-                    <label key={acao} className="flex items-center gap-2.5 text-xs text-white/35 cursor-not-allowed select-none">
-                      <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
-                      {acao}
-                    </label>
-                  ))}
-                </div>
               </div>
             </div>
           </div>

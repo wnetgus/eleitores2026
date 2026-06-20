@@ -98,6 +98,7 @@ export default function EleitoresPage() {
   const [responsavelCoordenadorId, setResponsavelCoordenadorId] = useState("");
   const [responsavelColaboradorId, setResponsavelColaboradorId] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; nome: string } | null>(null);
+  const [camposComErro, setCamposComErro] = useState<string[]>([]);
 
   // Real-time listener para colaborador e coordenador; getDocs para roles de maior escopo
   useEffect(() => {
@@ -225,9 +226,16 @@ export default function EleitoresPage() {
     e.preventDefault();
     if (!userData) return;
     if (!form.nomeCompleto || !form.grauApoio || !form.cidade || !form.bairro) {
-      toast.error("Preencha nome, cidade, bairro e grau de apoio");
+      const erros: string[] = [];
+      if (!form.nomeCompleto) erros.push("nomeCompleto");
+      if (!form.cidade) erros.push("cidade");
+      if (!form.bairro) erros.push("bairro");
+      if (!form.grauApoio) erros.push("grauApoio");
+      setCamposComErro(erros);
+      toast.error("Preencha os campos obrigatórios destacados em vermelho");
       return;
     }
+    setCamposComErro([]);
     if (!form.consentimentoLGPD) {
       toast.error("O eleitor deve autorizar o uso dos dados (LGPD)");
       return;
@@ -689,18 +697,18 @@ export default function EleitoresPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           {/* Campos essenciais */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Input label="Nome Completo *" value={form.nomeCompleto} onChange={(e) => setForm({ ...form, nomeCompleto: e.target.value })} placeholder="Nome do eleitor" />
+            <Input label="Nome Completo *" value={form.nomeCompleto} onChange={(e) => { setForm({ ...form, nomeCompleto: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "nomeCompleto")); }} placeholder="Nome do eleitor" error={camposComErro.includes("nomeCompleto") ? " " : undefined} />
             <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
-            <Select label="Cidade *" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value, bairro: "" })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
+            <Select label="Cidade *" value={form.cidade} onChange={(e) => { setForm({ ...form, cidade: e.target.value, bairro: "" }); setCamposComErro((p) => p.filter((c) => c !== "cidade")); }} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} error={camposComErro.includes("cidade") ? " " : undefined} />
             {isOperacional ? (
               <div>
                 <label className="block text-sm font-medium text-white/70 mb-1.5">Bairro *</label>
                 <input
                   list="bairros-datalist"
                   value={form.bairro}
-                  onChange={(e) => setForm({ ...form, bairro: e.target.value })}
+                  onChange={(e) => { setForm({ ...form, bairro: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "bairro")); }}
                   placeholder="Digite ou selecione o bairro"
-                  className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+                  className={`w-full px-4 py-2.5 bg-white/5 border rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 transition-all ${camposComErro.includes("bairro") ? "border-red-500/50 focus:ring-red-500/50" : "border-white/10 focus:ring-emerald-500/50 focus:border-emerald-500/50"}`}
                 />
                 <datalist id="bairros-datalist">
                   {getBairros(form.cidade).map((b) => (
@@ -709,10 +717,10 @@ export default function EleitoresPage() {
                 </datalist>
               </div>
             ) : (
-              <Input label="Bairro *" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
+              <Input label="Bairro *" value={form.bairro} onChange={(e) => { setForm({ ...form, bairro: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "bairro")); }} placeholder="Bairro" error={camposComErro.includes("bairro") ? " " : undefined} />
             )}
             <div>
-              <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => setForm({ ...form, grauApoio: e.target.value })} options={grauOptions} />
+              <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => { setForm({ ...form, grauApoio: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "grauApoio")); }} options={grauOptions} error={camposComErro.includes("grauApoio") ? " " : undefined} />
               <p className="mt-1 text-xs text-white/30">
                 Forte = vai votar com certeza · Médio = simpatiza · Fraco = resistência · Indeciso = ainda não decidiu
               </p>

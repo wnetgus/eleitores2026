@@ -23,10 +23,6 @@ export default function ExportacoesPage() {
   const [selectedAssessorId, setSelectedAssessorId] = useState("");
   const [selectedCidade, setSelectedCidade] = useState("");
   const [modalDossie, setModalDossie] = useState(false);
-  const [filtroTipo, setFiltroTipo] = useState("executivo");
-  const [filtroFormato, setFiltroFormato] = useState("pdf");
-  const [filtroPeriodo, setFiltroPeriodo] = useState("tudo");
-  const [filtroEscopo, setFiltroEscopo] = useState("mandato");
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) {
@@ -318,17 +314,6 @@ export default function ExportacoesPage() {
     const cidadesUniq = [...new Set(eleitores.map(e => e.cidade).filter(Boolean))].sort() as string[];
     const assessorSel = assessores.find(a => a.uid === selectedAssessorId);
 
-    function filtroBtn(label: string, ativo: boolean, onClick: () => void) {
-      return (
-        <button key={label} onClick={onClick} className={`flex items-center gap-2 text-sm transition-colors ${ativo ? "text-violet-400" : "text-white/40 hover:text-white/60"}`}>
-          <span className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ${ativo ? "border-violet-400" : "border-white/20"}`}>
-            {ativo && <span className="w-1.5 h-1.5 rounded-full bg-violet-400" />}
-          </span>
-          {label}
-        </button>
-      );
-    }
-
     return (
       <div className="space-y-6 animate-in">
 
@@ -568,45 +553,6 @@ export default function ExportacoesPage() {
           </div>
         </div>
 
-        {/* Filtros de Exportação */}
-        <GlassCard className="p-5">
-          <h3 className="text-white font-semibold mb-4">Filtros de Exportação</h3>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-6">
-            <div>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Tipo</p>
-              <div className="space-y-2">
-                {[["executivo","Executivo"],["territorial","Territorial"],["assessoria","Assessoria"],["metas","Metas"],["inteligencia","Inteligência"]].map(([k,l]) =>
-                  filtroBtn(l, filtroTipo === k, () => setFiltroTipo(k))
-                )}
-              </div>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Formato</p>
-              <div className="space-y-2">
-                {[["pdf","PDF"],["excel","Excel"]].map(([k,l]) =>
-                  filtroBtn(l, filtroFormato === k, () => setFiltroFormato(k))
-                )}
-              </div>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Período</p>
-              <div className="space-y-2">
-                {[["30d","30 dias"],["90d","90 dias"],["ano","Ano eleitoral"],["tudo","Todo histórico"]].map(([k,l]) =>
-                  filtroBtn(l, filtroPeriodo === k, () => setFiltroPeriodo(k))
-                )}
-              </div>
-            </div>
-            <div>
-              <p className="text-[10px] text-white/30 uppercase tracking-wider mb-3">Escopo</p>
-              <div className="space-y-2">
-                {[["mandato","Todo mandato"],["assessor","Por assessor"],["municipio","Por município"]].map(([k,l]) =>
-                  filtroBtn(l, filtroEscopo === k, () => setFiltroEscopo(k))
-                )}
-              </div>
-            </div>
-          </div>
-        </GlassCard>
-
         {/* ⭐ Dossiê Político Premium */}
         <GlassCard className="p-5 border-violet-500/25">
           <div className="flex items-start gap-4">
@@ -624,15 +570,6 @@ export default function ExportacoesPage() {
                   <div key={item} className="flex items-center gap-1.5 text-xs text-white/50">
                     <span className="text-violet-400/60 font-bold">{i+1}.</span> {item}
                   </div>
-                ))}
-              </div>
-              {/* Fase 2 */}
-              <div className="flex flex-wrap gap-x-4 gap-y-1.5 mb-4">
-                {["Compartilhar PDF","Enviar por WhatsApp","Enviar por e-mail","Histórico de relatórios","Relatórios agendados"].map(acao => (
-                  <label key={acao} className="flex items-center gap-1.5 text-xs text-white/20 cursor-not-allowed select-none">
-                    <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
-                    {acao}
-                  </label>
                 ))}
               </div>
               <div className="flex items-center gap-4 pt-3 border-t border-violet-500/10">

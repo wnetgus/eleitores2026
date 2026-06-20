@@ -25,6 +25,7 @@ export interface Missao {
   concluidoPorNome?: string;
   concluidoEm?: any;
   resultado?: string;
+  prazo?: string;
 }
 export type TipoDocumento = "titulo" | "cpf" | "rg";
 export type NivelPolitico = "municipal" | "estadual" | "federal";

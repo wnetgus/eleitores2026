@@ -114,7 +114,6 @@ export default function AssessoresPage() {
   const [excluirSaving, setExcluirSaving] = useState(false);
   const [todosGabinetes, setTodosGabinetes] = useState<Gabinete[]>([]);
   const [filtros, setFiltros] = useState<FiltrosOperacionais>({ texto: "" });
-  const [modalFaseOp, setModalFaseOp] = useState(false);
   const [modalCriarAssessoria, setModalCriarAssessoria] = useState(false);
   const [formAssessoria, setFormAssessoria] = useState({
     nomeAssessor: "",
@@ -382,27 +381,6 @@ export default function AssessoresPage() {
           <BuscaGlobal userData={userData} />
         </div>
 
-        {/* Modal pequeno — confirmação ESTABILIZAÇÃO */}
-        {modalFaseOp && (
-          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalFaseOp(false)}>
-            <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-5" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
-                <span className="text-sm shrink-0">⚡</span>
-                <div>
-                  <p className="text-xs font-bold text-violet-400 tracking-wider">ESTABILIZAÇÃO</p>
-                  <p className="text-[11px] text-white/40">A gravação real será habilitada após a conclusão da homologação.</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setModalFaseOp(false)}
-                className="w-full py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-semibold hover:bg-white/10 transition-colors"
-              >
-                Entendi
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Modal grande — pré-formulário Criar Assessoria */}
         {modalCriarAssessoria && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalCriarAssessoria(false)}>
@@ -500,11 +478,10 @@ export default function AssessoresPage() {
                 <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Resumo Executivo</p>
                 <div className="bg-white/[0.02] border border-white/[0.06] rounded-xl p-4 space-y-2.5">
                   {[
-                    { label: "Município",           value: cidadeParam ?? "—",        highlight: false },
-                    { label: "Apoiadores atuais",   value: "4",                       highlight: false },
-                    { label: "Situação",            value: "Sem Assessoria Regional", highlight: false },
-                    { label: "Prioridade",          value: "CRÍTICA",                 highlight: true  },
-                    { label: "Prazo",               value: "15 dias",                 highlight: false },
+                    { label: "Município",           value: cidadeParam ?? "—",                                                                          highlight: false },
+                    { label: "Apoiadores atuais",   value: String(eleitoresExec.filter(e => e.cidade === cidadeParam).length) || "0",                   highlight: false },
+                    { label: "Situação",            value: "Sem Assessoria Regional",                                                                   highlight: false },
+                    { label: "Prioridade",          value: "CRÍTICA",                                                                                   highlight: true  },
                   ].map(({ label, value, highlight }) => (
                     <div key={label} className="flex items-center justify-between text-sm">
                       <span className="text-white/35">{label}</span>
