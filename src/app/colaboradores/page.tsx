@@ -259,6 +259,16 @@ export default function ColaboradoresPage() {
     if (!excluirModal) return;
     setExcluirSaving(true);
     try {
+      // Verificar eleitores vinculados (cascade guard)
+      const eleitoresSnap = await getDocs(query(collection(db, "eleitores"), where("colaboradorId", "==", excluirModal.uid)));
+      if (eleitoresSnap.size > 0) {
+        toast.error(
+          `${excluirModal.nome} tem ${eleitoresSnap.size} eleitor(es) cadastrado(s). Reatribua-os antes de excluir.`,
+          { duration: 6000 }
+        );
+        setExcluirModal(null);
+        return;
+      }
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       toast.success("Colaborador excluído!");
       setExcluirModal(null);
@@ -807,6 +817,9 @@ export default function ColaboradoresPage() {
         <div className="space-y-4">
           <p className="text-white/60 text-sm">
             Tem certeza que deseja excluir <strong className="text-white">{excluirModal?.nome}</strong>?
+          </p>
+          <p className="text-amber-400/70 text-xs">
+            Colaboradores com eleitores cadastrados não podem ser excluídos. Reatribua os eleitores a outro colaborador primeiro.
           </p>
           <p className="text-red-400/70 text-xs">Esta ação remove o usuário do Firestore. Não é reversível.</p>
           <div className="flex gap-3 pt-2">

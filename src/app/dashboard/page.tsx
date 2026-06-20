@@ -223,7 +223,14 @@ export default function DashboardPage() {
                            (u as any).cidadePrincipal === cidade ||
                            (u as any).cidade === cidade
                          )),
-      assessorResponsavel: "",
+      assessorResponsavel: (() => {
+        const a = usuarios.find((u) => u.role === "assessor" && u.ativo === true && (
+          (Array.isArray(u.cidades) && (u.cidades as string[]).includes(cidade)) ||
+          (u as any).cidade === cidade ||
+          (u as any).cidadePrincipal === cidade
+        ));
+        return a?.nome || "";
+      })(),
       diasSemNovoCadastro: (() => {
         const datas = grupo.map((e) => parseDate(e.criadoEm).getTime()).filter(Boolean);
         if (datas.length === 0) return 0;
@@ -601,39 +608,6 @@ export default function DashboardPage() {
     return Math.min(100, Math.round(qualidade + crescScore + diversScore + atividadeScore));
   })() : 0;
 
-  const pendenciasDemo = isPolitico(userData) ? ordenarPendencias([
-    criarPendencia({ tipo: "critica", titulo: "Designar Assessoria",  descricao: "Município possui eleitores mas não possui assessoria.",   territorio: "Surubim",   origem: "Força Territorial", destino: "/assessores",   acao: "Designar Assessoria" }),
-    criarPendencia({ tipo: "alta",    titulo: "Recuperar Base",       descricao: "Base em risco.",                                          territorio: "Garanhuns", origem: "Base Eleitoral",   destino: "/relatorios",   acao: "Recuperar Base"      }),
-    criarPendencia({ tipo: "media",   titulo: "Criar Coordenação",    descricao: "Assessor presente sem coordenação.",                      territorio: "Timbaúba",  origem: "Força Territorial", destino: "/coordenadores", acao: "Criar Coordenação"   }),
-  ]) : [];
-  const resumoPendencias = isPolitico(userData) ? getResumoPendencias(pendenciasDemo) : null;
-
-  const eventosDemo: EventoMandato[] = isPolitico(userData) ? [
-    { data: "03/03/2026", cidade: "Recife",    titulo: "Assessoria Regional Criada",  descricao: "Primeira estrutura oficial.",              responsavel: "Marcos Andrade", tipo: "estrutura"   },
-    { data: "15/04/2026", cidade: "Olinda",    titulo: "Coordenação Implantada",       descricao: "Operação consolidada.",                    responsavel: "Marcos Andrade", tipo: "estrutura"   },
-    { data: "02/05/2026", cidade: "Petrolina", titulo: "Plano de Recuperação",         descricao: "Base em risco entrou em recuperação.",     responsavel: "Pedro Coelho",   tipo: "recuperacao" },
-    { data: "18/06/2026", cidade: "Surubim",   titulo: "Expansão Territorial",         descricao: "Novo município incluído.",                 responsavel: "Pedro Coelho",   tipo: "expansao"    },
-    { data: "22/06/2026", cidade: "Recife",    titulo: "Meta Atingida",                descricao: "Meta regional alcançada.",                 responsavel: "Marcos Andrade", tipo: "meta"        },
-  ] : [];
-
-  const alertasDemo: AlertaExecutivo[] = isPolitico(userData) ? [
-    { tipo: "critico",      titulo: "30 dias sem evolução",      descricao: "Garanhuns permanece sem recuperação.",  cidade: "Garanhuns", responsavel: "Carla Neves",    tempo: "há 2 horas", acao: "Abrir plano",           classificacao: "P1", cobertura: 0,   potencialEleitoral: "+48 eleitores"  },
-    { tipo: "oportunidade", titulo: "57 indecisos disponíveis",  descricao: "Recife apresenta alto potencial.",      cidade: "Recife",    responsavel: "Marcos Andrade", tempo: "há 4 horas", acao: "Intensificar conversão", classificacao: "P1", cobertura: 85,  potencialEleitoral: "+57 eleitores"  },
-    { tipo: "sucesso",      titulo: "Estrutura consolidada",     descricao: "Olinda atingiu estabilidade.",          cidade: "Olinda",    responsavel: "Marcos Andrade", tempo: "ontem",      acao: "Visualizar",            classificacao: "P2", cobertura: 100                                       },
-    { tipo: "atencao",      titulo: "Meta abaixo do esperado",   descricao: "Petrolina caiu para 8% de força.",     cidade: "Petrolina", responsavel: "Pedro Coelho",   tempo: "há 1 dia",   acao: "Revisar meta",          classificacao: "P1", cobertura: 40,  potencialEleitoral: "+32 eleitores"  },
-  ] : [];
-
-  const agendaDemo: AgendaItem[] = isPolitico(userData) ? [
-    { cidade: "Garanhuns", titulo: "Reunir Assessoria",     descricao: "Plano de recuperação parado.",  responsavel: "Carla Neves",    prioridade: "critica", status: "hoje"        },
-    { cidade: "Surubim",   titulo: "Designar Assessoria",   descricao: "Município sem estrutura.",       responsavel: "Pedro Coelho",   prioridade: "alta",    status: "esta_semana" },
-    { cidade: "Olinda",    titulo: "Estrutura Consolidada", descricao: "Nenhuma ação necessária.",       responsavel: "Marcos Andrade", prioridade: "normal",  status: "concluida"   },
-  ] : [];
-
-  const decisoesDemo: DecisaoPolitica[] = isPolitico(userData) ? [
-    { cidade: "Surubim",   titulo: "Assessoria Regional Planejada", descricao: "Município sem cobertura política.", responsavel: "Pedro Coelho",   criadoEm: "15/06/2026", prazoDias: 15, status: "em_andamento", historico: ["Pendência criada", "Plano aprovado", "Assessoria em implantação"] },
-    { cidade: "Garanhuns", titulo: "Plano de Recuperação",          descricao: "Baixa força política.",            responsavel: "Carla Neves",    criadoEm: "10/06/2026", prazoDias: 20, status: "atrasada",     historico: ["Plano criado",      "Meta definida",    "Sem evolução"               ] },
-    { cidade: "Olinda",    titulo: "Estrutura Consolidada",         descricao: "Operação funcionando.",            responsavel: "Marcos Andrade", criadoEm: "05/06/2026", prazoDias: 5,  status: "concluida",    historico: ["Assessoria criada", "Coordenação criada", "Estrutura ativa"           ] },
-  ] : [];
 
   // Execução real — derivada dos territórios reais (assessorias + coordenações)
   const execucaoReal: ExecucaoItem[] = territoriosReais.map((t) => ({
@@ -643,35 +617,8 @@ export default function DashboardPage() {
     descricao:   !t.possuiAssessoria ? "Sem assessoria regional" : !t.possuiCoordenacao ? "Aguardando coordenação" : "Estrutura ativa",
     dias:        0,
   }));
-  const execucaoDemo: ExecucaoItem[] = isPolitico(userData) && execucaoReal.length === 0 ? [
-    { cidade: "Olinda",   status: "concluida",    responsavel: "Marcos Andrade", descricao: "Assessoria consolidada",          dias: 5  },
-    { cidade: "Surubim",  status: "em_andamento", responsavel: "Pedro Coelho",   descricao: "Criando assessoria regional",     dias: 15 },
-    { cidade: "Timbaúba", status: "atrasada",     responsavel: "Carlos Silva",   descricao: "Coordenação ainda não criada",    dias: 20 },
-  ] : [];
-  const execucaoAtiva: ExecucaoItem[] = execucaoReal.length > 0 ? execucaoReal : execucaoDemo;
-  // territoriosDemo: dados representativos dos 10 municípios do cenário executivo.
-  // Projetados para gerar pendencias=4, agenda=4, alertas=3, decisoes=4, memoria=4.
-  const territoriosDemo: TerritorioPolitico[] = isPolitico(userData) ? [
-    // Territórios saudáveis — nenhuma regra dispara
-    { cidade: "Recife",    eleitores: 210, fortes: 60, medios: 80, indecisos: 50, fracos: 20, crescimento30d: 12,  possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Marcos Andrade" },
-    { cidade: "Caruaru",   eleitores: 95,  fortes: 18, medios: 35, indecisos: 28, fracos: 14, crescimento30d: 5,   possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Ana Ferreira"   },
-    { cidade: "Olinda",    eleitores: 78,  fortes: 30, medios: 25, indecisos: 15, fracos: 8,  crescimento30d: 22,  possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Marcos Andrade" },
-    { cidade: "Palmares",  eleitores: 25,  fortes: 6,  medios: 9,  indecisos: 7,  fracos: 3,  crescimento30d: 8,   possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Sônia Barbosa"  },
-    // Regra 3 — base forte < 10% → pendência alta
-    { cidade: "Garanhuns", eleitores: 48,  fortes: 4,  medios: 12, indecisos: 24, fracos: 8,  crescimento30d: -5,  possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Carla Neves"    },
-    // Regra 1 — sem assessoria → pendência crítica + Regra 4 → alerta oportunidade
-    { cidade: "Salgueiro", eleitores: 30,  fortes: 5,  medios: 10, indecisos: 10, fracos: 5,  crescimento30d: 120, possuiAssessoria: assessoriasCriadas.has("Salgueiro"), possuiCoordenacao: false, assessorResponsavel: ""               },
-    // Regra 1 — sem assessoria → pendência crítica
-    { cidade: "Surubim",   eleitores: 4,   fortes: 1,  medios: 2,  indecisos: 1,  fracos: 0,  crescimento30d: 0,   possuiAssessoria: assessoriasCriadas.has("Surubim"),   possuiCoordenacao: coordenacoesCriadas.has("Surubim"),   assessorResponsavel: "Pedro Coelho"   },
-    // Regra 4 — crescimento > 100 → alerta oportunidade
-    { cidade: "Caetés",    eleitores: 18,  fortes: 4,  medios: 7,  indecisos: 5,  fracos: 2,  crescimento30d: 200, possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Fábio Lira"     },
-    // Regra 5 — crescimento < -20 → alerta atenção
-    { cidade: "Petrolina", eleitores: 60,  fortes: 10, medios: 20, indecisos: 18, fracos: 12, crescimento30d: -25, possuiAssessoria: true,  possuiCoordenacao: true,  assessorResponsavel: "Pedro Coelho"   },
-    // Regra 2 — assessoria sem coordenação → pendência media
-    { cidade: "Timbaúba",  eleitores: 12,  fortes: 2,  medios: 4,  indecisos: 4,  fracos: 2,  crescimento30d: 3,   possuiAssessoria: true,  possuiCoordenacao: coordenacoesCriadas.has("Timbaúba"),  assessorResponsavel: "Carlos Silva"   },
-  ] : [];
-
-  const territorios = territoriosReais.length > 0 ? territoriosReais : territoriosDemo;
+  const execucaoAtiva: ExecucaoItem[] = execucaoReal;
+  const territorios = territoriosReais;
   const motor = isPolitico(userData) ? executarMotorTerritorial(territorios) : null;
 
   // Sprint 7 — substituição controlada: motor tem prioridade, demo é fallback
@@ -700,9 +647,8 @@ export default function DashboardPage() {
         )
     : [];
 
-  // Com dados reais, o motor é autoridade absoluta — mesmo que retorne vazio (município resolvido)
   const pendenciasAtivas = ordenarPendencias([
-    ...(territoriosReais.length > 0 ? pendenciasMotor : (pendenciasMotor.length > 0 ? pendenciasMotor : pendenciasDemo)),
+    ...pendenciasMotor,
     ...pendenciasAssessoresInativos,
   ]);
   const resumoPendenciasAtivas = isPolitico(userData) ? getResumoPendencias(pendenciasAtivas) : null;
@@ -722,21 +668,17 @@ export default function DashboardPage() {
     return (eleitoresPorCidade[b.territorio] ?? 0) - (eleitoresPorCidade[a.territorio] ?? 0);
   });
 
-  // Sprint 8 — Agenda Executiva via motor
   const agendaMotor = motor?.agenda ?? [];
-  const agendaAtiva = agendaMotor.length > 0 ? agendaMotor : agendaDemo;
+  const agendaAtiva = agendaMotor;
 
-  // Sprint 9 — Central de Alertas via motor
   const alertasMotor = motor?.alertas ?? [];
-  const alertasAtivos = alertasMotor.length > 0 ? alertasMotor : alertasDemo;
+  const alertasAtivos = alertasMotor;
 
-  // Sprint 10 — Central de Decisões via motor
   const decisoesMotor = motor?.decisoes ?? [];
-  const decisoesAtivas = decisoesMotor.length > 0 ? decisoesMotor : decisoesDemo;
+  const decisoesAtivas = decisoesMotor;
 
-  // Sprint 11 — Memória do Mandato via motor
   const memoriaMotor = motor?.memoria ?? [];
-  const memoriaAtiva = memoriaMotor.length > 0 ? memoriaMotor : eventosDemo;
+  const memoriaAtiva = memoriaMotor;
 
   type PendenciaExtra = { responsavel: string; stats?: { label: string; value: string }[]; assessor?: string; impacto?: { eleitores: string; assessores?: string; coordenacoes?: string }; prazo?: string };
   const PENDENCIA_EXTRA: Record<string, PendenciaExtra> = {
@@ -921,20 +863,26 @@ export default function DashboardPage() {
           </div>
           <div className="flex items-center gap-3 flex-wrap">
             {indiceSaudeTerritorial > 0 && (
-              <div className={`flex items-center gap-2 px-3 py-2 rounded-xl border ${
-                indiceSaudeTerritorial >= 70 ? "bg-emerald-500/10 border-emerald-500/20" :
-                indiceSaudeTerritorial >= 45 ? "bg-amber-500/10  border-amber-500/20"  :
-                                               "bg-red-500/10    border-red-500/20"
-              }`}>
-                <span className={`text-[10px] uppercase tracking-wider font-medium ${
-                  indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
-                  indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
-                }`}>IST</span>
-                <span className={`text-xl font-bold leading-none ${
-                  indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
-                  indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
-                }`}>{indiceSaudeTerritorial}</span>
-                <span className="text-[10px] text-white/25">/100</span>
+              <div
+                title="IST — Índice de Saúde Territorial (0–100): mede a qualidade dos cadastros, ritmo de crescimento, diversidade de apoio e atividade recente da equipe. Acima de 70 = saudável · 45–69 = atenção · abaixo de 45 = crítico."
+                className={`flex flex-col items-center px-3 py-2 rounded-xl border cursor-help ${
+                  indiceSaudeTerritorial >= 70 ? "bg-emerald-500/10 border-emerald-500/20" :
+                  indiceSaudeTerritorial >= 45 ? "bg-amber-500/10  border-amber-500/20"  :
+                                                 "bg-red-500/10    border-red-500/20"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] uppercase tracking-wider font-medium ${
+                    indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
+                    indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
+                  }`}>IST</span>
+                  <span className={`text-xl font-bold leading-none ${
+                    indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
+                    indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
+                  }`}>{indiceSaudeTerritorial}</span>
+                  <span className="text-[10px] text-white/25">/100</span>
+                </div>
+                <span className="text-[9px] text-white/30 mt-0.5">Saúde Territorial</span>
               </div>
             )}
             <div className="text-right">

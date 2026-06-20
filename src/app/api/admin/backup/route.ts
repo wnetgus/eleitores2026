@@ -21,22 +21,21 @@ export async function POST(req: NextRequest) {
   const timestamp = new Date().toISOString().slice(0, 10);
   const backupRef = adminDb.doc(`_backups/${timestamp}`);
 
-  const snapshot: Record<string, any[]> = {};
+  const contagemPorColecao: Record<string, number> = {};
   let totalDocs = 0;
 
   for (const col of COLLECTIONS) {
     const snap = await adminDb.collection(col).get();
-    snapshot[col] = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    contagemPorColecao[col] = snap.size;
     totalDocs += snap.size;
   }
 
+  // Armazena apenas metadados — dados completos ficam no Firebase Admin (não no Firestore)
+  // para evitar limite de 1MB por documento e exposição via vazamento de credenciais
   await backupRef.set({
     criadoEm: new Date(),
     totalDocumentos: totalDocs,
-    colecoes: Object.fromEntries(
-      Object.entries(snapshot).map(([k, v]) => [k, v.length])
-    ),
-    dados: snapshot,
+    colecoes: contagemPorColecao,
   });
 
   return NextResponse.json({ success: true, data: timestamp, totalDocumentos: totalDocs });

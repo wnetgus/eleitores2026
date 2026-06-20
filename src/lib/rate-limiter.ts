@@ -36,8 +36,10 @@ export async function isRateLimited(ip: string, action: string, maxRequests = 10
 }
 
 export function getClientIp(req: Request): string {
+  // Usar o ÚLTIMO IP da cadeia: é o que o Vercel/proxy adiciona e é confiável.
+  // O primeiro pode ser forjado pelo atacante via header X-Forwarded-For.
   return (
-    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",").at(-1)?.trim() ||
     req.headers.get("x-real-ip") ||
     "unknown"
   );

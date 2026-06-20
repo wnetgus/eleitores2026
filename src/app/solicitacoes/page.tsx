@@ -5,7 +5,6 @@ import { collection, getDocs, query, orderBy, where, doc, updateDoc, getDoc, set
 import { createAuthUser, db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
-import { Sidebar } from "@/components/layout/Sidebar";
 import { AppUser } from "@/types";
 import { isAssessor, isAssessorExecutivo, isSuperOrMaster } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -129,8 +128,9 @@ export default function SolicitacoesPage() {
       await updateDoc(doc(db, "usuarios", s.uid), { status: "aprovado" });
 
       // Passo 2+3: cria conta Auth e perfil via app secundário (sessão principal preservada)
+      const senhaTemp = Math.random().toString(36).slice(-8).toUpperCase() + Math.floor(Math.random() * 100);
       const { uid: _oldUid, status: _st, solicitadoPor: _sp, solicitadoPorNome: _spn, ...dadosBase } = s as any;
-      await createAuthUser(s.email, "111111", {
+      await createAuthUser(s.email, senhaTemp, {
         ...dadosBase,
         status: "ativo",
         ativo: true,
@@ -143,7 +143,7 @@ export default function SolicitacoesPage() {
         acao: "aprovou_colaborador", usuarioId: userData!.uid, usuarioNome: userData!.nome,
         usuarioRole: userData!.role, detalhes: `Aprovou colaborador ${s.nome} (solicitado por ${s.solicitadoPorNome || "N/I"})`,
       });
-      toast.success(`${s.nome} aprovado! Conta criada com senha 111111`);
+      toast.success(`${s.nome} aprovado! Senha provisória: ${senhaTemp} — informe ao colaborador e peça para redefinir.`, { duration: 10000 });
     } catch (e: any) {
       setSolicitacoes((prev) => [s, ...prev]);
       toast.error(e.code === "auth/email-already-in-use" ? "Email já está em uso por outra conta" : "Erro ao aprovar");
@@ -183,19 +183,11 @@ export default function SolicitacoesPage() {
     } finally { setProcessingId(null); }
   }
 
-  if (!userData) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0a0a0f]">
-      <div className="animate-spin h-8 w-8 rounded-full border-2 border-emerald-500 border-t-transparent" />
-    </div>
-  );
+  if (!userData) return null;
   if (!isSuperOrMaster(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) return null;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
-      <Sidebar />
-      <main className="lg:pl-[260px] transition-all duration-300 min-h-screen">
-        <div className="p-4 md:p-6 lg:p-8 pt-20 lg:pt-8 max-w-7xl mx-auto">
-          <div className="space-y-6 animate-in">
+    <div className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-lg">
           <Clock size={20} className="text-white" />
@@ -338,9 +330,6 @@ export default function SolicitacoesPage() {
           </div>
         </div>
       </Modal>
-        </div>
-      </div>
-    </main>
-  </div>
+    </div>
   );
 }

@@ -711,7 +711,12 @@ export default function EleitoresPage() {
             ) : (
               <Input label="Bairro *" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
             )}
-            <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => setForm({ ...form, grauApoio: e.target.value })} options={grauOptions} />
+            <div>
+              <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => setForm({ ...form, grauApoio: e.target.value })} options={grauOptions} />
+              <p className="mt-1 text-xs text-white/30">
+                Forte = vai votar com certeza · Médio = simpatiza · Fraco = resistência · Indeciso = ainda não decidiu
+              </p>
+            </div>
             {(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && (
               <Select
                 label="Coordenador Responsável *"
@@ -747,7 +752,7 @@ export default function EleitoresPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-white/[0.05]">
               <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value as any, documento: "" })} options={tipoDocOptions} />
               <Input label={docLabel} value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder={`Número do ${docLabel}`} maxLength={14} />
-              <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
+              <Input type="tel" label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
               <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
               <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
               <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
@@ -912,12 +917,15 @@ export default function EleitoresPage() {
                   <td className="py-3 px-2"><Badge variant={eleitor.grauApoio === "forte" ? "success" : eleitor.grauApoio === "medio" ? "warning" : eleitor.grauApoio === "fraco" ? "danger" : "info"}>{eleitor.grauApoio}</Badge></td>
                   <td className="py-3 px-2 text-white/60">{eleitor.colaboradorNome}</td>
                   <td className="py-3 px-2 text-white/40 text-xs">{formatDate(eleitor.criadoEm)}</td>
-                  {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData)) && (
+                  {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData) || isColaborador(userData)) && (
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-2">
-                        <button onClick={() => setEditingEleitor(eleitor)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar">
-                          <Pencil size={16} />
-                        </button>
+                        {/* Colaborador edita apenas os seus próprios cadastros */}
+                        {(!isColaborador(userData) || eleitor.colaboradorId === userData!.uid) && (
+                          <button onClick={() => setEditingEleitor(eleitor)} className="text-white/30 hover:text-emerald-400 transition-colors" title="Editar">
+                            <Pencil size={16} />
+                          </button>
+                        )}
                         {(isAssessor(userData) || isSuperOrMaster(userData)) && (
                           <button onClick={() => handleExcluir(eleitor.id!, eleitor.nomeCompleto)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir">
                             <Trash2 size={16} />

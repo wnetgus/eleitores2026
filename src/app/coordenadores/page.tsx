@@ -219,6 +219,13 @@ export default function CoordenadoresPage() {
     }
     setExcluirSaving(true);
     try {
+      // Verificar dependentes antes de excluir (cascade guard)
+      const colabsSnap = await getDocs(query(collection(db, "usuarios"), where("coordenadorId", "==", excluirModal.uid), where("role", "==", "colaborador")));
+      if (colabsSnap.size > 0) {
+        toast.error(`Não é possível excluir: ${colabsSnap.size} colaborador(es) vinculado(s). Transfira ou exclua-os primeiro.`, { duration: 5000 });
+        setExcluirModal(null);
+        return;
+      }
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu coordenador ${excluirModal.nome}` });
       toast.success("Coordenador excluído!");
@@ -617,6 +624,9 @@ export default function CoordenadoresPage() {
         <div className="space-y-4">
           <p className="text-white/60 text-sm">
             Tem certeza que deseja excluir <strong className="text-white">{excluirModal?.nome}</strong>?
+          </p>
+          <p className="text-amber-400/70 text-xs">
+            Coordenadores com colaboradores vinculados não podem ser excluídos. Transfira ou remova os colaboradores primeiro.
           </p>
           <p className="text-red-400/70 text-xs">Esta ação remove o usuário do Firestore. Não é reversível.</p>
           <div className="flex gap-3 pt-2">

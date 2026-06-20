@@ -240,7 +240,7 @@ export default function LogsPage() {
                         )}
                       </div>
                     </div>
-                    {isAdmin && s.status === "pendente" && (
+                    {(isAdmin || isAssessorExecutivo(userData)) && s.status === "pendente" && (
                       <div className="flex gap-2 mt-3 pt-3 border-t border-white/[0.05]">
                         <Button
                           onClick={() => processarLGPD(s, "processado")}

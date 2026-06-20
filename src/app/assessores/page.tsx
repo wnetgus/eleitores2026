@@ -809,7 +809,7 @@ export default function AssessoresPage() {
                     </div>
                     <div className="flex items-center gap-2">
                       {podeGerenciar && <button onClick={() => openEdit(c)} className="text-white/30 hover:text-purple-400 transition-colors" title="Editar"><Pencil size={14} /></button>}
-                      {podeGerenciar && isSuperOrMaster(userData) && userData?.uid !== c.uid && (
+                      {podeGerenciar && userData?.uid !== c.uid && (
                         <button onClick={() => setExcluirModal(c)} className="text-white/30 hover:text-red-400 transition-colors" title="Excluir"><Trash2 size={14} /></button>
                       )}
                       <Badge variant={c.ativo ? "success" : "default"}>{c.ativo ? "Ativo" : "Inativo"}</Badge>

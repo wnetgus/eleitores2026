@@ -143,12 +143,17 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
   return (
     <Modal open={open} onClose={onClose} title={`Editar: ${eleitor.nomeCompleto}`}>
       <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
-        <Select
-          label="Grau de Apoio"
-          value={form.grauApoio}
-          onChange={(e) => setForm({ ...form, grauApoio: e.target.value as any })}
-          options={grauOptions}
-        />
+        <div>
+          <Select
+            label="Grau de Apoio"
+            value={form.grauApoio}
+            onChange={(e) => setForm({ ...form, grauApoio: e.target.value as any })}
+            options={grauOptions}
+          />
+          <p className="mt-1 text-xs text-white/30">
+            Forte = vai votar com certeza · Médio = simpatiza · Fraco = resistência · Indeciso = ainda não decidiu
+          </p>
+        </div>
         <Select
           label="Tipo de Documento"
           value={form.tipoDocumento}
@@ -157,7 +162,7 @@ export function EditarEleitorModal({ eleitor, open, onClose, onSaved }: Props) {
         />
         <Input label={`${docLabel}`} value={form.documento} onChange={(e) => setForm({ ...form, documento: e.target.value })} />
         <Input label="Nome" value={form.nomeCompleto} onChange={(e) => setForm({ ...form, nomeCompleto: e.target.value })} />
-        <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
+        <Input type="tel" label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} />
         <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: e.target.value })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
         <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} />
         <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} />

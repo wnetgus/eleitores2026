@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { signInWithEmailAndPassword } from "firebase/auth";
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { Shield, Eye, EyeOff } from "lucide-react";
 import toast from "react-hot-toast";
@@ -43,6 +43,20 @@ export default function LoginPage() {
 
   const onEnterKey = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") doLogin();
+  };
+
+  const doResetSenha = async () => {
+    if (!email) { toast.error("Digite seu email para receber o link de redefinição"); return; }
+    try {
+      await sendPasswordResetEmail(auth, email);
+      toast.success("Link de redefinição enviado! Verifique sua caixa de entrada.");
+    } catch (error: any) {
+      const messages: Record<string, string> = {
+        "auth/user-not-found": "Email não encontrado",
+        "auth/invalid-email": "Email inválido",
+      };
+      toast.error(messages[error.code] || "Erro ao enviar email de redefinição");
+    }
   };
 
   return (
@@ -110,6 +124,13 @@ export default function LoginPage() {
                 </svg>
               )}
               {loading ? "Entrando..." : "Entrar"}
+            </button>
+            <button
+              type="button"
+              onClick={doResetSenha}
+              className="w-full text-center text-xs text-white/30 hover:text-white/50 transition-colors pt-1"
+            >
+              Esqueci minha senha
             </button>
           </div>
 

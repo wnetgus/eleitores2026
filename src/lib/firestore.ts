@@ -59,11 +59,12 @@ export async function cadastrarEleitor(data: Omit<Eleitor, "id" | "criadoEm"> | 
   return docRef.id;
 }
 
-export async function buscarEleitores(gabineteId?: string, colaboradorId?: string) {
+export async function buscarEleitores(gabineteId?: string, colaboradorId?: string, max = 1000) {
   const constraints: any[] = [];
   if (gabineteId) constraints.push(where("campanhaId", "==", gabineteId));
   if (colaboradorId) constraints.push(where("colaboradorId", "==", colaboradorId));
   constraints.push(orderBy("criadoEm", "desc"));
+  constraints.push(limit(max));
   const q = query(collection(db, colecoes.eleitores), ...constraints);
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() } as Eleitor));

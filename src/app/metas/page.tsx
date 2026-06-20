@@ -834,16 +834,6 @@ export default function MetasPage() {
                       >
                         Ver Equipe →
                       </button>
-                      <div className="flex items-center gap-3">
-                        <label className="flex items-center gap-1.5 text-[10px] text-white/20 cursor-not-allowed select-none" title="Fase 2">
-                          <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
-                          Notificar
-                        </label>
-                        <label className="flex items-center gap-1.5 text-[10px] text-white/20 cursor-not-allowed select-none" title="Fase 2">
-                          <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
-                          Cobrar
-                        </label>
-                      </div>
                     </div>
                   </GlassCard>
                 );
@@ -1000,21 +990,6 @@ export default function MetasPage() {
               })}
             </div>
 
-            {/* Fase 2 */}
-            <div className="p-4 rounded-xl bg-white/[0.01] border border-white/[0.04]">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-white/25 uppercase tracking-wider">Ações — Fase 2</p>
-                <span className="text-[9px] text-white/15 italic">Em breve</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {["Notificar assessor", "Cobrar coordenador", "Registrar conclusão", "Aprovar resultado", "Histórico de cobranças"].map(acao => (
-                  <label key={acao} className="flex items-center gap-2 text-xs text-white/25 cursor-not-allowed select-none">
-                    <input type="checkbox" disabled className="opacity-20 cursor-not-allowed" />
-                    {acao}
-                  </label>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 

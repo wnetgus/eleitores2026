@@ -21,6 +21,11 @@ service cloud.firestore {
       return d.get("campanhaId", d.get("gabineteId", ""));
     }
 
+    // Retorna true apenas quando o usuário tem uma campanha válida associada
+    function hasCampanha() {
+      return myCampanha() != "";
+    }
+
     function camposProtegidosSelf() {
       return ["role", "campanhaId", "gabineteId", "assessorId",
               "coordenadorId", "criadoPor", "criadoEm"].toSet();
@@ -53,8 +58,8 @@ service cloud.firestore {
       );
       allow list: if isAuth() && (
         isAdmin() ||
-        resource.data.get("campanhaId", "") == myCampanha() ||
-        resource.data.get("gabineteId", "") == myCampanha() ||
+        (hasCampanha() && resource.data.get("campanhaId", "") == myCampanha()) ||
+        (hasCampanha() && resource.data.get("gabineteId", "") == myCampanha()) ||
         resource.data.get("assessorId", "") == request.auth.uid ||
         resource.data.get("coordenadorId", "") == request.auth.uid
       );
@@ -96,9 +101,19 @@ service cloud.firestore {
       );
       allow delete: if isAuth() && (
         isAdmin() ||
-        // assessor_executivo / assessor: exclui coordenadores e colaboradores da própria campanha
+        // assessor_executivo: exclui assessores, coordenadores e colaboradores da própria campanha
         (
-          me().get("role", "") in ["assessor_executivo", "assessor"] &&
+          me().get("role", "") == "assessor_executivo" &&
+          resource.data.get("role", "") in ["assessor", "coordenador", "colaborador"] &&
+          hasCampanha() &&
+          (
+            resource.data.get("campanhaId", "") == myCampanha() ||
+            resource.data.get("gabineteId", "") == myCampanha()
+          )
+        ) ||
+        // assessor: exclui coordenadores e colaboradores da própria campanha
+        (
+          me().get("role", "") == "assessor" &&
           resource.data.get("role", "") in ["coordenador", "colaborador"] &&
           (
             resource.data.get("campanhaId", "") == myCampanha() ||
@@ -119,7 +134,13 @@ service cloud.firestore {
     match /eleitores/{id} {
       allow read: if isAuth() && (
         isAdmin() ||
-        resource.data.get("campanhaId", "") == myCampanha() ||
+        // Executivo e Político: leem toda a campanha (requer campanha válida)
+        (me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador"] &&
+         hasCampanha() && resource.data.get("campanhaId", "") == myCampanha()) ||
+        // Assessor: lê pelo assessorId (vínculo direto) OU pela campanha (fallback para dados sem assessorId)
+        (me().get("role", "") == "assessor" &&
+         hasCampanha() && resource.data.get("campanhaId", "") == myCampanha()) ||
+        // Coordenador e colaborador: vínculo direto pelo ID
         resource.data.get("colaboradorId", "") == request.auth.uid ||
         resource.data.get("coordenadorId", "") == request.auth.uid
       );
@@ -303,6 +324,22 @@ service cloud.firestore {
 
     // ─── coleções administrativas (prefixo _) ─────────────────────────────────
 
+    // Rate limiting — acesso exclusivo via Admin SDK (server-side)
+    // Deny explícito garante isolamento mesmo se regras globais mudarem
+    match /_rate_limits/{id} {
+      allow read, write: if false;
+    }
+
+    // Backups — acesso exclusivo via Admin SDK (server-side)
+    match /_backups/{id} {
+      allow read, write: if false;
+    }
+
+    // Manifesto de seeds (dados de teste) — exclusivo admin
+    match /_seed_manifest/{id} {
+      allow read, write: if isAuth() && isAdmin();
+    }
+
     // Erros de runtime — gravados pelo ErrorBoundary client-side
     match /_erros/{id} {
       allow create: if isAuth();
@@ -313,17 +350,33 @@ service cloud.firestore {
     match /_solicitacoes_lgpd/{id} {
       allow create: if isAuth() && (
         isAdmin() ||
-        request.resource.data.get("campanhaId", "") == myCampanha()
+        (hasCampanha() && request.resource.data.get("campanhaId", "") == myCampanha())
       );
       allow read: if isAuth() && (
         isAdmin() ||
         (
           me().get("role", "") == "assessor_executivo" &&
+          hasCampanha() &&
           resource.data.get("campanhaId", "") == myCampanha()
         )
       );
-      allow update: if isAuth() && isAdmin();
-      allow delete: if isAuth() && isAdmin();
+      // Processamento LGPD: admin ou assessor_executivo da própria campanha
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") == "assessor_executivo" &&
+          hasCampanha() &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
+      allow delete: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") == "assessor_executivo" &&
+          hasCampanha() &&
+          resource.data.get("campanhaId", "") == myCampanha()
+        )
+      );
     }
   }
 }
