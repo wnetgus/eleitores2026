@@ -37,6 +37,7 @@ export default function PainelGabinetePage() {
   const [vincularSaving, setVincularSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [equipeExpanded, setEquipeExpanded] = useState<Record<string, boolean>>({});
+  const [confirmDesvincular, setConfirmDesvincular] = useState<{ id: string; nome: string } | null>(null);
 
   function toggleEquipe(key: string) {
     setEquipeExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -139,13 +140,17 @@ export default function PainelGabinetePage() {
     } catch (e) { toast.error("Erro ao vincular"); } finally { setVincularSaving(false); }
   }
 
-  async function desvincularGabinete(filhoId: string, nome: string) {
-    if (!confirm(`Desvincular "${nome}" do ${gabinete?.nome}?`)) return;
+  function desvincularGabinete(filhoId: string, nome: string) {
+    setConfirmDesvincular({ id: filhoId, nome });
+  }
+
+  async function confirmarDesvincular() {
+    if (!confirmDesvincular) return;
     try {
-      await updateDoc(doc(db, "campanhas", filhoId), { parentGabineteId: "", parentGabineteNome: "" });
+      await updateDoc(doc(db, "campanhas", confirmDesvincular.id), { parentGabineteId: "", parentGabineteNome: "" });
       toast.success("Gabinete desvinculado!");
       loadAll();
-    } catch (e) { toast.error("Erro ao desvincular"); }
+    } catch { toast.error("Erro ao desvincular"); } finally { setConfirmDesvincular(null); }
   }
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 size={32} className="animate-spin text-rose-500" /></div>;
@@ -580,6 +585,20 @@ export default function PainelGabinetePage() {
             <div className="flex gap-3 mt-4">
               <Button onClick={vincularGabinete} loading={vincularSaving} className="flex-1">Vincular</Button>
               <Button variant="ghost" onClick={() => setShowVincular(false)} className="flex-1">Cancelar</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {confirmDesvincular && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setConfirmDesvincular(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <p className="text-white font-semibold">Desvincular gabinete?</p>
+              <p className="text-sm text-white/50 mt-1">{confirmDesvincular.nome}</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDesvincular(null)} className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-semibold hover:bg-white/10 transition-colors">Cancelar</button>
+              <button onClick={confirmarDesvincular} className="flex-1 py-2.5 rounded-xl bg-amber-600 text-white text-sm font-semibold hover:bg-amber-700 transition-colors">Desvincular</button>
             </div>
           </div>
         </div>

@@ -11,7 +11,7 @@ import { Select } from "@/components/ui/Select";
 import { Button } from "@/components/ui/Button";
 import { formatDate, parseDate } from "@/lib/utils";
 import { FileSpreadsheet, FileText, Filter, Search, TrendingUp, MapPin, Zap, X } from "lucide-react";
-import { isPolitico, isAssessor, isCoordenador } from "@/lib/permissions";
+import { isPolitico, isAssessor, isAssessorOuExecutivo, isCoordenador } from "@/lib/permissions";
 import { exportExcelPremium, exportPDFPremium } from "@/lib/reports";
 import toast from "react-hot-toast";
 import { calcularSFPSimples } from "@/lib/inteligencia";
@@ -158,7 +158,7 @@ export default function RelatoriosPage() {
   }
 
   const radarTerritorial = useMemo(() => {
-    if (!userData || !isAssessor(userData) || filtered.length === 0) return null;
+    if (!userData || !isAssessorOuExecutivo(userData) || filtered.length === 0) return null;
     const agora30d = Date.now() - 30 * 86400000;
     const mapa: Record<string, { label: string; total: number; fortes: number; fracos: number; indecisos: number; recentes: number }> = {};
     for (const e of filtered) {
@@ -655,8 +655,8 @@ export default function RelatoriosPage() {
     <div className="space-y-6 animate-in">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">{isAssessor(userData) ? "Radar Territorial" : "Relatórios"}</h1>
-          <p className="text-white/50 text-sm mt-1">{isAssessor(userData) ? `Inteligência regional · ${filtered.length} apoiadores na base` : "Filtre e exporte seus dados"}</p>
+          <h1 className="text-2xl font-bold text-white">{isAssessorOuExecutivo(userData) ? "Radar Territorial" : "Relatórios"}</h1>
+          <p className="text-white/50 text-sm mt-1">{isAssessorOuExecutivo(userData) ? `Inteligência regional · ${filtered.length} apoiadores na base` : "Filtre e exporte seus dados"}</p>
         </div>
         <div className="flex items-center gap-2"><Button variant="secondary" onClick={exportExcelPremiumAction}><FileSpreadsheet size={16} /> Excel Premium</Button><Button variant="secondary" onClick={exportPDFPremiumAction}><FileText size={16} /> PDF Premium</Button></div>
       </div>

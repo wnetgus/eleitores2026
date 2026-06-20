@@ -84,7 +84,7 @@ export default function ExportacoesPage() {
     return { total: eleitores.length, fortes, indecisos, fracos, medios, recentes, coordsAtivos: topCoordenadores.length, topCoordenadores, topCidades, topTerrit };
   }, [eleitores]);
 
-  if (!userData || (!isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessor(userData))) return null;
+  if (!userData || (!isSuperOrMaster(userData) && !isPolitico(userData) && !isPrefeito(userData) && !isVereador(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData))) return null;
   const config = getRoleConfig(userData);
 
   // ── Export actions (non-assessor: unchanged) ──────────────────────────────

@@ -122,6 +122,7 @@ export default function GabinetesPage() {
   const [saving, setSaving] = useState(false);
   const [eleitorCounts, setEleitorCounts] = useState<Record<string, number>>({});
   const [editModal, setEditModal] = useState<Gabinete | null>(null);
+  const [confirmDeleteGab, setConfirmDeleteGab] = useState<{ id: string; nome: string } | null>(null);
   const [editForm, setEditForm] = useState({ nome: "", slug: "", cargo: "", slogan: "", corPrincipal: "#8b5cf6", estado: "", cidade: "", municipios: [] as string[], metaEleitoral: "" });
 
   useEffect(() => {
@@ -205,7 +206,13 @@ export default function GabinetesPage() {
   }
 
   async function excluirGabinete(id: string, nome: string) {
-    if (!confirm(`Tem certeza que deseja EXCLUIR permanentemente o gabinete "${nome}"?\n\nEsta ação não pode ser desfeita. Todos os dados vinculados (eleitores, candidatos, etc.) serão mantidos, mas o gabinete será removido da plataforma.`)) return;
+    setConfirmDeleteGab({ id, nome });
+  }
+
+  async function confirmarExclusaoGabinete() {
+    if (!confirmDeleteGab) return;
+    const { id, nome } = confirmDeleteGab;
+    setConfirmDeleteGab(null);
     try {
       await deleteDoc(doc(db, "campanhas", id));
       await registrarAtividade({ acao: "excluiu_gabinete", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu gabinete ${nome}` });
@@ -535,6 +542,21 @@ export default function GabinetesPage() {
           </div>
         </div>
       </Modal>
+      {confirmDeleteGab && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setConfirmDeleteGab(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-sm space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <p className="text-white font-semibold">Excluir gabinete permanentemente?</p>
+              <p className="text-sm text-white/50 mt-1">{confirmDeleteGab.nome}</p>
+            </div>
+            <p className="text-xs text-white/40">Os eleitores e candidatos vinculados serão mantidos, mas o gabinete será removido.</p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDeleteGab(null)} className="flex-1 py-2.5 rounded-xl bg-white/5 text-white/60 text-sm font-semibold hover:bg-white/10 transition-colors">Cancelar</button>
+              <button onClick={confirmarExclusaoGabinete} className="flex-1 py-2.5 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition-colors">Excluir</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -568,6 +568,22 @@ export default function MissoesPage() {
       return;
     }
     loadData();
+
+    if (canCreateMission && typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("acao") === "nova") {
+        const tipo = params.get("tipo") as MissaoTipo | null;
+        const cidade = params.get("cidade") || "";
+        const prioridade = params.get("prioridade") as "P1" | "P2" | "P3" | null;
+        setForm((f) => ({
+          ...f,
+          ...(tipo && Object.keys(TIPO_CONFIG).includes(tipo) ? { tipo } : {}),
+          ...(cidade ? { cidade } : {}),
+          ...(prioridade && ["P1", "P2", "P3"].includes(prioridade) ? { prioridade } : {}),
+        }));
+        setModalCriar(true);
+      }
+    }
   }, [userData]);
 
   async function criarMissao() {
@@ -636,8 +652,10 @@ export default function MissoesPage() {
   async function concluirMissao(missao: Missao, resultado: string) {
     if (!missao.id) return;
     await updateDoc(doc(db, "missoes", missao.id), {
-      status:       "concluida",
-      concluidoEm:  Timestamp.now(),
+      status:            "concluida",
+      concluidoEm:       Timestamp.now(),
+      concluidoPor:      userData?.uid ?? "",
+      concluidoPorNome:  userData?.nome ?? "",
       resultado,
     });
     setModalExec(null);
