@@ -658,7 +658,7 @@ export default function ColaboradoresPage() {
       <GlassCard className="p-5">
         <div className="mb-4">
           <h3 className="text-white font-semibold">
-            {isAssessor(userData) ? "Todos os Colaboradores" : "Meus Colaboradores"}
+            {(isAssessor(userData) || isAssessorExecutivo(userData)) ? "Todos os Colaboradores" : "Meus Colaboradores"}
             <span className="ml-2 text-sm font-normal text-white/40">({colaboradoresFiltrados.length})</span>
           </h3>
           {filtros.assessorId && assessorNomeMap[filtros.assessorId] && (

@@ -143,7 +143,8 @@ export default function SolicitacoesPage() {
         acao: "aprovou_colaborador", usuarioId: userData!.uid, usuarioNome: userData!.nome,
         usuarioRole: userData!.role, detalhes: `Aprovou colaborador ${s.nome} (solicitado por ${s.solicitadoPorNome || "N/I"})`,
       });
-      toast.success(`${s.nome} aprovado! Senha provisória: ${senhaTemp} — informe ao colaborador e peça para redefinir.`, { duration: 10000 });
+      try { await navigator.clipboard.writeText(senhaTemp); } catch { /* clipboard não disponível */ }
+      toast.success(`✅ ${s.nome} aprovado! Senha ${senhaTemp} copiada — peça ao colaborador para redefinir no primeiro acesso.`, { duration: 15000 });
     } catch (e: any) {
       setSolicitacoes((prev) => [s, ...prev]);
       toast.error(e.code === "auth/email-already-in-use" ? "Email já está em uso por outra conta" : "Erro ao aprovar");

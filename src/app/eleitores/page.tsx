@@ -670,7 +670,7 @@ export default function EleitoresPage() {
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-white">Cadastro de Eleitores</h1>
-          <p className="text-white/50 text-sm mt-1">Cadastro rápido e simplificado para equipes de rua</p>
+          <p className="text-white/50 text-sm mt-1">{isAssessorOuExecutivo(userData) ? "Gestão e consulta da base eleitoral da campanha" : "Cadastro rápido e simplificado para equipes de rua"}</p>
         </div>
         {userData && (isCoordenador(userData) || isColaborador(userData) || isAssessor(userData)) && (
           <button
@@ -912,7 +912,7 @@ export default function EleitoresPage() {
                 <th className="text-left py-3 px-2 font-medium">Grau</th>
                 <th className="text-left py-3 px-2 font-medium">Colaborador</th>
                 <th className="text-left py-3 px-2 font-medium">Data</th>
-                {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData)) && <th className="text-left py-3 px-2 font-medium">Ações</th>}
+                {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData) || isAssessorExecutivo(userData)) && <th className="text-left py-3 px-2 font-medium">Ações</th>}
               </tr>
             </thead>
             <tbody>
@@ -925,7 +925,7 @@ export default function EleitoresPage() {
                   <td className="py-3 px-2"><Badge variant={eleitor.grauApoio === "forte" ? "success" : eleitor.grauApoio === "medio" ? "warning" : eleitor.grauApoio === "fraco" ? "danger" : "info"}>{eleitor.grauApoio}</Badge></td>
                   <td className="py-3 px-2 text-white/60">{eleitor.colaboradorNome}</td>
                   <td className="py-3 px-2 text-white/40 text-xs">{formatDate(eleitor.criadoEm)}</td>
-                  {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData) || isColaborador(userData)) && (
+                  {(isAssessor(userData) || isSuperOrMaster(userData) || isCoordenador(userData) || isColaborador(userData) || isAssessorExecutivo(userData)) && (
                     <td className="py-3 px-2">
                       <div className="flex items-center gap-2">
                         {/* Colaborador edita apenas os seus próprios cadastros */}

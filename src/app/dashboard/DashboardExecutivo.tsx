@@ -109,6 +109,7 @@ export function DashboardExecutivo({ userData }: Props) {
     const concluidas  = missoes.filter((m) => m.status === "concluida").length;
     const atrasadas   = missoes.filter((m) => {
       if (m.status === "concluida" || m.status === "cancelada") return false;
+      if (m.prazo) return new Date(m.prazo + "T23:59:59") < new Date();
       const t = (m.criadoEm as any)?.toMillis?.() ?? 0;
       return t > 0 && agora - t > SETE_DIAS;
     }).length;

@@ -195,8 +195,8 @@ export default function ExportacoesPage() {
   const cidadesTop  = stats.topCidades.slice(0, 8);
   const maxCidade   = cidadesTop[0]?.total || 1;
 
-  // ── ASSESSOR VIEW — Central de Relatórios ────────────────────────────────
-  if (isAssessor(userData)) {
+  // ── ASSESSOR / EXECUTIVO VIEW — Central de Relatórios ───────────────────
+  if (isAssessor(userData) || isAssessorExecutivo(userData)) {
     return (
       <div className="space-y-6 animate-in">
         <div className="flex items-center gap-3">

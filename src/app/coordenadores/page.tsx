@@ -60,6 +60,7 @@ export default function CoordenadoresPage() {
   const [modalEstabCoord, setModalEstabCoord] = useState(false);
   const [salvandoCoord, setSalvandoCoord] = useState(false);
   const [formCoord, setFormCoord] = useState({ nomeCoord: "" });
+  const [metaInicialCoord, setMetaInicialCoord] = useState<10 | 25 | 50 | 100>(25);
 
   useEffect(() => {
     if (userData && !canViewCoordenadores(userData)) { router.push("/dashboard"); return; }
@@ -138,6 +139,7 @@ export default function CoordenadoresPage() {
         campanhaId: userData?.campanhaId || userData?.gabineteId || "",
         coordenadorId: userData?.uid ?? "",
         coordenadorNome: formCoord.nomeCoord.trim(),
+        metaInicial: metaInicialCoord,
         status: "ativa",
         criadoEm: new Date(),
         criadoPor: userData?.uid ?? "",
@@ -387,8 +389,8 @@ export default function CoordenadoresPage() {
             <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-violet-500/10 border border-violet-500/20">
               <span className="text-sm shrink-0">⚡</span>
               <div>
-                <p className="text-xs font-bold text-violet-400 tracking-wider">FASE OPERACIONAL</p>
-                <p className="text-[11px] text-white/40">Simulação da criação da coordenação territorial.</p>
+                <p className="text-xs font-bold text-violet-400 tracking-wider">COORDENAÇÃO TERRITORIAL</p>
+                <p className="text-[11px] text-white/40">Os dados serão salvos no Firestore em tempo real.</p>
               </div>
             </div>
 
@@ -423,39 +425,20 @@ export default function CoordenadoresPage() {
               <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Meta Inicial</p>
               <div className="grid grid-cols-4 gap-2">
                 {([10, 25, 50, 100] as const).map((v) => (
-                  <div key={v} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border cursor-not-allowed ${
-                    v === 25 ? "bg-orange-500/10 border-orange-500/30" : "bg-white/2 border-white/6"
+                  <button key={v} type="button" onClick={() => setMetaInicialCoord(v)} className={`flex items-center gap-2 px-3 py-2.5 rounded-xl border transition-colors ${
+                    v === metaInicialCoord ? "bg-orange-500/10 border-orange-500/30" : "bg-white/[0.02] border-white/[0.06] hover:border-white/20"
                   }`}>
                     <div className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center ${
-                      v === 25 ? "border-orange-500" : "border-white/20"
+                      v === metaInicialCoord ? "border-orange-500" : "border-white/20"
                     }`}>
-                      {v === 25 && <div className="w-2 h-2 rounded-full bg-orange-500" />}
+                      {v === metaInicialCoord && <div className="w-2 h-2 rounded-full bg-orange-500" />}
                     </div>
-                    <span className={`text-sm font-medium ${v === 25 ? "text-orange-400" : "text-white/30"}`}>{v}</span>
-                  </div>
+                    <span className={`text-sm font-medium ${v === metaInicialCoord ? "text-orange-400" : "text-white/30"}`}>{v}</span>
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Estrutura */}
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Estrutura</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: "Coordenador Regional",    checked: true  },
-                  { label: "Liderança Comunitária",   checked: true  },
-                  { label: "Núcleo de Bairro",        checked: true  },
-                  { label: "Juventude",               checked: false },
-                  { label: "Mulheres",                checked: false },
-                  { label: "Rural",                   checked: false },
-                ].map(({ label, checked }) => (
-                  <label key={label} className="flex items-center gap-2 cursor-not-allowed">
-                    <input type="checkbox" defaultChecked={checked} disabled className="w-4 h-4 accent-orange-500" />
-                    <span className={`text-sm ${checked ? "text-white/60" : "text-white/25"}`}>{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
 
             {/* Cronograma */}
             <div className="space-y-2">

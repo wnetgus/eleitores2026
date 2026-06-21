@@ -532,6 +532,16 @@ export default function MissoesPage() {
   }>({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
 
   const canCreateMission  = isPolitico(userData) || isAssessorExecutivo(userData) || isSuperOrMaster(userData);
+
+  const cidadesDaCampanha = useMemo(() => {
+    const set = new Set<string>();
+    assessores.forEach((a) => {
+      if (a.cidadePrincipal) set.add(a.cidadePrincipal);
+      if ((a as any).cidade) set.add((a as any).cidade);
+      if (Array.isArray(a.cidades)) a.cidades.forEach((c: string) => set.add(c));
+    });
+    return Array.from(set).sort();
+  }, [assessores]);
   const canExecuteMission = isAssessorExecutivo(userData) || isAssessor(userData) || isSuperOrMaster(userData);
 
   async function loadData() {
@@ -792,8 +802,8 @@ export default function MissoesPage() {
               {filtroStatus !== "todas"
                 ? `Nenhuma missão com status "${STATUS_CONFIG[filtroStatus as MissaoStatus]?.label ?? filtroStatus}".`
                 : canCreateMission
-                  ? "Nenhuma missão criada. Crie sua primeira missão acima."
-                  : "Nenhuma missão pendente para você."}
+                  ? "Nenhuma missão criada. Use o botão acima para criar a primeira missão e delegar ao time."
+                  : "Nenhuma missão delegada ainda. Aguardando criação pelo deputado."}
             </p>
           </div>
         ) : (
@@ -840,13 +850,27 @@ export default function MissoesPage() {
               {/* Município */}
               <div>
                 <label className="text-xs text-white/40 block mb-1">Município *</label>
-                <input
-                  value={form.cidade}
-                  onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
-                  placeholder="Ex: Petrolina"
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
-                  style={{ colorScheme: "dark" }}
-                />
+                {cidadesDaCampanha.length > 0 ? (
+                  <select
+                    value={form.cidade}
+                    onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
+                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/50"
+                    style={{ colorScheme: "dark" }}
+                  >
+                    <option value="">Selecione o município</option>
+                    {cidadesDaCampanha.map((c) => (
+                      <option key={c} value={c} className="bg-zinc-950">{c}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    value={form.cidade}
+                    onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
+                    placeholder="Ex: Petrolina"
+                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                    style={{ colorScheme: "dark" }}
+                  />
+                )}
               </div>
 
               {/* Prioridade */}

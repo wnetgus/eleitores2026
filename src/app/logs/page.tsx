@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { isSuperOrMaster, isAssessor, isAssessorExecutivo, getRoleConfig } from "@/lib/permissions";
 import { Atividade } from "@/types";
-import { buscarAtividades } from "@/lib/firestore";
+import { buscarAtividades, registrarAtividade } from "@/lib/firestore";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -90,6 +90,13 @@ export default function LogsPage() {
       });
       if (acao === "processado") {
         await deleteDoc(doc(db, "eleitores", sol.eleitorId));
+        await registrarAtividade({
+          acao: "excluiu_eleitor_lgpd",
+          usuarioId: userData!.uid,
+          usuarioNome: userData!.nome,
+          usuarioRole: userData!.role,
+          detalhes: `Exclusão LGPD (Art. 18): ${sol.eleitorNome} — solicitação ${sol.id}`,
+        });
         toast.success(`Dados de ${sol.eleitorNome} excluídos com sucesso.`);
       } else {
         toast.success("Solicitação recusada.");

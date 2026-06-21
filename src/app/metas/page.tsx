@@ -279,7 +279,7 @@ export default function MetasPage() {
 
   function resolverMeta(colabId: string): { valor: number; tipo: "individual" | "padrao" | "sem_meta"; origem?: "coord" | "assessor" } {
     if (metas[colabId] > 0) return { valor: metas[colabId], tipo: "individual" };
-    if (isAssessor(userData)) {
+    if (isAssessor(userData) || isAssessorExecutivo(userData)) {
       const colab = colaboradores.find((c) => c.uid === colabId);
       const coordPadrao = colab?.coordenadorId ? (coordInfoMap[colab.coordenadorId]?.metaPadrao || 0) : 0;
       if (coordPadrao > 0) return { valor: coordPadrao, tipo: "padrao", origem: "coord" };
@@ -1413,8 +1413,8 @@ export default function MetasPage() {
         </GlassCard>
       )}
 
-      {/* RANKING DE COORDENADORES — assessor */}
-      {isAssessor(userData) && coordStats.length > 0 && (
+      {/* RANKING DE COORDENADORES — assessor / executivo */}
+      {(isAssessor(userData) || isAssessorExecutivo(userData)) && coordStats.length > 0 && (
         <GlassCard className="p-5">
           <div className="flex items-center gap-2 mb-4">
             <Target size={18} className="text-purple-400" />

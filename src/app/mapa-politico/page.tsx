@@ -869,8 +869,8 @@ export default function MapaPoliticoPage() {
         </div>
       )}
 
-      {/* DEPUTADO: Força Territorial 2.0 */}
-      {isPolitico(userData) && gAtual && (
+      {/* DEPUTADO + EXECUTIVO: Força Territorial 2.0 */}
+      {(isPolitico(userData) || isAssessorExecutivo(userData)) && gAtual && (
         <ViewForcaTerritorial
           gAtual={gAtual}
           gabinetes={gabinetes}

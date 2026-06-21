@@ -740,7 +740,7 @@ export default function RelatoriosPage() {
                       <span className="text-xs text-white/65 truncate">{t.label}</span>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs text-white/30">{t.total}</span>
-                        <a href={`https://wa.me/?text=${encodeURIComponent(`⚠ Território estagnado: ${t.label} — ${t.total} apoiadores sem atividade há 30 dias.`)}`} target="_blank" rel="noopener noreferrer" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
+                        <a href={`https://wa.me/?text=${encodeURIComponent(`⚠ Território estagnado: ${t.label} — ${t.total} apoiadores sem atividade há 30 dias.`)}`} target="_blank" rel="noopener noreferrer" title="Compartilhar alerta no WhatsApp (selecione o contato)" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
                       </div>
                     </div>
                   ))}
@@ -763,7 +763,7 @@ export default function RelatoriosPage() {
                       <span className="text-xs text-white/65 truncate">{t.label}</span>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs text-blue-400">{Math.round((t.indecisos / t.total) * 100)}%</span>
-                        <a href={`https://wa.me/?text=${encodeURIComponent(`🎯 Oportunidade: ${t.label} — ${t.indecisos} indecisos (${Math.round((t.indecisos / t.total) * 100)}%). Intensificar abordagem.`)}`} target="_blank" rel="noopener noreferrer" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
+                        <a href={`https://wa.me/?text=${encodeURIComponent(`🎯 Oportunidade: ${t.label} — ${t.indecisos} indecisos (${Math.round((t.indecisos / t.total) * 100)}%). Intensificar abordagem.`)}`} target="_blank" rel="noopener noreferrer" title="Compartilhar oportunidade no WhatsApp (selecione o contato)" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
                       </div>
                     </div>
                   ))}
@@ -786,7 +786,7 @@ export default function RelatoriosPage() {
                       <span className="text-xs text-white/65 truncate">{t.label}</span>
                       <div className="flex items-center gap-2 shrink-0">
                         <span className="text-xs text-red-400">{Math.round((t.fracos / t.total) * 100)}%</span>
-                        <a href={`https://wa.me/?text=${encodeURIComponent(`🚨 Área de atenção: ${t.label} — ${Math.round((t.fracos / t.total) * 100)}% de rejeição. Avaliar estratégia.`)}`} target="_blank" rel="noopener noreferrer" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
+                        <a href={`https://wa.me/?text=${encodeURIComponent(`🚨 Área de atenção: ${t.label} — ${Math.round((t.fracos / t.total) * 100)}% de rejeição. Avaliar estratégia.`)}`} target="_blank" rel="noopener noreferrer" title="Compartilhar alerta no WhatsApp (selecione o contato)" className="text-green-400/30 hover:text-green-400 transition-colors leading-none">📲</a>
                       </div>
                     </div>
                   ))}
