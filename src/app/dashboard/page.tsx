@@ -10,7 +10,8 @@ import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isA
 import { DashboardExecutivo } from "./DashboardExecutivo";
 import { getPartyColors, exportRelatorioExecutivo } from "@/lib/reports";
 import { buscarEleitoresPorGabinetes } from "@/lib/firestore";
-import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter, AlertTriangle, Bell, Clock, Eye, PlusCircle, FileSpreadsheet, Settings } from "lucide-react";
+import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter, AlertTriangle, Bell, Clock, Eye, PlusCircle, FileSpreadsheet, Settings, Shield, ChevronRight } from "lucide-react";
+import Link from "next/link";
 import { Select } from "@/components/ui/Select";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { ApoiadoresPorCidade } from "@/components/charts/ApoiadoresPorCidade";
@@ -1201,6 +1202,26 @@ export default function DashboardPage() {
             </div>
           )}
         </GlassCard>
+      )}
+
+      {/* SALA DE SITUAÇÃO — atalho rápido para o Deputado */}
+      {isPolitico(userData) && (
+        <Link href="/sala-situacao" className="block group">
+          <GlassCard className="p-4 border border-violet-500/15 hover:border-violet-500/35 transition-colors">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
+                  <Shield size={18} className="text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white/80 group-hover:text-white transition-colors">Sala de Situação</p>
+                  <p className="text-[11px] text-white/30">Municípios em risco · oportunidades · alertas operacionais</p>
+                </div>
+              </div>
+              <ChevronRight size={16} className="text-white/20 group-hover:text-violet-400 transition-colors" />
+            </div>
+          </GlassCard>
+        </Link>
       )}
 
       {/* PRIORIDADES ESTRATÉGICAS — político */}

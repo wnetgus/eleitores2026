@@ -57,6 +57,7 @@ const superAdminMenu = [
 
 const politicoMenu = [
   { href: "/dashboard", label: "Centro de Mandato", icon: Crown },
+  { href: "/sala-situacao", label: "Sala de Situação", icon: Shield },
   { href: "/mapa-politico", label: "Força Territorial", icon: Map },
   { href: "/missoes", label: "Missões", icon: Zap },
   { href: "/relatorios", label: "Inteligência Política", icon: BarChart3 },
