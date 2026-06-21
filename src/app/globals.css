@@ -7,16 +7,27 @@
 @layer base {
   html {
     scroll-behavior: smooth;
+    /* Prevent horizontal scroll on mobile */
+    overflow-x: hidden;
   }
   * {
-    @apply border-white/[0.06];
+    @apply border-white/6;
+    /* Prevent text size adjustment on orientation change */
+    -webkit-text-size-adjust: 100%;
   }
   body {
     @apply bg-[#0a0a0f] text-white;
+    overflow-x: hidden;
   }
   button {
     touch-action: manipulation;
     cursor: pointer;
+    /* Min touch target 44px per WCAG */
+    min-height: 44px;
+  }
+  input, select, textarea {
+    /* Prevent iOS zoom on focus (font-size < 16px triggers zoom) */
+    font-size: max(16px, 1em);
   }
 }
 
