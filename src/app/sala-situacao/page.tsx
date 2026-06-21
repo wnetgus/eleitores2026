@@ -3,8 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   collection, getDocs, query, where,
-  limit, orderBy, startAfter, addDoc, Timestamp,
-  type DocumentSnapshot,
+  orderBy, addDoc, Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,6 +12,7 @@ import { GlassCard } from "@/components/ui/GlassCard";
 import { isPolitico } from "@/lib/permissions";
 import { AppUser, Eleitor, Missao } from "@/types";
 import { parseDate } from "@/lib/utils";
+import { buscarEleitoresPorGabinetes } from "@/lib/firestore";
 import toast from "react-hot-toast";
 import Link from "next/link";
 import {
@@ -39,22 +39,19 @@ interface CidadeStats {
   irtLocal: number;
 }
 
-// ─── Cursor pagination (mesmo padrão do DashboardExecutivo) ──────────────────
+// ─── Carga de eleitores (mesmo padrão do dashboard/page.tsx) ─────────────────
+// Usa orderBy("criadoEm", "desc") para corresponder ao índice composto existente.
+// Também carrega eleitores de gabinetes filhos via buscarEleitoresPorGabinetes.
 
-async function loadAllEleitores(campanhaId: string): Promise<Eleitor[]> {
-  const PAGE = 500;
-  const todos: Eleitor[] = [];
-  let cursor: DocumentSnapshot | undefined;
-  while (true) {
-    const q = cursor
-      ? query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), orderBy("criadoEm"), startAfter(cursor), limit(PAGE))
-      : query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), orderBy("criadoEm"), limit(PAGE));
-    const snap = await getDocs(q);
-    todos.push(...snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-    if (snap.size < PAGE) break;
-    cursor = snap.docs[snap.docs.length - 1];
-  }
-  return todos;
+async function carregarEleitoresPolitico(campanhaId: string): Promise<Eleitor[]> {
+  const [diretos, filhosSnap] = await Promise.all([
+    getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), orderBy("criadoEm", "desc"))),
+    getDocs(query(collection(db, "campanhas"), where("parentGabineteId", "==", campanhaId))),
+  ]);
+  const diretosData = diretos.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
+  const filhosIds = filhosSnap.docs.map((d) => d.id);
+  const filhosData = filhosIds.length > 0 ? await buscarEleitoresPorGabinetes(filhosIds) : [];
+  return [...diretosData, ...filhosData];
 }
 
 // ─── Sub-componentes visuais ──────────────────────────────────────────────────
@@ -118,7 +115,7 @@ export default function SalaDeSituacao() {
       setLoading(true);
       try {
         const [eletRes, assessRes, coordRes, missRes, aeRes] = await Promise.allSettled([
-          loadAllEleitores(campanhaId),
+          carregarEleitoresPolitico(campanhaId),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "missoes"), where("campanhaId", "==", campanhaId))),
@@ -396,14 +393,21 @@ export default function SalaDeSituacao() {
         </div>
       </GlassCard>
 
-      {/* B. TERRITÓRIOS EM RISCO */}
-      {cidadesRisco.length > 0 && (
-        <GlassCard className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <AlertTriangle size={15} className="text-amber-400" />
-            <h2 className="text-white font-semibold">Territórios em Risco</h2>
+      {/* B. TERRITÓRIOS EM RISCO — sempre visível */}
+      <GlassCard className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <AlertTriangle size={15} className="text-amber-400" />
+          <h2 className="text-white font-semibold">Territórios em Risco</h2>
+          {cidadesRisco.length > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20">{cidadesRisco.length}</span>
+          )}
+        </div>
+        {cidadesRisco.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-white/25 text-sm">Nenhum território em situação de risco</p>
+            <p className="text-white/15 text-xs mt-1">Todos os municípios estão dentro dos parâmetros normais</p>
           </div>
+        ) : (
           <div className="space-y-2">
             {cidadesRisco.map((c) => (
               <div key={c.nome} className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5 hover:border-white/10 transition-colors">
@@ -428,17 +432,24 @@ export default function SalaDeSituacao() {
               </div>
             ))}
           </div>
-        </GlassCard>
-      )}
+        )}
+      </GlassCard>
 
-      {/* C. OPORTUNIDADES */}
-      {cidadesOport.length > 0 && (
-        <GlassCard className="p-5">
-          <div className="flex items-center gap-2 mb-4">
-            <TrendingUp size={15} className="text-emerald-400" />
-            <h2 className="text-white font-semibold">Oportunidades de Expansão</h2>
+      {/* C. OPORTUNIDADES — sempre visível */}
+      <GlassCard className="p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <TrendingUp size={15} className="text-emerald-400" />
+          <h2 className="text-white font-semibold">Oportunidades de Expansão</h2>
+          {cidadesOport.length > 0 && (
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/20">{cidadesOport.length}</span>
+          )}
+        </div>
+        {cidadesOport.length === 0 ? (
+          <div className="py-6 text-center">
+            <p className="text-white/25 text-sm">Nenhuma oportunidade de expansão identificada</p>
+            <p className="text-white/15 text-xs mt-1">Monitore indecisos e crescimento para detectar potencial</p>
           </div>
+        ) : (
           <div className="space-y-2">
             {cidadesOport.map((c) => (
               <div key={c.nome} className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5 hover:border-white/10 transition-colors">
@@ -463,8 +474,8 @@ export default function SalaDeSituacao() {
               </div>
             ))}
           </div>
-        </GlassCard>
-      )}
+        )}
+      </GlassCard>
 
       {/* D. ALERTAS OPERACIONAIS */}
       {(coordInativos.length > 0 || missoesAtrasadas.length > 0) && (
@@ -510,30 +521,25 @@ export default function SalaDeSituacao() {
         </GlassCard>
       )}
 
-      {/* Estado vazio */}
-      {cidadesRisco.length === 0 && cidadesOport.length === 0 && coordInativos.length === 0 && missoesAtrasadas.length === 0 && (
-        <GlassCard className="p-12 text-center">
-          <p className="text-5xl mb-3">✅</p>
-          <p className="text-white/60 font-semibold">Território sob controle</p>
-          <p className="text-white/25 text-sm mt-1">Nenhum alerta ativo no momento</p>
-        </GlassCard>
-      )}
-
       {/* E. ATALHO CENTRAL DE DETERMINAÇÕES */}
-      <GlassCard className="p-4 border border-violet-500/10">
-        <Link href="/dashboard#determinacoes" className="flex items-center justify-between group">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
-              <Crown size={16} className="text-violet-400" />
+      <Link href="/dashboard" className="block group">
+        <GlassCard className="p-4 border border-violet-500/15 hover:border-violet-500/40 transition-all hover:bg-violet-500/5 cursor-pointer">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0 group-hover:bg-violet-500/25 transition-colors">
+                <Crown size={16} className="text-violet-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white/80 group-hover:text-white transition-colors">
+                  Central de Determinações →
+                </p>
+                <p className="text-[11px] text-white/30">Ver e acompanhar todas as ordens emitidas</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-semibold text-white/80 group-hover:text-white transition-colors">Central de Determinações</p>
-              <p className="text-[11px] text-white/30">Ver e acompanhar todas as ordens emitidas</p>
-            </div>
+            <ChevronRight size={16} className="text-white/20 group-hover:text-violet-400 transition-colors" />
           </div>
-          <ChevronRight size={16} className="text-white/20 group-hover:text-violet-400 transition-colors" />
-        </Link>
-      </GlassCard>
+        </GlassCard>
+      </Link>
 
       {/* MODAL DE DETERMINAÇÃO */}
       {modalDet && (
