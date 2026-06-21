@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { collection, getDocs, getDoc, doc, query, orderBy, where } from "firebase/firestore";
+import { collection, getDocs, getDoc, doc, query, orderBy, where, addDoc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
@@ -55,6 +55,22 @@ export default function DashboardPage() {
   const [modalEstabDash, setModalEstabDash] = useState(false);
   const [assessoriasCriadas, setAssessoriasCriadas] = useState<Set<string>>(new Set());
   const [coordenacoesCriadas, setCoordenacoesCriadas] = useState<Set<string>>(new Set());
+  const [modalDeterminacao, setModalDeterminacao] = useState<{ territorio: string; acao: string; assessorNome: string } | null>(null);
+  const [determinacaoForm, setDeterminacaoForm] = useState({ assunto: "", prioridade: "Alta", prazo: 7, descricao: "" });
+  const [determinacaoEnviando, setDeterminacaoEnviando] = useState(false);
+  const [determinacoes, setDeterminacoes] = useState<any[]>([]);
+  const [abaDeterminacao, setAbaDeterminacao] = useState<"pendente" | "em_andamento" | "concluida">("pendente");
+
+  // Auto-switch para a tab com conteúdo quando a ativa fica vazia
+  useEffect(() => {
+    if (!determinacoes.length) return;
+    const counts = { pendente: 0, em_andamento: 0, concluida: 0 } as Record<string, number>;
+    determinacoes.forEach((d) => { if (d.status in counts) counts[d.status]++; });
+    if (counts[abaDeterminacao] === 0) {
+      if (counts.em_andamento > 0) setAbaDeterminacao("em_andamento");
+      else if (counts.concluida > 0) setAbaDeterminacao("concluida");
+    }
+  }, [determinacoes]);
 
   useEffect(() => {
     async function load() {
@@ -184,6 +200,14 @@ export default function DashboardPage() {
             const cSnap = await getDocs(query(collection(db, "coordenacoes"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId), where("status", "==", "ativa")));
             setCoordenacoesCriadas(new Set(cSnap.docs.map((d) => d.data().municipio as string).filter(Boolean)));
           } catch (e) { console.error("coordenacoes:", e); setCoordenacoesCriadas(new Set()); }
+        }
+
+        // Determinações do Deputado (P6 — Sprint 20)
+        if (isPolitico(userData)) {
+          try {
+            const dSnap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", userData?.campanhaId || userData?.gabineteId || ""), where("criadoPorId", "==", userData?.uid || "")));
+            setDeterminacoes(dSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          } catch (e) { console.error("determinacoes:", e); setDeterminacoes([]); }
         }
 
         setUltimaAtualizacao(new Date());
@@ -552,6 +576,47 @@ export default function DashboardPage() {
   const eleitoresSemLideranca = analiseAssessor.semLideranca;
   const maxAssessorTotal = assessorRanking.filter((a) => a.total > 0)[0]?.total || 1;
 
+  // Dados reais por cidade para modal de pendências (P2 — Sprint 20)
+  const statsCidadeModal = isPolitico(userData) ? (() => {
+    const agora = Date.now();
+    const d30 = agora - 30 * 86400000;
+    const d60 = agora - 60 * 86400000;
+    const map: Record<string, { total: number; fortes: number; indecisos: number; cadastros30d: number; cadastros30_60d: number; pctForte: number }> = {};
+    eleitoresFiltrados.forEach((e) => {
+      if (!e.cidade) return;
+      if (!map[e.cidade]) map[e.cidade] = { total: 0, fortes: 0, indecisos: 0, cadastros30d: 0, cadastros30_60d: 0, pctForte: 0 };
+      map[e.cidade].total++;
+      if (e.grauApoio === "forte")   map[e.cidade].fortes++;
+      if (e.grauApoio === "indeciso") map[e.cidade].indecisos++;
+      const t = parseDate(e.criadoEm).getTime();
+      if (t > d30)       map[e.cidade].cadastros30d++;
+      else if (t > d60)  map[e.cidade].cadastros30_60d++;
+    });
+    for (const c of Object.values(map)) c.pctForte = c.total > 0 ? Math.round((c.fortes / c.total) * 100) : 0;
+    return map;
+  })() : {} as Record<string, { total: number; fortes: number; indecisos: number; cadastros30d: number; cadastros30_60d: number; pctForte: number }>;
+
+  const assessorResponsavelPorCidade = isPolitico(userData) ? (() => {
+    const coordToAid: Record<string, string> = {};
+    const aidToNome: Record<string, string> = {};
+    usuarios.filter((u) => u.role === "coordenador").forEach((u) => { if (u.assessorId) coordToAid[u.uid] = u.assessorId; });
+    usuarios.filter((u) => u.role === "assessor").forEach((u) => { aidToNome[u.uid] = u.nome; });
+    const cidadeAidCount: Record<string, Record<string, number>> = {};
+    eleitoresFiltrados.forEach((e) => {
+      if (!e.cidade || !e.coordenadorId) return;
+      const aid = coordToAid[e.coordenadorId];
+      if (!aid) return;
+      if (!cidadeAidCount[e.cidade]) cidadeAidCount[e.cidade] = {};
+      cidadeAidCount[e.cidade][aid] = (cidadeAidCount[e.cidade][aid] || 0) + 1;
+    });
+    const result: Record<string, string> = {};
+    for (const [cidade, counts] of Object.entries(cidadeAidCount)) {
+      const topAid = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+      result[cidade] = topAid ? (aidToNome[topAid] || "—") : "—";
+    }
+    return result;
+  })() : {} as Record<string, string>;
+
   const todasCidadesAssessores = isPolitico(userData)
     ? new Set(assessorRanking.flatMap((a) => a.cidades))
     : new Set<string>();
@@ -876,29 +941,28 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            {indiceSaudeTerritorial > 0 && (
-              <div
-                title="IST — Índice de Saúde Territorial (0–100): mede a qualidade dos cadastros, ritmo de crescimento, diversidade de apoio e atividade recente da equipe. Acima de 70 = saudável · 45–69 = atenção · abaixo de 45 = crítico."
-                className={`flex flex-col items-center px-3 py-2 rounded-xl border cursor-help ${
-                  indiceSaudeTerritorial >= 70 ? "bg-emerald-500/10 border-emerald-500/20" :
-                  indiceSaudeTerritorial >= 45 ? "bg-amber-500/10  border-amber-500/20"  :
-                                                 "bg-red-500/10    border-red-500/20"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] uppercase tracking-wider font-medium ${
-                    indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
-                    indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
-                  }`}>IST</span>
-                  <span className={`text-xl font-bold leading-none ${
-                    indiceSaudeTerritorial >= 70 ? "text-emerald-400" :
-                    indiceSaudeTerritorial >= 45 ? "text-amber-400"   : "text-red-400"
-                  }`}>{indiceSaudeTerritorial}</span>
-                  <span className="text-[10px] text-white/25">/100</span>
+            {indiceSaudeTerritorial > 0 && (() => {
+              const stClass = indiceSaudeTerritorial >= 70 ? { bg: "bg-emerald-500/10", border: "border-emerald-500/20", text: "text-emerald-400" }
+                            : indiceSaudeTerritorial >= 45 ? { bg: "bg-amber-500/10",   border: "border-amber-500/20",   text: "text-amber-400"   }
+                            :                                { bg: "bg-red-500/10",      border: "border-red-500/20",      text: "text-red-400"     };
+              const stLabel = indiceSaudeTerritorial >= 75 ? "Excelente"
+                            : indiceSaudeTerritorial >= 50 ? "Boa"
+                            : indiceSaudeTerritorial >= 25 ? "Em Atenção"
+                            :                                "Crítica";
+              return (
+                <div
+                  title={`Saúde Territorial (0–100) — ${stLabel}\nConsidera:\n• Cobertura dos municípios\n• Crescimento da base\n• Estrutura territorial\n• Atividade da equipe\n• Missões concluídas`}
+                  className={`flex flex-col items-center px-3 py-2 rounded-xl border cursor-help ${stClass.bg} ${stClass.border}`}
+                >
+                  <span className={`text-[9px] uppercase tracking-wider font-semibold ${stClass.text} mb-0.5`}>Saúde Territorial</span>
+                  <div className="flex items-baseline gap-1">
+                    <span className={`text-xl font-bold leading-none ${stClass.text}`}>{indiceSaudeTerritorial}</span>
+                    <span className="text-[10px] text-white/25">/100</span>
+                  </div>
+                  <span className={`text-[9px] font-medium mt-0.5 ${stClass.text}`}>{stLabel}</span>
                 </div>
-                <span className="text-[9px] text-white/30 mt-0.5">Saúde Territorial</span>
-              </div>
-            )}
+              );
+            })()}
             <div className="text-right">
               <p className={`text-xs font-medium ${roleInfo.text}`}>{roleInfo.label}</p>
               <p className="text-[11px] text-white/25 mt-0.5">
@@ -1106,7 +1170,7 @@ export default function DashboardPage() {
           </div>
           {indiceSaudeTerritorial > 0 && (
             <div className="mt-4 pt-4 border-t border-white/[0.05]">
-              <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Índice de Saúde Territorial</p>
+              <p className="text-[11px] text-white/30 uppercase tracking-wider mb-2">Saúde Territorial</p>
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-28 h-1.5 bg-white/[0.06] rounded-full">
                   <div
@@ -1118,8 +1182,8 @@ export default function DashboardPage() {
                   <span className={`text-lg font-bold ${indiceSaudeTerritorial >= 70 ? "text-emerald-400" : indiceSaudeTerritorial >= 45 ? "text-amber-400" : "text-red-400"}`}>
                     {indiceSaudeTerritorial}<span className="text-sm font-normal text-white/30">/100</span>
                   </span>
-                  <p className={`text-xs font-medium mt-0.5 ${indiceSaudeTerritorial >= 76 ? "text-emerald-400" : indiceSaudeTerritorial >= 51 ? "text-emerald-400" : indiceSaudeTerritorial >= 26 ? "text-amber-400" : "text-red-400"}`}>
-                    {indiceSaudeTerritorial >= 76 ? "Forte" : indiceSaudeTerritorial >= 51 ? "Saudável" : indiceSaudeTerritorial >= 26 ? "Atenção" : "Crítico"}
+                  <p className={`text-xs font-medium mt-0.5 ${indiceSaudeTerritorial >= 75 ? "text-emerald-400" : indiceSaudeTerritorial >= 50 ? "text-sky-400" : indiceSaudeTerritorial >= 25 ? "text-amber-400" : "text-red-400"}`}>
+                    {indiceSaudeTerritorial >= 75 ? "Excelente" : indiceSaudeTerritorial >= 50 ? "Boa" : indiceSaudeTerritorial >= 25 ? "Em Atenção" : "Crítica"}
                   </p>
                 </div>
               </div>
@@ -1397,112 +1461,160 @@ export default function DashboardPage() {
                     </>
                   )}
 
-                  {/* Modal: Recuperar Base (alta) — Plano Executivo */}
-                  {p.tipo === "alta" && (
-                    <>
-                      {/* Título */}
-                      <div>
-                        <p className="text-xs text-white/30 uppercase tracking-wider mb-0.5">Recuperação de Base</p>
-                        <p className="text-lg font-bold text-white uppercase tracking-wide">{p.territorio}</p>
-                      </div>
-
-                      {/* Seção 1 — Diagnóstico */}
-                      <div>
-                        <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Diagnóstico</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="text-center p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                            <p className="text-base font-bold text-amber-400">8%</p>
-                            <p className="text-[10px] text-white/30 mt-0.5">Base Forte</p>
-                          </div>
-                          <div className="text-center p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                            <p className="text-base font-bold text-blue-400">24</p>
-                            <p className="text-[10px] text-white/30 mt-0.5">Indecisos</p>
-                          </div>
-                          <div className="text-center p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-                            <p className="text-base font-bold text-emerald-400">+91%</p>
-                            <p className="text-[10px] text-white/30 mt-0.5">Tendência</p>
-                          </div>
-                          <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-red-500/10 border border-red-500/20">
-                            <span className="text-[10px] font-bold text-red-400 tracking-wider">INTERVENÇÃO</span>
-                            <span className="text-[10px] font-bold text-red-400 tracking-wider">NECESSÁRIA</span>
-                          </div>
+                  {/* Modal: Recuperar Base (alta) — Plano Executivo com dados reais */}
+                  {p.tipo === "alta" && (() => {
+                    const st = statsCidadeModal[p.territorio] ?? { total: 0, fortes: 0, indecisos: 0, cadastros30d: 0, cadastros30_60d: 0, pctForte: 0 };
+                    const delta30 = st.cadastros30_60d > 0 ? Math.round(((st.cadastros30d - st.cadastros30_60d) / st.cadastros30_60d) * 100) : 0;
+                    const tendenciaLabel = st.cadastros30_60d === 0 ? "—" : delta30 >= 0 ? `+${delta30}%` : `${delta30}%`;
+                    const tendenciaColor = delta30 >= 0 ? "text-emerald-400" : "text-red-400";
+                    const assessorNome = assessorResponsavelPorCidade[p.territorio] || extra.responsavel;
+                    const motivo = st.pctForte < 15
+                      ? "Base forte abaixo de 15% — conversão necessária"
+                      : st.cadastros30d < 3
+                        ? "Baixo cadastro de campo nos últimos 30 dias"
+                        : delta30 < -30
+                          ? `Queda de ${Math.abs(delta30)}% no ritmo de cadastro`
+                          : st.indecisos > st.fortes
+                            ? "Indecisos sem acompanhamento ativo"
+                            : "Crescimento territorial abaixo do esperado";
+                    const meta30 = Math.min(100, st.pctForte + 7);
+                    const meta60 = Math.min(100, st.pctForte + 14);
+                    const meta90 = Math.min(100, st.pctForte + 22);
+                    const plano: string[] = [
+                      "Reunir assessoria regional para alinhamento",
+                      st.indecisos > 3 ? `Converter ${st.indecisos} indecisos identificados` : "Intensificar identificação de indecisos",
+                      st.cadastros30d < 5 ? "Aumentar frequência das visitas de campo" : "Manter ritmo de cadastro ativo",
+                      "Criar meta territorial com prazo definido",
+                      "Monitoramento semanal dos indicadores",
+                    ];
+                    return (
+                      <>
+                        <div>
+                          <p className="text-xs text-white/30 uppercase tracking-wider mb-0.5">Recuperação de Base</p>
+                          <p className="text-lg font-bold text-white uppercase tracking-wide">{p.territorio}</p>
                         </div>
-                      </div>
 
-                      {/* Seção 2 — Meta de Recuperação */}
-                      <div>
-                        <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Meta de Recuperação</p>
-                        <div className="space-y-0">
-                          {[
-                            { label: "Atual",       value: "8%",  color: "text-red-400",     bg: "bg-red-500/10",     border: "border-red-500/20"     },
-                            { label: "Meta 30 dias", value: "15%", color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"   },
-                            { label: "Meta 60 dias", value: "20%", color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/20"    },
-                            { label: "Meta 90 dias", value: "30%", color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-                          ].map(({ label, value, color, bg, border }, idx, arr) => (
-                            <div key={label} className="flex items-start gap-2">
-                              <div className="flex flex-col items-center shrink-0">
-                                <div className={`w-7 h-7 rounded-lg ${bg} ${border} border flex items-center justify-center mt-0.5`}>
-                                  <span className={`text-xs font-bold ${color}`}>{value}</span>
-                                </div>
-                                {idx < arr.length - 1 && <div className="w-px h-5 bg-white/[0.08] my-0.5" />}
-                              </div>
-                              <p className={`text-xs mt-1.5 ${color}`}>{label}</p>
+                        {/* Situação Atual */}
+                        <div>
+                          <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Situação Atual</p>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="text-center p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                              <p className="text-base font-bold text-white/80">{st.cadastros30d}</p>
+                              <p className="text-[10px] text-white/30 mt-0.5">Cadastros 30d</p>
                             </div>
-                          ))}
+                            <div className="text-center p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                              <p className="text-base font-bold text-white/50">{st.cadastros30_60d}</p>
+                              <p className="text-[10px] text-white/30 mt-0.5">Período anterior</p>
+                            </div>
+                            <div className="text-center p-2.5 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                              <p className={`text-base font-bold ${tendenciaColor}`}>{tendenciaLabel}</p>
+                              <p className="text-[10px] text-white/30 mt-0.5">Variação</p>
+                            </div>
+                            <div className="text-center p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                              <p className="text-base font-bold text-amber-400">{st.pctForte}%</p>
+                              <p className="text-[10px] text-white/30 mt-0.5">Base Forte</p>
+                            </div>
+                          </div>
+                          <div className="mt-2 p-2.5 rounded-xl bg-red-500/[0.07] border border-red-500/15">
+                            <p className="text-[10px] text-white/30 uppercase tracking-wider mb-0.5">Motivo provável</p>
+                            <p className="text-xs text-red-300/80">{motivo}</p>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Seção 3 — Plano de Ação */}
-                      <div>
-                        <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Plano de Ação</p>
-                        <div className="space-y-1.5">
-                          {[
-                            "Reunir assessoria regional",
-                            "Intensificar conversão dos indecisos",
-                            "Reforçar coordenação",
-                            "Criar meta de recuperação",
-                            "Monitoramento semanal",
-                          ].map((a) => (
-                            <label key={a} className="flex items-center gap-2 cursor-not-allowed">
-                              <input type="checkbox" defaultChecked disabled className="w-4 h-4 accent-red-500" />
-                              <span className="text-sm text-white/50">{a}</span>
-                            </label>
-                          ))}
+                        {/* Diagnóstico Completo */}
+                        <div>
+                          <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Diagnóstico</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="text-center p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                              <p className="text-base font-bold text-blue-400">{st.indecisos}</p>
+                              <p className="text-[10px] text-white/30 mt-0.5">Indecisos</p>
+                            </div>
+                            <div className="text-center p-2 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+                              <p className="text-base font-bold text-white/60">{st.total}</p>
+                              <p className="text-[10px] text-white/30 mt-0.5">Total</p>
+                            </div>
+                            <div className="flex flex-col items-center justify-center p-2 rounded-xl bg-red-500/10 border border-red-500/20">
+                              <span className="text-[9px] font-bold text-red-400 tracking-wider leading-tight text-center">INTERVENÇÃO{"\n"}NECESSÁRIA</span>
+                            </div>
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Seção 4 — Responsável */}
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm space-y-0.5">
-                          <p className="text-white/35 text-xs uppercase tracking-wider">Responsável</p>
-                          <p className="text-white/70 font-medium">{extra.responsavel}</p>
-                          <p className="text-white/35 text-xs">Prazo: <span className="text-white/55">60 dias</span></p>
+                        {/* Meta de Recuperação */}
+                        <div>
+                          <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Meta de Recuperação — Base Forte</p>
+                          <div className="space-y-0">
+                            {[
+                              { label: "Atual",        value: `${st.pctForte}%`, color: "text-red-400",     bg: "bg-red-500/10",     border: "border-red-500/20"     },
+                              { label: "Meta 30 dias", value: `${meta30}%`,       color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"   },
+                              { label: "Meta 60 dias", value: `${meta60}%`,       color: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/20"    },
+                              { label: "Meta 90 dias", value: `${meta90}%`,       color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+                            ].map(({ label, value, color, bg, border }, idx, arr) => (
+                              <div key={label} className="flex items-start gap-2">
+                                <div className="flex flex-col items-center shrink-0">
+                                  <div className={`w-7 h-7 rounded-lg ${bg} ${border} border flex items-center justify-center mt-0.5`}>
+                                    <span className={`text-xs font-bold ${color}`}>{value}</span>
+                                  </div>
+                                  {idx < arr.length - 1 && <div className="w-px h-5 bg-white/[0.08] my-0.5" />}
+                                </div>
+                                <p className={`text-xs mt-1.5 ${color}`}>{label}</p>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                        <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-500/20 text-red-300 tracking-wider">
-                          CRÍTICA
-                        </span>
-                      </div>
 
-                      {/* Seção 5 — Resumo Executivo */}
-                      <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
-                        <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Resumo Executivo</p>
-                        <p className="text-sm text-white/50 leading-relaxed">
-                          O município apresenta baixa força política e exige atuação imediata. A prioridade é recuperar a base forte, ampliar a conversão dos indecisos e fortalecer a coordenação local.
-                        </p>
-                      </div>
+                        {/* Plano de Ação */}
+                        <div>
+                          <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Plano de Ação</p>
+                          <div className="space-y-1.5">
+                            {plano.map((a) => (
+                              <label key={a} className="flex items-center gap-2 cursor-not-allowed">
+                                <input type="checkbox" defaultChecked disabled className="w-4 h-4 accent-red-500" />
+                                <span className="text-sm text-white/50">{a}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
 
-                      {/* Rodapé */}
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => { setModalPendencia(null); router.push(`/eleitores?cidade=${encodeURIComponent(p.territorio)}`); }}
-                          className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
-                        >
-                          Ver Eleitores de {p.territorio} →
-                        </button>
-                        <button onClick={() => setModalPendencia(null)} className="px-5 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors">Cancelar</button>
-                      </div>
-                    </>
-                  )}
+                        {/* Responsável */}
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm space-y-0.5">
+                            <p className="text-white/35 text-xs uppercase tracking-wider">Assessor Responsável</p>
+                            <p className="text-white/70 font-medium">{assessorNome}</p>
+                            <p className="text-white/35 text-xs">Prazo sugerido: <span className="text-white/55">60 dias</span></p>
+                          </div>
+                          <span className="text-xs font-bold px-3 py-1.5 rounded-lg bg-red-500/20 text-red-300 tracking-wider">CRÍTICA</span>
+                        </div>
+
+                        {/* Resumo Executivo */}
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-2xl p-4">
+                          <p className="text-xs text-white/30 uppercase tracking-wider mb-2">Resumo Executivo</p>
+                          <p className="text-sm text-white/50 leading-relaxed">
+                            {p.territorio} tem {st.total} apoiadores na base, com {st.pctForte}% de força política.
+                            {st.cadastros30_60d > 0 && st.cadastros30d < st.cadastros30_60d ? ` O cadastro caiu ${Math.abs(delta30)}% em relação ao período anterior.` : ""}
+                            {st.indecisos > 0 ? ` Há ${st.indecisos} indecisos convertíveis que precisam de acompanhamento.` : ""}
+                            {" "}A prioridade é fortalecer a base e acelerar o cadastro de campo.
+                          </p>
+                        </div>
+
+                        {/* Rodapé */}
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => { setModalPendencia(null); router.push(`/eleitores?cidade=${encodeURIComponent(p.territorio)}`); }}
+                            className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
+                          >
+                            Ver Eleitores de {p.territorio} →
+                          </button>
+                          <button
+                            onClick={() => { setModalPendencia(null); setModalDeterminacao({ territorio: p.territorio, acao: "Recuperar Base Territorial", assessorNome }); }}
+                            className="px-4 py-2.5 rounded-xl bg-violet-500/15 text-violet-300 text-sm font-medium border border-violet-500/25 hover:bg-violet-500/25 transition-colors"
+                          >
+                            Determinar
+                          </button>
+                          <button onClick={() => setModalPendencia(null)} className="px-4 py-2.5 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors">Cancelar</button>
+                        </div>
+                      </>
+                    );
+                  })()}
 
                   {/* Modal: Criar Coordenação (media) */}
                   {p.tipo === "media" && (
@@ -2484,12 +2596,24 @@ export default function DashboardPage() {
                   </span>
                 ))}
               </div>
-              <a
-                href={`/coordenadores?alertaEstrutura=${municipiosSemCoordenador.map(({ cidade, assessorNome }) => `${encodeURIComponent(cidade)}|${encodeURIComponent(assessorNome)}`).join(",")}`}
-                className="inline-flex items-center gap-1.5 text-xs text-amber-400/70 hover:text-amber-300 transition-colors"
-              >
-                <span>→</span> Ver coordenadores
-              </a>
+              <div className="flex items-center gap-3 mt-1">
+                <a
+                  href={`/coordenadores?alertaEstrutura=${municipiosSemCoordenador.map(({ cidade, assessorNome }) => `${encodeURIComponent(cidade)}|${encodeURIComponent(assessorNome)}`).join(",")}`}
+                  className="inline-flex items-center gap-1.5 text-xs text-amber-400/70 hover:text-amber-300 transition-colors"
+                >
+                  <span>→</span> Ver coordenadores
+                </a>
+                <button
+                  onClick={() => setModalDeterminacao({
+                    territorio: municipiosSemCoordenador.map((m) => m.cidade).join(", "),
+                    acao: "Criar coordenação operacional",
+                    assessorNome: municipiosSemCoordenador[0]?.assessorNome || "Assessor Executivo",
+                  })}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-colors"
+                >
+                  Determinar Providência
+                </button>
+              </div>
             </GlassCard>
           )}
 
@@ -2529,6 +2653,257 @@ export default function DashboardPage() {
           </GlassCard>
         </>
       )}
+
+      {/* MINHAS DETERMINAÇÕES — P6 Sprint 20 */}
+      {isPolitico(userData) && (
+        <GlassCard className="p-5 border-violet-500/10">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Crown size={16} className="text-violet-400" />
+              <h3 className="text-white font-semibold">Minhas Determinações</h3>
+              {determinacoes.filter((d) => d.status === "pendente").length > 0 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-300 font-bold">
+                  {determinacoes.filter((d) => d.status === "pendente").length}
+                </span>
+              )}
+            </div>
+            <div className="flex gap-1">
+              {(["pendente", "em_andamento", "concluida"] as const).map((s) => {
+                const cnt = determinacoes.filter((d) => d.status === s).length;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setAbaDeterminacao(s)}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                      abaDeterminacao === s ? "bg-violet-500/20 text-violet-300" : "text-white/30 hover:text-white/50"
+                    }`}
+                  >
+                    {s === "pendente" ? "Pendentes" : s === "em_andamento" ? "Em andamento" : "Concluídas"}
+                    {cnt > 0 && (
+                      <span className={`text-[9px] px-1 rounded-full ${abaDeterminacao === s ? "bg-violet-500/30 text-violet-200" : "bg-white/10 text-white/40"}`}>
+                        {cnt}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {determinacoes.filter((d) => d.status === abaDeterminacao).length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-white/25 text-sm">
+                {abaDeterminacao === "pendente" ? "Nenhuma determinação pendente" :
+                 abaDeterminacao === "em_andamento" ? "Nenhuma determinação em andamento" :
+                 "Nenhuma determinação concluída ainda"}
+              </p>
+              {abaDeterminacao === "pendente" && (
+                <p className="text-white/15 text-xs mt-1">Use os alertas territoriais para determinar providências</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {determinacoes.filter((d) => d.status === abaDeterminacao).map((det) => {
+                const prazoDate = det.prazo?.toDate?.() ?? null;
+                const diasRestantes = prazoDate ? Math.ceil((prazoDate.getTime() - Date.now()) / 86400000) : null;
+                const prazoColor = diasRestantes === null ? "text-white/30"
+                  : diasRestantes < 0 ? "text-red-400"
+                  : diasRestantes <= 2 ? "text-amber-400"
+                  : "text-emerald-400";
+                return (
+                  <div key={det.id} className="flex items-start gap-3 p-3 rounded-xl bg-white/[0.03] border border-white/[0.05] hover:border-white/10 transition-colors">
+                    <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                      det.status === "pendente" ? "bg-red-400" :
+                      det.status === "em_andamento" ? "bg-amber-400" : "bg-emerald-400"
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm text-white/80 font-medium truncate">{det.assunto}</p>
+                      <p className="text-[11px] text-white/35 mt-0.5">{det.municipios?.join(", ") || det.territorio}</p>
+                      <div className="flex items-center gap-3 mt-1.5 flex-wrap">
+                        <span className="text-[10px] text-white/25">Para: <span className="text-white/45">{det.destinatarioNome || "Assessor Executivo"}</span></span>
+                        {prazoDate && (
+                          <span className={`text-[10px] ${prazoColor}`}>
+                            {diasRestantes! < 0 ? `Vencido há ${Math.abs(diasRestantes!)}d` :
+                             diasRestantes === 0 ? "Vence hoje" :
+                             `${diasRestantes}d restantes`}
+                          </span>
+                        )}
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                          det.prioridade === "Alta" ? "bg-red-500/15 text-red-300" :
+                          det.prioridade === "Media" ? "bg-amber-500/15 text-amber-300" :
+                          "bg-white/5 text-white/30"
+                        }`}>{det.prioridade}</span>
+                      </div>
+                      {det.status === "concluida" && (
+                        <div className="mt-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
+                          <p className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-wider mb-2">Prestação de Contas</p>
+                          {(det.conclusaoItems as string[] | undefined)?.filter(Boolean).map((item, i) => (
+                            <p key={i} className="text-[11px] text-emerald-300/75 flex items-start gap-1.5 mb-1">
+                              <span className="text-emerald-500/60 shrink-0 mt-px">✓</span>{item}
+                            </p>
+                          ))}
+                          {det.resultado && <p className="text-[11px] text-white/45 mt-2 italic">{det.resultado}</p>}
+                          <div className="flex items-center gap-3 mt-2 flex-wrap">
+                            {det.destinatarioNome && (
+                              <span className="text-[10px] text-white/30">Por: <span className="text-white/50">{det.destinatarioNome}</span></span>
+                            )}
+                            {det.tempoExecucaoDias != null && (
+                              <span className="text-[10px] text-emerald-400/60">Concluído em {det.tempoExecucaoDias}d</span>
+                            )}
+                            {det.concluidoEm?.toDate && (
+                              <span className="text-[10px] text-white/25">{det.concluidoEm.toDate().toLocaleDateString("pt-BR")}</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </GlassCard>
+      )}
+
+      {/* MODAL DE DETERMINAÇÃO — P3 Sprint 20 */}
+      {modalDeterminacao && (() => {
+        const ae = usuarios.find((u) => u.role === "assessor_executivo");
+        const prazoData = new Date(Date.now() + determinacaoForm.prazo * 86400000);
+        const handleEnviarDeterminacao = async () => {
+          if (!userData || !ae || !modalDeterminacao) return;
+          setDeterminacaoEnviando(true);
+          try {
+            await addDoc(collection(db, "determinacoes"), {
+              campanhaId:       userData.campanhaId || userData.gabineteId || "",
+              criadoPorId:      userData.uid,
+              criadoPorNome:    userData.nome,
+              destinatarioId:   ae.uid,
+              destinatarioNome: ae.nome,
+              destinatarioRole: "assessor_executivo",
+              municipios:       modalDeterminacao.territorio.split(",").map((s) => s.trim()).filter(Boolean),
+              assunto:          determinacaoForm.assunto || modalDeterminacao.acao,
+              descricao:        determinacaoForm.descricao,
+              prioridade:       determinacaoForm.prioridade,
+              prazo:            Timestamp.fromDate(prazoData),
+              status:           "pendente",
+              criadoEm:         Timestamp.now(),
+              atualizadoEm:     Timestamp.now(),
+            });
+            const snap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", userData.campanhaId || userData.gabineteId || ""), where("criadoPorId", "==", userData.uid)));
+            setDeterminacoes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+            setModalDeterminacao(null);
+            setDeterminacaoForm({ assunto: "", prioridade: "Alta", prazo: 7, descricao: "" });
+            toast.success("Determinação enviada ao Assessor Executivo");
+          } catch (e) {
+            console.error(e);
+            toast.error("Erro ao enviar determinação");
+          } finally {
+            setDeterminacaoEnviando(false);
+          }
+        };
+        return (
+          <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDeterminacao(null)}>
+            <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
+              {/* Cabeçalho */}
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
+                  <Crown size={18} className="text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-xs text-white/30 uppercase tracking-wider">Nova Determinação</p>
+                  <p className="text-lg font-bold text-white">Determinar Providência</p>
+                </div>
+              </div>
+
+              {/* Destinatário */}
+              <div className="p-3 rounded-xl bg-violet-500/[0.07] border border-violet-500/15">
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Destinatário</p>
+                <p className="text-sm font-medium text-white/80">{ae?.nome || "Assessor Executivo"}</p>
+                <p className="text-[11px] text-white/30">Assessor Executivo</p>
+              </div>
+
+              {/* Municípios */}
+              <div>
+                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Municípios</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {modalDeterminacao.territorio.split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
+                    <span key={t} className="text-xs px-2 py-1 rounded-lg bg-white/[0.05] text-white/60 border border-white/[0.07]">• {t}</span>
+                  ))}
+                </div>
+              </div>
+
+              {/* Assunto */}
+              <div>
+                <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Assunto</label>
+                <input
+                  type="text"
+                  value={determinacaoForm.assunto || modalDeterminacao.acao}
+                  onChange={(e) => setDeterminacaoForm((f) => ({ ...f, assunto: e.target.value }))}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-violet-500/40 placeholder-white/20"
+                  placeholder={modalDeterminacao.acao}
+                />
+              </div>
+
+              {/* Prioridade + Prazo */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Prioridade</label>
+                  <select
+                    value={determinacaoForm.prioridade}
+                    onChange={(e) => setDeterminacaoForm((f) => ({ ...f, prioridade: e.target.value }))}
+                    className="w-full bg-zinc-800 border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-violet-500/40"
+                  >
+                    <option value="Alta">Alta</option>
+                    <option value="Media">Média</option>
+                    <option value="Baixa">Baixa</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Prazo (dias)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={determinacaoForm.prazo}
+                    onChange={(e) => setDeterminacaoForm((f) => ({ ...f, prazo: Number(e.target.value) }))}
+                    className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-violet-500/40"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-white/25 -mt-3">Prazo: até {prazoData.toLocaleDateString("pt-BR")}</p>
+
+              {/* Descrição */}
+              <div>
+                <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Descrição (opcional)</label>
+                <textarea
+                  rows={2}
+                  value={determinacaoForm.descricao}
+                  onChange={(e) => setDeterminacaoForm((f) => ({ ...f, descricao: e.target.value }))}
+                  className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-violet-500/40 placeholder-white/20 resize-none"
+                  placeholder="Contexto adicional para o assessor..."
+                />
+              </div>
+
+              {/* Botões */}
+              <div className="flex gap-3">
+                <button
+                  onClick={handleEnviarDeterminacao}
+                  disabled={determinacaoEnviando}
+                  className="flex-1 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {determinacaoEnviando ? "Enviando..." : "Enviar Determinação"}
+                </button>
+                <button
+                  onClick={() => { setModalDeterminacao(null); setDeterminacaoForm({ assunto: "", prioridade: "Alta", prazo: 7, descricao: "" }); }}
+                  className="px-5 py-3 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

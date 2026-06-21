@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, type DocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, Timestamp, type DocumentSnapshot } from "firebase/firestore";
+import toast from "react-hot-toast";
 import { db } from "@/lib/firebase";
 import { AppUser, Missao } from "@/types";
 import { Eleitor } from "@/types";
@@ -12,7 +13,7 @@ import { useRouter } from "next/navigation";
 import {
   Crown, Zap, Bell,
   BarChart3, ChevronRight, MapPin, Clock, CheckCircle,
-  Shield, AlertTriangle,
+  Shield, AlertTriangle, FileCheck,
 } from "lucide-react";
 
 interface Props {
@@ -60,6 +61,10 @@ export function DashboardExecutivo({ userData }: Props) {
   const [missoes, setMissoes] = useState<Missao[]>([]);
   const [solicitacoesPendentes, setSolicitacoesPendentes] = useState(0);
   const [gabineteNome, setGabineteNome] = useState("");
+  const [determinacoesRecebidas, setDeterminacoesRecebidas] = useState<any[]>([]);
+  const [modalConcluir, setModalConcluir] = useState<{ id: string; assunto: string } | null>(null);
+  const [conclusaoForm, setConclusaoForm] = useState({ resultado: "", items: ["", "", ""] });
+  const [conclusaoEnviando, setConclusaoEnviando] = useState(false);
 
   const campanhaId = userData.campanhaId || userData.gabineteId || "";
 
@@ -99,6 +104,11 @@ export function DashboardExecutivo({ userData }: Props) {
         setSolicitacoesPendentes(solSnap.value.size);
       if (gabSnap.status === "fulfilled" && gabSnap.value.exists())
         setGabineteNome(gabSnap.value.data()?.nome || "");
+      // Determinações recebidas pelo AE (P4 — Sprint 20)
+      try {
+        const detSnap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", campanhaId), where("destinatarioId", "==", userData.uid)));
+        setDeterminacoesRecebidas(detSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
+      } catch (e) { console.error("determinacoes AE:", e); }
     } catch (e) {
       console.error("DashboardExecutivo.loadAll:", e);
     } finally {
@@ -355,7 +365,7 @@ export function DashboardExecutivo({ userData }: Props) {
               missaoStats.atrasadas > 0 && {
                 urgente: true,
                 icone: "⚡",
-                label: `${missaoStats.atrasadas} missão${missaoStats.atrasadas > 1 ? "ões" : ""} atrasada${missaoStats.atrasadas > 1 ? "s" : ""}`,
+                label: `${missaoStats.atrasadas} ${missaoStats.atrasadas > 1 ? "missões" : "missão"} atrasada${missaoStats.atrasadas > 1 ? "s" : ""}`,
                 sub: "Mais de 7 dias sem conclusão",
                 href: "/missoes",
               },
@@ -369,7 +379,7 @@ export function DashboardExecutivo({ userData }: Props) {
               missaoStats.pendentes > 0 && {
                 urgente: false,
                 icone: "🎯",
-                label: `${missaoStats.pendentes} missão${missaoStats.pendentes > 1 ? "ões" : ""} aguardando início`,
+                label: `${missaoStats.pendentes} ${missaoStats.pendentes > 1 ? "missões" : "missão"} aguardando início`,
                 sub: "Pendentes de aceite pelos assessores",
                 href: "/missoes",
               },
@@ -670,6 +680,111 @@ export function DashboardExecutivo({ userData }: Props) {
             </div>
           )}
 
+          {/* ── Determinações Recebidas — P4 Sprint 20 ── */}
+          {determinacoesRecebidas.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <p className="text-[10px] font-semibold text-white/25 uppercase tracking-widest">
+                  DETERMINAÇÕES DO DEPUTADO
+                </p>
+                {determinacoesRecebidas.filter((d) => d.status === "pendente").length > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-300">
+                    {determinacoesRecebidas.filter((d) => d.status === "pendente").length} PENDENTE(S)
+                  </span>
+                )}
+              </div>
+              <div className="space-y-3">
+                {determinacoesRecebidas.map((det) => {
+                  const prazoDate = det.prazo?.toDate?.() ?? null;
+                  const diasRestantes = prazoDate ? Math.ceil((prazoDate.getTime() - Date.now()) / 86400000) : null;
+                  const prazoColor = diasRestantes === null ? "text-white/30" : diasRestantes < 0 ? "text-red-400" : diasRestantes <= 2 ? "text-amber-400" : "text-emerald-400";
+                  const handleAceitar = async () => {
+                    try {
+                      await updateDoc(doc(db, "determinacoes", det.id), { status: "em_andamento", aceitoPorId: userData.uid, aceitoPorNome: userData.nome, aceitoEm: Timestamp.now(), atualizadoEm: Timestamp.now() });
+                      setDeterminacoesRecebidas((prev) => prev.map((d) => d.id === det.id ? { ...d, status: "em_andamento" } : d));
+                      toast.success("Determinação aceita — em andamento");
+                    } catch (e) { toast.error("Erro ao aceitar"); console.error(e); }
+                  };
+                  const handleAbrirMissao = () => {
+                    const prioMap: Record<string, string> = { "Alta": "P1", "Media": "P2", "Baixa": "P3" };
+                    const assuntoLower = (det.assunto || "").toLowerCase();
+                    const tipo =
+                      assuntoLower.includes("recuperar") || assuntoLower.includes("base") || assuntoLower.includes("fortalecer") || assuntoLower.includes("indeciso")
+                        ? "fortalecer_base"
+                        : assuntoLower.includes("expandir") || assuntoLower.includes("território") || assuntoLower.includes("territorio")
+                        ? "expandir_territorio"
+                        : assuntoLower.includes("assessoria") || assuntoLower.includes("assessor")
+                        ? "criar_assessoria"
+                        : assuntoLower.includes("coordenação") || assuntoLower.includes("coordenacao") || assuntoLower.includes("coordenador")
+                        ? "criar_coordenacao"
+                        : assuntoLower.includes("reestruturar") || assuntoLower.includes("região") || assuntoLower.includes("regiao")
+                        ? "reestruturar_regiao"
+                        : "fortalecer_base";
+                    const cidade = (det.municipios?.[0] || "").trim();
+                    const params = new URLSearchParams({
+                      acao:       "nova",
+                      cidade,
+                      tipo,
+                      prioridade: prioMap[det.prioridade] || "P1",
+                      descricao:  det.assunto || "",
+                    });
+                    window.location.href = `/missoes?${params.toString()}`;
+                  };
+                  return (
+                    <GlassCard key={det.id} className="p-4 border-violet-500/10">
+                      <div className="flex items-start gap-3">
+                        <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${det.status === "pendente" ? "bg-red-400" : det.status === "em_andamento" ? "bg-amber-400" : "bg-emerald-400"}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-2 flex-wrap">
+                            <div>
+                              <p className="text-sm font-semibold text-white">{det.assunto}</p>
+                              <p className="text-[11px] text-white/35 mt-0.5">{(det.municipios ?? []).join(" · ") || det.territorio}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              {det.prioridade === "Alta" && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/15 text-red-300">Alta</span>
+                              )}
+                              {prazoDate && (
+                                <span className={`text-[10px] ${prazoColor}`}>
+                                  {diasRestantes! < 0 ? `Vencido ${Math.abs(diasRestantes!)}d` : diasRestantes === 0 ? "Hoje" : `${diasRestantes}d`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          {det.descricao && (
+                            <p className="text-[11px] text-white/30 mt-2 leading-relaxed line-clamp-2">{det.descricao}</p>
+                          )}
+                          {det.status === "concluida" && det.resultado && (
+                            <div className="mt-2 p-2 rounded-lg bg-emerald-500/[0.07] border border-emerald-500/15">
+                              <p className="text-[11px] text-emerald-300/70">{det.resultado}</p>
+                            </div>
+                          )}
+                          {det.status !== "concluida" && (
+                            <div className="flex items-center gap-2 mt-3 flex-wrap">
+                              {det.status === "pendente" && (
+                                <button onClick={handleAceitar} className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors font-medium">
+                                  Aceitar
+                                </button>
+                              )}
+                              <button onClick={handleAbrirMissao} className="text-[11px] px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 transition-colors font-medium">
+                                Abrir Missão
+                              </button>
+                              {det.status === "em_andamento" && (
+                                <button onClick={() => setModalConcluir({ id: det.id, assunto: det.assunto })} className="text-[11px] px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-colors font-medium">
+                                  Prestar Contas
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </GlassCard>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
           {/* ── Ações Rápidas ── */}
           <section>
             <p className="text-[10px] font-semibold text-white/25 uppercase tracking-widest mb-3">
@@ -687,6 +802,91 @@ export function DashboardExecutivo({ userData }: Props) {
             </div>
           </section>
 
+      {/* MODAL PRESTAÇÃO DE CONTAS — P5 Sprint 20 */}
+      {modalConcluir && (
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalConcluir(null)}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
+                <FileCheck size={18} className="text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-xs text-white/30 uppercase tracking-wider">Prestação de Contas</p>
+                <p className="text-base font-bold text-white line-clamp-1">{modalConcluir.assunto}</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-2">O que foi feito?</label>
+              <div className="space-y-2">
+                {conclusaoForm.items.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <CheckCircle size={14} className="text-emerald-400/40 shrink-0" />
+                    <input
+                      type="text"
+                      value={item}
+                      onChange={(e) => setConclusaoForm((f) => { const items = [...f.items]; items[i] = e.target.value; return { ...f, items }; })}
+                      className="flex-1 bg-white/4 border border-white/8 rounded-xl px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-emerald-500/40 placeholder-white/20"
+                      placeholder={`Ação concluída ${i + 1}...`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-2">Resultado geral</label>
+              <textarea
+                rows={2}
+                value={conclusaoForm.resultado}
+                onChange={(e) => setConclusaoForm((f) => ({ ...f, resultado: e.target.value }))}
+                className="w-full bg-white/4 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-emerald-500/40 placeholder-white/20 resize-none"
+                placeholder="Resumo do que foi entregue..."
+              />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                disabled={conclusaoEnviando}
+                onClick={async () => {
+                  if (!modalConcluir) return;
+                  setConclusaoEnviando(true);
+                  try {
+                    const itensFeitos = conclusaoForm.items.filter((s) => s.trim());
+                    const tempoExec = (() => {
+                      const det = determinacoesRecebidas.find((d) => d.id === modalConcluir.id);
+                      if (!det?.aceitoEm) return null;
+                      return Math.ceil((Date.now() - det.aceitoEm.toDate().getTime()) / 86400000);
+                    })();
+                    await updateDoc(doc(db, "determinacoes", modalConcluir.id), {
+                      status:            "concluida",
+                      resultado:         conclusaoForm.resultado,
+                      conclusaoItems:    itensFeitos,
+                      concluidoEm:       Timestamp.now(),
+                      atualizadoEm:      Timestamp.now(),
+                      ...(tempoExec !== null ? { tempoExecucaoDias: tempoExec } : {}),
+                    });
+                    setDeterminacoesRecebidas((prev) => prev.map((d) => d.id === modalConcluir.id ? { ...d, status: "concluida", resultado: conclusaoForm.resultado } : d));
+                    setModalConcluir(null);
+                    setConclusaoForm({ resultado: "", items: ["", "", ""] });
+                    toast.success("Prestação de contas registrada com sucesso");
+                  } catch (e) { console.error(e); toast.error("Erro ao registrar prestação de contas"); }
+                  finally { setConclusaoEnviando(false); }
+                }}
+                className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {conclusaoEnviando ? "Registrando..." : "Registrar Conclusão"}
+              </button>
+              <button
+                onClick={() => { setModalConcluir(null); setConclusaoForm({ resultado: "", items: ["", "", ""] }); }}
+                className="px-5 py-3 rounded-xl bg-white/5 text-white/50 text-sm hover:bg-white/10 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

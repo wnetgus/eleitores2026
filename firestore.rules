@@ -228,6 +228,38 @@ service cloud.firestore {
       allow delete: if isAuth() && isAdmin();
     }
 
+    // ─── determinacoes (Central de Comando Político — Sprint 20) ─────────────
+    match /determinacoes/{id} {
+      // Deputado lê as suas; AE lê as destinadas a ele
+      allow read: if isAuth() && (
+        isAdmin() ||
+        (resource.data.get("campanhaId", "") == myCampanha() && (
+          resource.data.get("criadoPorId", "")   == request.auth.uid ||
+          resource.data.get("destinatarioId", "") == request.auth.uid
+        ))
+      );
+      // Apenas o político (deputado) cria
+      allow create: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") == "politico" &&
+          hasCampanha() &&
+          request.resource.data.get("campanhaId", "") == myCampanha() &&
+          request.resource.data.get("criadoPorId", "") == request.auth.uid
+        )
+      );
+      // AE atualiza (aceitar, prestar contas, concluir)
+      allow update: if isAuth() && (
+        isAdmin() ||
+        (
+          me().get("role", "") == "assessor_executivo" &&
+          resource.data.get("campanhaId", "") == myCampanha() &&
+          resource.data.get("destinatarioId", "") == request.auth.uid
+        )
+      );
+      allow delete: if isAuth() && isAdmin();
+    }
+
     // ─── assessorias ──────────────────────────────────────────────────────────
     match /assessorias/{id} {
       allow read: if isAuth() && (
