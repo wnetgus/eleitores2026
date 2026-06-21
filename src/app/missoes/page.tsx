@@ -643,7 +643,7 @@ export default function MissoesPage() {
     setAtualizandoId(missao.id);
     try {
       await updateDoc(doc(db, "missoes", missao.id), {
-        status:          "em_execucao",
+        status:          "aceita",
         responsavelId:   assessorId,
         responsavelNome: assessorNome,
         delegadoPor:     userData?.uid ?? "",

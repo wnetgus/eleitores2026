@@ -511,9 +511,11 @@ export default function PainelGabinetePage() {
                         <button onClick={() => window.open(`/gabinete/${f.id}`, "_blank")} className="text-white/80 hover:text-emerald-400 transition-colors text-left">
                           {f.nome} <span className="text-white/40 text-xs">({f.cargo})</span>
                         </button>
-                        <button onClick={() => desvincularGabinete(f.id!, f.nome)} className="text-white/20 hover:text-red-400 transition-colors" title="Desvincular">
-                          <Unlink size={12} />
-                        </button>
+                        {isSuperOrMaster(userData) && (
+                          <button onClick={() => desvincularGabinete(f.id!, f.nome)} className="text-white/20 hover:text-red-400 transition-colors" title="Desvincular">
+                            <Unlink size={12} />
+                          </button>
+                        )}
                       </div>
                       <span className="text-white/50 text-xs">{totalFilhos} eleitores</span>
                     </div>
@@ -531,12 +533,14 @@ export default function PainelGabinetePage() {
           <GlassCard className="p-5">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-white font-semibold">Bases Políticas Vinculadas</h3>
-              <button
-                onClick={() => setShowVincular(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
-              >
-                <Plus size={14} /> Vincular
-              </button>
+              {isSuperOrMaster(userData) && (
+                <button
+                  onClick={() => setShowVincular(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-all"
+                >
+                  <Plus size={14} /> Vincular
+                </button>
+              )}
             </div>
             {gabinetesFilhos.length === 0 ? (
               <p className="text-sm text-white/30 italic">Nenhuma base vinculada. Clique em "Vincular" para adicionar prefeitos, vereadores ou outros gabinetes aliados.</p>
@@ -554,13 +558,13 @@ export default function PainelGabinetePage() {
           <GlassCard className="p-5">
             <h3 className="text-white font-semibold mb-3">Navegação Rápida</h3>
             <div className="space-y-2">
-              <Button onClick={() => window.open(`/eleitores?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Users size={14} /> Eleitores</Button>
-              <Button onClick={() => window.open(`/coordenadores?gabineteId=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Target size={14} /> Coordenadores</Button>
-              <Button onClick={() => window.open(`/colaboradores?gabineteId=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Zap size={14} /> Colaboradores</Button>
-              <Button onClick={() => window.open(`/metas?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><BarChart3 size={14} /> Metas</Button>
-              <Button onClick={() => window.open(`/relatorios?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Activity size={14} /> Relatórios</Button>
-              <Button onClick={() => window.open(`/candidatos?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Building2 size={14} /> Candidatos</Button>
-              <Button onClick={() => window.open(`/logs?gabinete=${id}`, "_blank")} className="w-full justify-start text-xs" variant="ghost"><Activity size={14} /> Logs</Button>
+              <Button onClick={() => router.push(`/eleitores?gabinete=${id}`)} className="w-full justify-start text-xs" variant="ghost"><Users size={14} /> Eleitores</Button>
+              <Button onClick={() => router.push(`/coordenadores?gabineteId=${id}`)} className="w-full justify-start text-xs" variant="ghost"><Target size={14} /> Coordenadores</Button>
+              <Button onClick={() => router.push(`/colaboradores?gabineteId=${id}`)} className="w-full justify-start text-xs" variant="ghost"><Zap size={14} /> Colaboradores</Button>
+              <Button onClick={() => router.push(`/metas?gabinete=${id}`)} className="w-full justify-start text-xs" variant="ghost"><BarChart3 size={14} /> Metas</Button>
+              <Button onClick={() => router.push(`/relatorios?gabinete=${id}`)} className="w-full justify-start text-xs" variant="ghost"><Activity size={14} /> Relatórios</Button>
+              <Button onClick={() => router.push(`/candidatos?gabinete=${id}`)} className="w-full justify-start text-xs" variant="ghost"><Building2 size={14} /> Candidatos</Button>
+              <Button onClick={() => router.push(`/logs?gabinete=${id}`)} className="w-full justify-start text-xs" variant="ghost"><Activity size={14} /> Logs</Button>
             </div>
           </GlassCard>
         </div>

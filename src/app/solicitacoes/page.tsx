@@ -203,7 +203,18 @@ export default function SolicitacoesPage() {
         <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-purple-500" /></div>
       ) : (
         <div className="space-y-4">
-          {solicitacoes.map((s) => (
+          {solicitacoes.filter(s => s.status === "pendente").length > 0 && (
+            <p className="text-xs font-semibold text-amber-400/70 uppercase tracking-wider px-1">
+              Aguardando aprovação ({solicitacoes.filter(s => s.status === "pendente").length})
+            </p>
+          )}
+          {[...solicitacoes.filter(s => s.status === "pendente"), ...solicitacoes.filter(s => s.status === "recusado")].map((s, idx, arr) => (
+            <div key={s.uid}>
+              {s.status === "recusado" && (idx === 0 || arr[idx - 1].status === "pendente") && (
+                <p className="text-xs font-semibold text-red-400/50 uppercase tracking-wider px-1 pt-2 pb-1 border-t border-white/[0.06]">
+                  Recusados ({solicitacoes.filter(x => x.status === "recusado").length})
+                </p>
+              )}
             <GlassCard key={s.uid} className="p-5">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4 flex-1 min-w-0">
@@ -281,6 +292,7 @@ export default function SolicitacoesPage() {
                 )}
               </div>
             </GlassCard>
+            </div>
           ))}
           {solicitacoes.length === 0 && (
             <EmptyState icon="✅" title="Nenhuma solicitação pendente" description="Todas as solicitações de colaboradores foram aprovadas ou recusadas" />

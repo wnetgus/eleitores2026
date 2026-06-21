@@ -117,6 +117,7 @@ export default function AssessoresPage() {
   const [modalCriarAssessoria, setModalCriarAssessoria] = useState(false);
   const [formAssessoria, setFormAssessoria] = useState({
     nomeAssessor: "",
+    municipio: "",
     metaInicial: 100,
     estrutura: { coordenadorRegional: true, nucleoUrbano: true, nucleoRural: false, liderancas: false },
   });
@@ -322,16 +323,17 @@ export default function AssessoresPage() {
 
   async function salvarAssessoria() {
     if (!podeGerenciar) { toast.error("Ação restrita ao Assessor Executivo."); return; }
+    const municipioFinal = (formAssessoria.municipio.trim() || cidadeParam || "").trim();
     if (!formAssessoria.nomeAssessor.trim()) {
       toast.error("Informe o nome do assessor responsável."); return;
     }
-    if (!cidadeParam) { toast.error("Município não identificado."); return; }
+    if (!municipioFinal) { toast.error("Informe o município da assessoria."); return; }
     setSalvandoAssessoria(true);
     try {
       await addDoc(collection(db, "assessorias"), {
-        municipio: cidadeParam,
+        municipio: municipioFinal,
         campanhaId: userData?.campanhaId || userData?.gabineteId || "",
-        assessorId: userData?.uid ?? "",
+        assessorId: "",
         assessorNome: formAssessoria.nomeAssessor.trim(),
         metaInicial: formAssessoria.metaInicial,
         status: "ativa",
@@ -339,20 +341,21 @@ export default function AssessoresPage() {
         criadoEm: new Date(),
         criadoPor: userData?.uid ?? "",
       });
-      toast.success(`Assessoria de ${cidadeParam} criada com sucesso!`);
+      toast.success(`Assessoria de ${municipioFinal} criada com sucesso!`);
       await registrarMemoriaAutomatica({
         campanhaId: userData?.campanhaId || userData?.gabineteId || "",
         tipo: "expansao",
-        titulo: `Assessoria criada em ${cidadeParam}`,
-        descricao: `Assessoria regional estabelecida em ${cidadeParam} por ${formAssessoria.nomeAssessor.trim()}.`,
+        titulo: `Assessoria criada em ${municipioFinal}`,
+        descricao: `Assessoria regional estabelecida em ${municipioFinal} por ${formAssessoria.nomeAssessor.trim()}.`,
         prioridade: "media",
         status: "aberto",
-        cidade: cidadeParam ?? undefined,
+        cidade: municipioFinal,
         responsavelId: userData?.uid,
         responsavelNome: userData?.nome,
       });
       setModalCriarAssessoria(false);
-      router.push("/dashboard");
+      setFormAssessoria({ nomeAssessor: "", municipio: "", metaInicial: 100, estrutura: { coordenadorRegional: true, nucleoUrbano: true, nucleoRural: false, liderancas: false } });
+      await loadAssessores();
     } catch (err) {
       console.error(err);
       toast.error("Erro ao salvar. Tente novamente.");
@@ -378,6 +381,14 @@ export default function AssessoresPage() {
               {bracosAtivos > 0 && ` · ${bracosAtivos} com atividade nos últimos 30 dias`}
             </p>
           </div>
+          {podeGerenciar && (
+            <button
+              onClick={() => setModalCriarAssessoria(true)}
+              className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-400 text-xs font-semibold border border-emerald-500/30 hover:bg-emerald-500/30 transition-colors"
+            >
+              + Nova Assessoria
+            </button>
+          )}
           <BuscaGlobal userData={userData} />
         </div>
 
@@ -409,12 +420,21 @@ export default function AssessoresPage() {
               {/* Seção 2 — Município */}
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-white/40 uppercase tracking-wider">Município</p>
-                <input
-                  disabled
-                  value={cidadeParam ?? ""}
-                  readOnly
-                  className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white/50 cursor-not-allowed"
-                />
+                {cidadeParam ? (
+                  <input
+                    disabled
+                    value={cidadeParam}
+                    readOnly
+                    className="w-full bg-white/[0.03] border border-white/[0.07] rounded-xl px-3 py-2.5 text-sm text-white/50 cursor-not-allowed"
+                  />
+                ) : (
+                  <input
+                    value={formAssessoria.municipio}
+                    onChange={(e) => setFormAssessoria((f) => ({ ...f, municipio: e.target.value }))}
+                    placeholder="Ex: Petrolina"
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/25 focus:outline-none focus:border-emerald-500/50 transition-colors"
+                  />
+                )}
               </div>
 
               {/* Seção 3 — Meta Inicial */}

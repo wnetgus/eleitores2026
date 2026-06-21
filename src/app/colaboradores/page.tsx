@@ -473,7 +473,7 @@ export default function ColaboradoresPage() {
                 label="Coordenador Responsável *"
                 value={form.coordenadorId}
                 onChange={(e) => setForm({ ...form, coordenadorId: e.target.value })}
-                options={[{ value: "", label: "Selecione o coordenador..." }, ...coordenadoresDisponiveis.map((c) => ({ value: c.uid, label: c.nome }))]}
+                options={[{ value: "", label: "Selecione o coordenador..." }, ...[...coordenadoresDisponiveis].sort((a, b) => (a.assessorId || "").localeCompare(b.assessorId || "") || a.nome.localeCompare(b.nome)).map((c) => ({ value: c.uid, label: assessorNomeMap[c.assessorId || ""] ? `${c.nome} · ${assessorNomeMap[c.assessorId || ""]}` : c.nome }))]}
               />
             )}
             <Input label="Nome Completo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do colaborador" />

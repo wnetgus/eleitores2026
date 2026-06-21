@@ -649,7 +649,11 @@ export default function RelatoriosPage() {
         <div className="flex items-center gap-2"><Button variant="secondary" onClick={exportExcelPremiumAction}><FileSpreadsheet size={16} /> Excel Premium</Button><Button variant="secondary" onClick={exportPDFPremiumAction}><FileText size={16} /> PDF Premium</Button></div>
       </div>
       <GlassCard className="p-5">
-        <div className="flex items-center gap-2 mb-4"><Filter size={18} className="text-emerald-400" /><h3 className="text-white font-semibold">Filtros</h3></div>
+        <div className="flex items-center gap-2 mb-4">
+          <Filter size={18} className="text-emerald-400" />
+          <h3 className="text-white font-semibold">Filtros</h3>
+          {(() => { const n = [filtros.estado, filtros.cidade, filtros.bairro, filtros.grauApoio, filtros.dataInicio, filtros.dataFim, filtros.search, grauPill].filter(Boolean).length; return n > 0 ? <span className="ml-auto flex items-center gap-2"><span className="text-xs text-white/40">{n} ativo{n > 1 ? "s" : ""}</span><button onClick={() => { setFiltros({ estado: "", cidade: "", bairro: "", grauApoio: "", dataInicio: "", dataFim: "", search: "", colaboradorId: "" }); setGrauPill(""); }} className="text-xs text-white/30 hover:text-white/60 underline transition-colors">Limpar</button></span> : null; })()}
+        </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {!isAssessor(userData) && !isCoordenador(userData) && (
             <Select value={filtros.estado} onChange={(e) => setFiltros({ ...filtros, estado: e.target.value, cidade: "", bairro: "" })} options={estadoOptions} label="Estado" />
@@ -913,7 +917,7 @@ export default function RelatoriosPage() {
           { key: "medio",    label: "Médios",   count: contagens.medio,    cor: "text-amber-400",   ativo: "bg-amber-500/15 text-amber-400 border-amber-500/30" },
           { key: "indeciso", label: "Indecisos",count: contagens.indeciso, cor: "text-blue-400",    ativo: "bg-blue-500/15 text-blue-400 border-blue-500/30" },
           { key: "fraco",    label: "Fracos",   count: contagens.fraco,    cor: "text-red-400",     ativo: "bg-red-500/15 text-red-400 border-red-500/30" },
-          { key: "recente",  label: "Recentes", count: contagens.recente,  cor: "text-violet-400",  ativo: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
+          { key: "recente",  label: "Recentes (7d)", count: contagens.recente,  cor: "text-violet-400",  ativo: "bg-violet-500/15 text-violet-400 border-violet-500/30" },
         ] as const;
         return (
           <div className="flex items-center gap-2 flex-wrap">
