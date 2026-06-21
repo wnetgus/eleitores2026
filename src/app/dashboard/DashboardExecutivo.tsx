@@ -365,7 +365,7 @@ export function DashboardExecutivo({ userData }: Props) {
               missaoStats.atrasadas > 0 && {
                 urgente: true,
                 icone: "⚡",
-                label: `${missaoStats.atrasadas} missão${missaoStats.atrasadas > 1 ? "ões" : ""} atrasada${missaoStats.atrasadas > 1 ? "s" : ""}`,
+                label: `${missaoStats.atrasadas} ${missaoStats.atrasadas > 1 ? "missões" : "missão"} atrasada${missaoStats.atrasadas > 1 ? "s" : ""}`,
                 sub: "Mais de 7 dias sem conclusão",
                 href: "/missoes",
               },
@@ -379,7 +379,7 @@ export function DashboardExecutivo({ userData }: Props) {
               missaoStats.pendentes > 0 && {
                 urgente: false,
                 icone: "🎯",
-                label: `${missaoStats.pendentes} missão${missaoStats.pendentes > 1 ? "ões" : ""} aguardando início`,
+                label: `${missaoStats.pendentes} ${missaoStats.pendentes > 1 ? "missões" : "missão"} aguardando início`,
                 sub: "Pendentes de aceite pelos assessores",
                 href: "/missoes",
               },
@@ -707,10 +707,24 @@ export function DashboardExecutivo({ userData }: Props) {
                   };
                   const handleAbrirMissao = () => {
                     const prioMap: Record<string, string> = { "Alta": "P1", "Media": "P2", "Baixa": "P3" };
+                    const assuntoLower = (det.assunto || "").toLowerCase();
+                    const tipo =
+                      assuntoLower.includes("recuperar") || assuntoLower.includes("base") || assuntoLower.includes("fortalecer") || assuntoLower.includes("indeciso")
+                        ? "fortalecer_base"
+                        : assuntoLower.includes("expandir") || assuntoLower.includes("território") || assuntoLower.includes("territorio")
+                        ? "expandir_territorio"
+                        : assuntoLower.includes("assessoria") || assuntoLower.includes("assessor")
+                        ? "criar_assessoria"
+                        : assuntoLower.includes("coordenação") || assuntoLower.includes("coordenacao") || assuntoLower.includes("coordenador")
+                        ? "criar_coordenacao"
+                        : assuntoLower.includes("reestruturar") || assuntoLower.includes("região") || assuntoLower.includes("regiao")
+                        ? "reestruturar_regiao"
+                        : "fortalecer_base";
                     const cidade = (det.municipios?.[0] || "").trim();
                     const params = new URLSearchParams({
-                      acao:      "nova",
+                      acao:       "nova",
                       cidade,
+                      tipo,
                       prioridade: prioMap[det.prioridade] || "P1",
                       descricao:  det.assunto || "",
                     });

@@ -61,6 +61,17 @@ export default function DashboardPage() {
   const [determinacoes, setDeterminacoes] = useState<any[]>([]);
   const [abaDeterminacao, setAbaDeterminacao] = useState<"pendente" | "em_andamento" | "concluida">("pendente");
 
+  // Auto-switch para a tab com conteúdo quando a ativa fica vazia
+  useEffect(() => {
+    if (!determinacoes.length) return;
+    const counts = { pendente: 0, em_andamento: 0, concluida: 0 } as Record<string, number>;
+    determinacoes.forEach((d) => { if (d.status in counts) counts[d.status]++; });
+    if (counts[abaDeterminacao] === 0) {
+      if (counts.em_andamento > 0) setAbaDeterminacao("em_andamento");
+      else if (counts.concluida > 0) setAbaDeterminacao("concluida");
+    }
+  }, [determinacoes]);
+
   useEffect(() => {
     async function load() {
       try {
@@ -2657,17 +2668,25 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="flex gap-1">
-              {(["pendente", "em_andamento", "concluida"] as const).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setAbaDeterminacao(s)}
-                  className={`text-[11px] px-2.5 py-1 rounded-lg transition-all ${
-                    abaDeterminacao === s ? "bg-violet-500/20 text-violet-300" : "text-white/30 hover:text-white/50"
-                  }`}
-                >
-                  {s === "pendente" ? "Pendentes" : s === "em_andamento" ? "Em andamento" : "Concluídas"}
-                </button>
-              ))}
+              {(["pendente", "em_andamento", "concluida"] as const).map((s) => {
+                const cnt = determinacoes.filter((d) => d.status === s).length;
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setAbaDeterminacao(s)}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 ${
+                      abaDeterminacao === s ? "bg-violet-500/20 text-violet-300" : "text-white/30 hover:text-white/50"
+                    }`}
+                  >
+                    {s === "pendente" ? "Pendentes" : s === "em_andamento" ? "Em andamento" : "Concluídas"}
+                    {cnt > 0 && (
+                      <span className={`text-[9px] px-1 rounded-full ${abaDeterminacao === s ? "bg-violet-500/30 text-violet-200" : "bg-white/10 text-white/40"}`}>
+                        {cnt}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -2715,8 +2734,27 @@ export default function DashboardPage() {
                           "bg-white/5 text-white/30"
                         }`}>{det.prioridade}</span>
                       </div>
-                      {det.status === "concluida" && det.resultado && (
-                        <p className="text-[11px] text-emerald-400/70 mt-1.5 line-clamp-2">{det.resultado}</p>
+                      {det.status === "concluida" && (
+                        <div className="mt-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
+                          <p className="text-[10px] font-semibold text-emerald-400/60 uppercase tracking-wider mb-2">Prestação de Contas</p>
+                          {(det.conclusaoItems as string[] | undefined)?.filter(Boolean).map((item, i) => (
+                            <p key={i} className="text-[11px] text-emerald-300/75 flex items-start gap-1.5 mb-1">
+                              <span className="text-emerald-500/60 shrink-0 mt-px">✓</span>{item}
+                            </p>
+                          ))}
+                          {det.resultado && <p className="text-[11px] text-white/45 mt-2 italic">{det.resultado}</p>}
+                          <div className="flex items-center gap-3 mt-2 flex-wrap">
+                            {det.destinatarioNome && (
+                              <span className="text-[10px] text-white/30">Por: <span className="text-white/50">{det.destinatarioNome}</span></span>
+                            )}
+                            {det.tempoExecucaoDias != null && (
+                              <span className="text-[10px] text-emerald-400/60">Concluído em {det.tempoExecucaoDias}d</span>
+                            )}
+                            {det.concluidoEm?.toDate && (
+                              <span className="text-[10px] text-white/25">{det.concluidoEm.toDate().toLocaleDateString("pt-BR")}</span>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>
