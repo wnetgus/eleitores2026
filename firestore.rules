@@ -65,20 +65,15 @@ service cloud.firestore {
       );
       allow create: if isAuth() && (
         isAdmin() ||
-        request.auth.uid == uid ||
+        // coordenador solicita colaborador pendente (aprovado via assessor/solicitacoes)
         (
           me().get("role", "") == "coordenador" &&
           request.resource.data.get("status", "") == "pendente" &&
           request.resource.data.get("coordenadorId", "") == request.auth.uid &&
           request.resource.data.get("campanhaId", "") == myCampanha()
-        ) ||
-        // assessor_executivo pode criar assessores scoped à própria campanha
-        (
-          me().get("role", "") == "assessor_executivo" &&
-          request.resource.data.get("role", "") in ["assessor", "coordenador"] &&
-          request.resource.data.get("campanhaId", "") == myCampanha() &&
-          request.resource.data.get("campanhaId", "") != ""
         )
+        // Criação de usuários Auth (assessor, coordenador, colaborador) ocorre server-side
+        // via /api/admin/create-user usando Admin SDK — sem regra de client necessária.
       );
       allow update: if isAuth() && (
         (request.auth.uid == uid &&

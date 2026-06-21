@@ -3,10 +3,8 @@ import {
   getAuth,
   browserSessionPersistence,
   setPersistence,
-  inMemoryPersistence,
-  createUserWithEmailAndPassword,
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -31,28 +29,39 @@ if (typeof window !== "undefined" &&
   setPersistence(auth, browserSessionPersistence).catch(() => {});
 }
 
-// Creates a Firebase Auth account and writes the user document without switching the
-// current session. Uses a secondary Firebase App with in-memory persistence so the
-// main app's onAuthStateChanged is never triggered by the new account.
+// Creates a Firebase Auth account server-side via Admin SDK, keeping the current
+// session intact. The caller's ID token is forwarded so the API route can enforce
+// role-based permission checks.
 export async function createAuthUser(
   email: string,
   password: string,
   dados: Record<string, any>
 ): Promise<string> {
-  const secondaryApp =
-    getApps().find((a) => a.name === "secondary") ??
-    initializeApp(firebaseConfig, "secondary");
-  const secondaryAuth = getAuth(secondaryApp);
-  const secondaryDb = getFirestore(secondaryApp);
-  await setPersistence(secondaryAuth, inMemoryPersistence);
-  const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-  await setDoc(doc(secondaryDb, "usuarios", cred.user.uid), {
-    criadoEm: serverTimestamp(),
-    ...dados,
-    uid: cred.user.uid,
+  const token = await auth.currentUser?.getIdToken();
+  if (!token) throw new Error("Sessão expirada — faça login novamente");
+
+  const res = await fetch("/api/admin/create-user", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ email, password, dados }),
   });
-  await secondaryAuth.signOut();
-  return cred.user.uid;
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const msg: string = body.error ?? `Erro ${res.status}`;
+    if (res.status === 409) {
+      const err: any = new Error(msg);
+      err.code = "auth/email-already-in-use";
+      throw err;
+    }
+    throw new Error(msg);
+  }
+
+  const { uid } = await res.json();
+  return uid as string;
 }
 
 export { app, auth, db };
