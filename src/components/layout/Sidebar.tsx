@@ -118,9 +118,9 @@ const assessorMenu = [
 const coordenadorMenu = [
   { href: "/dashboard", label: "Dashboard", icon: Target },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
-  { href: "/eleitores", label: "Eleitores", icon: Users },
+  { href: "/eleitores", label: "Eleitores", icon: TrendingUp },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
-  { href: "/metas", label: "Metas", icon: TrendingUp },
+  { href: "/metas", label: "Metas", icon: Flag },
 ];
 
 const colaboradorMenu = [

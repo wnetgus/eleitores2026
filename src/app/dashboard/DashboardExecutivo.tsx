@@ -302,7 +302,7 @@ export function DashboardExecutivo({ userData }: Props) {
               <div className="flex items-center gap-2 mb-1">
                 <Crown size={16} className="text-violet-400" />
                 <span className="text-[11px] font-semibold text-violet-400 uppercase tracking-wider">
-                  Chefe de Gabinete
+                  Assessor Executivo
                 </span>
               </div>
               <h1 className="text-2xl font-bold text-white">{userData.nome}</h1>
