@@ -42,11 +42,6 @@ export default function SolicitacoesPage() {
   const [recusaMotivo, setRecusaMotivo] = useState("");
   const [recusaJustificativa, setRecusaJustificativa] = useState("");
 
-  useEffect(() => {
-    if (userData && !isSuperOrMaster(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
-    load();
-  }, [userData]);
-
   async function load() {
     if (!userData) return;
     try {
@@ -119,6 +114,11 @@ export default function SolicitacoesPage() {
       }
     } catch (e) { console.error(e); } finally { setLoading(false); }
   }
+
+  useEffect(() => {
+    if (userData && !isSuperOrMaster(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
+    load();
+  }, [userData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAprovar(s: AppUser) {
     setProcessingId(s.uid);

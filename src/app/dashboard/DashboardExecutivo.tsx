@@ -63,15 +63,6 @@ export function DashboardExecutivo({ userData }: Props) {
 
   const campanhaId = userData.campanhaId || userData.gabineteId || "";
 
-  useEffect(() => {
-    if (!campanhaId) { setLoading(false); return; }
-    loadAll();
-    // Revalida ao voltar para esta aba — dados nunca ficam obsoletos
-    const onVisible = () => { if (document.visibilityState === "visible") loadAll(); };
-    document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
-  }, [campanhaId]);
-
   async function loadAll() {
     setLoading(true);
     try {
@@ -114,6 +105,15 @@ export function DashboardExecutivo({ userData }: Props) {
       setLoading(false);
     }
   }
+
+  useEffect(() => {
+    if (!campanhaId) { setLoading(false); return; }
+    loadAll();
+    // Revalida ao voltar para esta aba — dados nunca ficam obsoletos
+    const onVisible = () => { if (document.visibilityState === "visible") loadAll(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [campanhaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── KPIs de Missões ──────────────────────────────────────────────────────────
 
