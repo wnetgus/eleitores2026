@@ -177,7 +177,7 @@ export default function EleitoresPage() {
         return;
       }
       if (isAssessor(userData)) {
-        const q = query(collection(db, "eleitores"), where("campanhaId", "==", userData!.campanhaId), where("assessorId", "==", userData!.uid), orderBy("criadoEm", "desc"));
+        const q = query(collection(db, "eleitores"), where("campanhaId", "==", userData!.campanhaId), orderBy("criadoEm", "desc"));
         const snap = await getDocs(q);
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
         return;
