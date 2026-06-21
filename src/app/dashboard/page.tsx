@@ -40,6 +40,7 @@ export default function DashboardPage() {
   const [filtroEstado, setFiltroEstado] = useState("");
   const [filtroCidade, setFiltroCidade] = useState("");
   const [filtroBairro, setFiltroBairro] = useState("");
+  const [filtroAssessorId, setFiltroAssessorId] = useState("");
   const [loading, setLoading] = useState(true);
   const [gabinetes, setGabinetes] = useState<any[]>([]);
   const [solicitacoesPendentes, setSolicitacoesPendentes] = useState(0);
@@ -242,6 +243,13 @@ export default function DashboardPage() {
     }));
   }, [eleitores, assessoriasCriadas, coordenacoesCriadas, usuarios, userData]);
 
+  const coordsDoAssessorFiltro = useMemo(() => {
+    if (!filtroAssessorId) return null;
+    return new Set(
+      usuarios.filter((u) => u.role === "coordenador" && (u as any).assessorId === filtroAssessorId).map((u) => u.uid)
+    );
+  }, [filtroAssessorId, usuarios]);
+
   if (!userData) return null;
 
   // Assessor Executivo tem dashboard próprio — não usa o fluxo genérico abaixo
@@ -255,8 +263,11 @@ export default function DashboardPage() {
     if (filtroEstado && e.estado !== filtroEstado) return false;
     if (filtroCidade && e.cidade !== filtroCidade) return false;
     if (filtroBairro && e.bairro !== filtroBairro) return false;
+    if (coordsDoAssessorFiltro && (!e.coordenadorId || !coordsDoAssessorFiltro.has(e.coordenadorId))) return false;
     return true;
   });
+
+  const assessoresParaFiltro = isPolitico(userData) ? usuarios.filter((u) => u.role === "assessor") : [];
 
   const hoje = new Date().toLocaleDateString("pt-BR");
   const cadastrosHoje = eleitoresFiltrados.filter((e) => parseDate(e.criadoEm).toLocaleDateString("pt-BR") === hoje);
@@ -301,11 +312,14 @@ export default function DashboardPage() {
   const estados = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => { acc[e.estado] = (acc[e.estado] || 0) + 1; return acc; }, {});
   const estadosArray = Object.entries(estados).map(([estado, total]) => ({ estado, total })).sort((a, b) => b.total - a.total);
 
-  // Listas para filtros (selects dependentes em cascata: estado → cidade → bairro)
-  const estadosDisponiveis = [...new Set(eleitores.map((e) => e.estado).filter(Boolean))].sort();
-  const eleitoresBaseCidade = filtroEstado ? eleitores.filter((e) => e.estado === filtroEstado) : eleitores;
+  // Listas para filtros (selects dependentes em cascata: assessor → estado → cidade → bairro)
+  const eleitoresBaseAssessor = filtroAssessorId && coordsDoAssessorFiltro
+    ? eleitores.filter((e) => e.coordenadorId && coordsDoAssessorFiltro.has(e.coordenadorId))
+    : eleitores;
+  const estadosDisponiveis = [...new Set(eleitoresBaseAssessor.map((e) => e.estado).filter(Boolean))].sort();
+  const eleitoresBaseCidade = filtroEstado ? eleitoresBaseAssessor.filter((e) => e.estado === filtroEstado) : eleitoresBaseAssessor;
   const cidadesDisponiveis = [...new Set(eleitoresBaseCidade.map((e) => e.cidade).filter(Boolean))].sort();
-  const eleitoresBaseBairro = filtroCidade ? eleitores.filter((e) => e.cidade === filtroCidade) : filtroEstado ? eleitores.filter((e) => e.estado === filtroEstado) : eleitores;
+  const eleitoresBaseBairro = filtroCidade ? eleitoresBaseAssessor.filter((e) => e.cidade === filtroCidade) : filtroEstado ? eleitoresBaseAssessor.filter((e) => e.estado === filtroEstado) : eleitoresBaseAssessor;
   const bairrosDisponiveis = [...new Set(eleitoresBaseBairro.map((e) => e.bairro).filter(Boolean))];
 
   const dias = eleitoresFiltrados.reduce<Record<string, number>>((acc, e) => {
@@ -912,6 +926,93 @@ export default function DashboardPage() {
             <p className="text-sm text-white/80 font-medium">{userData.nome}</p>
             <p className={`text-xs ${roleInfo.text}`}>{roleInfo.label}</p>
           </div>
+        </div>
+      )}
+
+      {/* FILTROS TERRITORIAIS AVANÇADOS — exclusivo deputado */}
+      {isPolitico(userData) && (estadosDisponiveis.length > 0 || assessoresParaFiltro.length > 0) && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <Filter size={14} className="text-white/30 shrink-0" />
+            {assessoresParaFiltro.length > 0 && (
+              <Select
+                label="Assessor"
+                value={filtroAssessorId}
+                onChange={(e) => { setFiltroAssessorId(e.target.value); setFiltroEstado(""); setFiltroCidade(""); setFiltroBairro(""); }}
+                options={[{ value: "", label: "Todos os assessores" }, ...assessoresParaFiltro.map((a) => ({ value: a.uid, label: a.nome }))]}
+              />
+            )}
+            {estadosDisponiveis.length > 0 && (
+              <Select
+                label="Estado"
+                value={filtroEstado}
+                onChange={(e) => { setFiltroEstado(e.target.value); setFiltroCidade(""); setFiltroBairro(""); }}
+                options={[{ value: "", label: "Todos os estados" }, ...estadosDisponiveis.map((s) => ({ value: s, label: s }))]}
+              />
+            )}
+            {cidadesDisponiveis.length > 0 && (
+              <Select
+                label="Cidade"
+                value={filtroCidade}
+                onChange={(e) => { setFiltroCidade(e.target.value); setFiltroBairro(""); }}
+                options={[{ value: "", label: "Todas as cidades" }, ...cidadesDisponiveis.map((c) => ({ value: c, label: c }))]}
+              />
+            )}
+            {bairrosDisponiveis.length > 0 && (
+              <Select
+                label="Bairro"
+                value={filtroBairro}
+                onChange={(e) => setFiltroBairro(e.target.value)}
+                options={[{ value: "", label: "Todos os bairros" }, ...bairrosDisponiveis.map((b) => ({ value: b, label: b }))]}
+              />
+            )}
+          </div>
+          {(filtroAssessorId || filtroEstado || filtroCidade || filtroBairro) && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[10px] text-white/25 uppercase tracking-wider">Filtrando:</span>
+              {filtroAssessorId && (() => {
+                const a = assessoresParaFiltro.find((x) => x.uid === filtroAssessorId);
+                return a ? (
+                  <button
+                    onClick={() => setFiltroAssessorId("")}
+                    className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-all"
+                  >
+                    {a.nome} ×
+                  </button>
+                ) : null;
+              })()}
+              {filtroEstado && (
+                <button
+                  onClick={() => { setFiltroEstado(""); setFiltroCidade(""); setFiltroBairro(""); }}
+                  className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/25 hover:bg-blue-500/25 transition-all"
+                >
+                  {filtroEstado} ×
+                </button>
+              )}
+              {filtroCidade && (
+                <button
+                  onClick={() => { setFiltroCidade(""); setFiltroBairro(""); }}
+                  className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 transition-all"
+                >
+                  {filtroCidade} ×
+                </button>
+              )}
+              {filtroBairro && (
+                <button
+                  onClick={() => setFiltroBairro("")}
+                  className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 transition-all"
+                >
+                  {filtroBairro} ×
+                </button>
+              )}
+              <button
+                onClick={() => { setFiltroAssessorId(""); setFiltroEstado(""); setFiltroCidade(""); setFiltroBairro(""); }}
+                className="text-[10px] text-white/25 hover:text-white/50 transition-colors ml-1"
+              >
+                Limpar todos
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1737,11 +1838,11 @@ export default function DashboardPage() {
         </>
       )}
 
-      {/* FILTROS TERRITORIAIS */}
-      {(isSuperOrMaster(userData) || isPolitico(userData) || isPrefeito(userData) || isAssessor(userData)) && (estadosDisponiveis.length > 0 || bairrosDisponiveis.length > 0) && (
+      {/* FILTROS TERRITORIAIS — super_admin, prefeito, assessor (deputado tem bloco próprio acima) */}
+      {(isSuperOrMaster(userData) || isPrefeito(userData) || isAssessor(userData)) && (estadosDisponiveis.length > 0 || bairrosDisponiveis.length > 0) && (
         <div className="flex items-center gap-3 flex-wrap">
           <Filter size={16} className="text-white/30" />
-          {(isSuperOrMaster(userData) || isPolitico(userData)) && estadosDisponiveis.length > 0 && (
+          {isSuperOrMaster(userData) && estadosDisponiveis.length > 0 && (
             <Select
               label="Estado"
               value={filtroEstado}
@@ -1749,7 +1850,7 @@ export default function DashboardPage() {
               options={[{ value: "", label: "Todos os estados" }, ...estadosDisponiveis.map((s) => ({ value: s, label: s }))]}
             />
           )}
-          {(isSuperOrMaster(userData) || isPolitico(userData) || isAssessor(userData)) && cidadesDisponiveis.length > 0 && (
+          {(isSuperOrMaster(userData) || isAssessor(userData)) && cidadesDisponiveis.length > 0 && (
             <Select
               label="Cidade"
               value={filtroCidade}
@@ -1757,7 +1858,7 @@ export default function DashboardPage() {
               options={[{ value: "", label: "Todas as cidades" }, ...cidadesDisponiveis.map((c) => ({ value: c, label: c }))]}
             />
           )}
-          {(isPrefeito(userData) || isPolitico(userData) || isAssessor(userData)) && bairrosDisponiveis.length > 0 && (
+          {(isPrefeito(userData) || isAssessor(userData)) && bairrosDisponiveis.length > 0 && (
             <Select
               label="Bairro"
               value={filtroBairro}
@@ -2308,6 +2409,9 @@ export default function DashboardPage() {
                   </GlassCard>
                 ))
               : (estadosArray.length > 0 && <ApoiadoresPorEstado data={estadosArray} />)}
+            {isPolitico(userData) && cidadesArray.length > 0 && (
+              <ApoiadoresPorCidade data={cidadesArray.slice(0, 10)} />
+            )}
             {isPolitico(userData) && crescimentoTerritorial.length > 0 && (
               <GlassCard className="p-5">
                 <div className="flex items-center gap-2 mb-5">

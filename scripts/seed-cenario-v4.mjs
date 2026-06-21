@@ -59,7 +59,7 @@ const SENHA         = "111111";
 const SUPER_EMAIL   = "wnetgus@gmail.com";
 const CAMPANHA_ID   = "5Y0Xi6Z1p9KvJiEqQODM";
 const DEPUTADO_UID  = "SpIqJLGEgwSr1PHYcQ4KGchSjGn1";
-const DEPUTADO_NOME = "Ricardo Alves";
+const DEPUTADO_NOME = "Ricardo Fonseca";
 const IS_RESET      = process.argv.includes("--reset");
 
 const C = {
