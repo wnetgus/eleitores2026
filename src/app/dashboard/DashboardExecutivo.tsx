@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc, limit } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, type DocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { AppUser, Missao } from "@/types";
 import { Eleitor } from "@/types";
@@ -34,6 +34,22 @@ interface AssessorStats {
   ativo: boolean;
 }
 
+async function loadAllEleitores(campanhaId: string): Promise<Eleitor[]> {
+  const PAGE = 500;
+  const todos: Eleitor[] = [];
+  let cursor: DocumentSnapshot | undefined;
+  while (true) {
+    const q = cursor
+      ? query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), orderBy("criadoEm"), startAfter(cursor), limit(PAGE))
+      : query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), orderBy("criadoEm"), limit(PAGE));
+    const snap = await getDocs(q);
+    todos.push(...snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+    if (snap.size < PAGE) break;
+    cursor = snap.docs[snap.docs.length - 1];
+  }
+  return todos;
+}
+
 export function DashboardExecutivo({ userData }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -64,7 +80,7 @@ export function DashboardExecutivo({ userData }: Props) {
           getDocs(query(collection(db, "usuarios"), where("role", "==", "assessor"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "coordenador"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", campanhaId))),
-          getDocs(query(collection(db, "eleitores"), where("campanhaId", "==", campanhaId), limit(1000))),
+          loadAllEleitores(campanhaId),
           getDocs(query(collection(db, "missoes"), where("campanhaId", "==", campanhaId))),
           getDocs(query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("campanhaId", "==", campanhaId), where("status", "==", "pendente"))),
           getDoc(doc(db, "campanhas", campanhaId)),
@@ -85,7 +101,7 @@ export function DashboardExecutivo({ userData }: Props) {
       if (colabSnap.status === "fulfilled")
         setColaboradores(colabSnap.value.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
       if (eletSnap.status === "fulfilled")
-        setEleitores(eletSnap.value.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+        setEleitores(eletSnap.value);
       if (missoesSnap.status === "fulfilled")
         setMissoes(missoesSnap.value.docs.map((d) => ({ id: d.id, ...d.data() } as Missao)));
       if (solSnap.status === "fulfilled")
