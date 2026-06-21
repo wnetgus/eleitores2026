@@ -101,6 +101,7 @@ const vereadorMenu = [
 
 const assessorMenu = [
   { href: "/dashboard", label: "Painel Regional", icon: Crown },
+  { href: "/missoes", label: "Minhas Missões", icon: Zap },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
   { href: "/solicitacoes", label: "Solicitações", icon: Clock },
   { href: "/assessores", label: "Assessores", icon: Shield },
