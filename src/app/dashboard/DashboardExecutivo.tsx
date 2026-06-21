@@ -706,7 +706,14 @@ export function DashboardExecutivo({ userData }: Props) {
                     } catch (e) { toast.error("Erro ao aceitar"); console.error(e); }
                   };
                   const handleAbrirMissao = () => {
-                    const params = new URLSearchParams({ assunto: det.assunto, municipios: (det.municipios ?? []).join(","), prioridade: det.prioridade ?? "Alta" });
+                    const prioMap: Record<string, string> = { "Alta": "P1", "Media": "P2", "Baixa": "P3" };
+                    const cidade = (det.municipios?.[0] || "").trim();
+                    const params = new URLSearchParams({
+                      acao:      "nova",
+                      cidade,
+                      prioridade: prioMap[det.prioridade] || "P1",
+                      descricao:  det.assunto || "",
+                    });
                     window.location.href = `/missoes?${params.toString()}`;
                   };
                   return (
@@ -783,7 +790,7 @@ export function DashboardExecutivo({ userData }: Props) {
 
       {/* MODAL PRESTAÇÃO DE CONTAS — P5 Sprint 20 */}
       {modalConcluir && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalConcluir(null)}>
+        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalConcluir(null)}>
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
@@ -805,7 +812,7 @@ export function DashboardExecutivo({ userData }: Props) {
                       type="text"
                       value={item}
                       onChange={(e) => setConclusaoForm((f) => { const items = [...f.items]; items[i] = e.target.value; return { ...f, items }; })}
-                      className="flex-1 bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-emerald-500/40 placeholder-white/20"
+                      className="flex-1 bg-white/4 border border-white/8 rounded-xl px-3 py-2 text-sm text-white/80 focus:outline-none focus:border-emerald-500/40 placeholder-white/20"
                       placeholder={`Ação concluída ${i + 1}...`}
                     />
                   </div>
@@ -819,7 +826,7 @@ export function DashboardExecutivo({ userData }: Props) {
                 rows={2}
                 value={conclusaoForm.resultado}
                 onChange={(e) => setConclusaoForm((f) => ({ ...f, resultado: e.target.value }))}
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-emerald-500/40 placeholder-white/20 resize-none"
+                className="w-full bg-white/4 border border-white/8 rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-emerald-500/40 placeholder-white/20 resize-none"
                 placeholder="Resumo do que foi entregue..."
               />
             </div>

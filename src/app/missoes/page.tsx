@@ -595,11 +595,13 @@ export default function MissoesPage() {
         const tipo = params.get("tipo") as MissaoTipo | null;
         const cidade = params.get("cidade") || "";
         const prioridade = params.get("prioridade") as "P1" | "P2" | "P3" | null;
+        const descricao = params.get("descricao") || "";
         setForm((f) => ({
           ...f,
           ...(tipo && Object.keys(TIPO_CONFIG).includes(tipo) ? { tipo } : {}),
           ...(cidade ? { cidade } : {}),
           ...(prioridade && ["P1", "P2", "P3"].includes(prioridade) ? { prioridade } : {}),
+          ...(descricao ? { descricao } : {}),
         }));
         setModalCriar(true);
       }

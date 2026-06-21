@@ -2764,7 +2764,7 @@ export default function DashboardPage() {
           }
         };
         return (
-          <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDeterminacao(null)}>
+          <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDeterminacao(null)}>
             <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
               {/* Cabeçalho */}
               <div className="flex items-center gap-3">
