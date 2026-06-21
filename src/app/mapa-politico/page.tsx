@@ -113,9 +113,9 @@ function ViewForcaTerritorial({
     tipo: "assessor" | "coordenador";
     assessorDaCidade: AppUser | null;
   } | null>(null);
-  const [modoDelegacao, setModoDelegacao] = useState<"selecionar" | "criar">("selecionar");
+  const [modoDelegacao, setModoDelegacao] = useState<"selecionar" | "criar" | "missao">("selecionar");
   const [selectedUid, setSelectedUid] = useState("");
-  const [delegacaoForm, setDelegacaoForm] = useState({ nome: "", email: "", telefone: "", senha: "111111" });
+  const [delegacaoForm, setDelegacaoForm] = useState({ nome: "", email: "", telefone: "", senha: "111111", regiao: "" });
   const [delegacaoSaving, setDelegacaoSaving] = useState(false);
 
   const canDelegateAssessor = isAssessorExecutivo(userData);
@@ -125,7 +125,7 @@ function ViewForcaTerritorial({
     setModalDelegacao({ cidade, tipo, assessorDaCidade });
     setModoDelegacao("selecionar");
     setSelectedUid("");
-    setDelegacaoForm({ nome: "", email: "", telefone: "", senha: "111111" });
+    setDelegacaoForm({ nome: "", email: "", telefone: "", senha: "111111", regiao: "" });
   }
 
   async function atribuirExistente() {
@@ -161,6 +161,9 @@ function ViewForcaTerritorial({
         criadoPor: userData.uid, criadoEm: serverTimestamp(), ativo: true, status: "ativo",
       };
       if (telefone.trim()) base.telefone = telefone.trim();
+      if (delegacaoForm.regiao.trim()) base.regiao = delegacaoForm.regiao.trim();
+      const estadoVal = (delegacaoForm as any).estado?.trim() || "PE";
+      if (estadoVal) base.estado = estadoVal;
       if (modalDelegacao.tipo === "assessor") {
         await createAuthUser(email.trim(), senha, { ...base, role: "assessor", cidades: [modalDelegacao.cidade] });
       } else {
@@ -169,7 +172,7 @@ function ViewForcaTerritorial({
       }
       toast.success(`${modalDelegacao.tipo === "assessor" ? "Assessor" : "Coordenador"} criado e vinculado a ${modalDelegacao.cidade}!`);
       setModalDelegacao(null);
-      setDelegacaoForm({ nome: "", email: "", telefone: "", senha: "111111" });
+      setDelegacaoForm({ nome: "", email: "", telefone: "", senha: "111111", regiao: "" });
       onRefresh();
     } catch (e: any) {
       toast.error(e.code === "auth/email-already-in-use" ? "E-mail já está em uso" : "Erro ao criar. Tente novamente.");
@@ -178,6 +181,26 @@ function ViewForcaTerritorial({
 
   const assessores  = useMemo(() => usuarios.filter(u => u.role === "assessor"),     [usuarios]);
   const coordenadores = useMemo(() => usuarios.filter(u => u.role === "coordenador"), [usuarios]);
+
+  // Sugestão inteligente: pessoa com menor carga + melhor desempenho
+  const recomendado = useMemo(() => {
+    if (!modalDelegacao) return null;
+    const lista = modalDelegacao.tipo === "assessor"
+      ? assessores.filter(a => !(a.cidades ?? []).includes(modalDelegacao.cidade))
+      : coordenadores.filter(c => c.cidadePrincipal !== modalDelegacao.cidade);
+    if (lista.length === 0) return null;
+    return lista.map(p => {
+      const myCidades  = modalDelegacao.tipo === "assessor" ? (p.cidades ?? []).length : (p.cidadePrincipal ? 1 : 0);
+      const meusEl     = modalDelegacao.tipo === "assessor"
+        ? eleitores.filter(e => (p.cidades ?? []).includes(e.cidade))
+        : eleitores.filter(e => e.coordenadorId === p.uid);
+      const fortes     = meusEl.filter(e => e.grauApoio === "forte").length;
+      const perf       = meusEl.length > 0 ? (fortes / meusEl.length) * 100 : 0;
+      const meusCoords = modalDelegacao.tipo === "assessor" ? coordenadores.filter(c => c.assessorId === p.uid).length : 0;
+      const score      = (perf * 0.4) + (Math.max(0, 5 - myCidades) * 15) + (meusCoords * 3);
+      return { uid: p.uid, score };
+    }).sort((a, b) => b.score - a.score)[0]?.uid ?? null;
+  }, [modalDelegacao, assessores, coordenadores, eleitores]);
 
   // cidadesStats — unidade: município (nível 1).
   // Estrutura preparada para expansão futura: adicionar campos `territorio` e `bairros[]`
@@ -663,73 +686,107 @@ function ViewForcaTerritorial({
 
             {/* Tabs */}
             <div className="flex gap-1 p-4 pb-0">
-              {(["selecionar", "criar"] as const).map(modo => (
+              {(["selecionar", "criar", "missao"] as const).map(modo => (
                 <button
                   key={modo}
-                  onClick={() => { setModoDelegacao(modo); setSelectedUid(""); }}
-                  className={`flex-1 py-2.5 rounded-xl text-xs font-semibold transition-all ${modoDelegacao === modo ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-white/40 hover:text-white/60 hover:bg-white/5"}`}
+                  onClick={() => { setModoDelegacao(modo as any); setSelectedUid(""); }}
+                  className={`flex-1 py-2 rounded-xl text-[11px] font-semibold transition-all ${modoDelegacao === modo ? "bg-amber-500/20 text-amber-400 border border-amber-500/30" : "text-white/40 hover:text-white/60 hover:bg-white/5"}`}
                 >
-                  {modo === "selecionar" ? "✅ Atribuir existente" : "➕ Criar novo"}
+                  {modo === "selecionar" ? "✅ Atribuir" : modo === "criar" ? "➕ Criar novo" : "📋 Missão"}
                 </button>
               ))}
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 max-h-[60vh] overflow-y-auto">
 
-              {modoDelegacao === "selecionar" ? (
-                <>
-                  <div>
-                    <label className="text-xs text-white/50 mb-1.5 block">
-                      {modalDelegacao.tipo === "assessor" ? "Assessores disponíveis" : "Coordenadores disponíveis"}
-                    </label>
-                    <select
-                      value={selectedUid}
-                      onChange={e => setSelectedUid(e.target.value)}
-                      className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:outline-none focus:border-amber-500/50 transition-colors"
-                    >
-                      <option value="">Selecione...</option>
-                      {modalDelegacao.tipo === "assessor"
-                        ? assessores.filter(a => !(a.cidades ?? []).includes(modalDelegacao.cidade)).map(a => (
-                          <option key={a.uid} value={a.uid}>{a.nome}{(a.cidades ?? []).length > 0 ? ` · ${(a.cidades ?? []).join(", ")}` : " · sem cidade atribuída"}</option>
-                        ))
-                        : coordenadores.filter(c => c.cidadePrincipal !== modalDelegacao.cidade).map(c => (
-                          <option key={c.uid} value={c.uid}>{c.nome}{c.cidadePrincipal ? ` · ${c.cidadePrincipal}` : " · sem cidade"}</option>
-                        ))
-                      }
-                    </select>
+              {modoDelegacao === "selecionar" ? (() => {
+                const lista = modalDelegacao.tipo === "assessor"
+                  ? assessores.filter(a => !(a.cidades ?? []).includes(modalDelegacao.cidade))
+                  : coordenadores.filter(c => c.cidadePrincipal !== modalDelegacao.cidade);
+                return lista.length === 0 ? (
+                  <div className="py-6 text-center space-y-2">
+                    <p className="text-white/40 text-sm">Nenhum {modalDelegacao.tipo === "assessor" ? "assessor" : "coordenador"} disponível</p>
+                    <button onClick={() => setModoDelegacao("criar" as any)} className="text-xs text-amber-400 hover:text-amber-300 underline transition-colors">
+                      Criar novo →
+                    </button>
                   </div>
-                  <button
-                    onClick={atribuirExistente}
-                    disabled={delegacaoSaving || !selectedUid}
-                    className="w-full py-3 rounded-xl bg-amber-500/20 text-amber-400 font-semibold text-sm border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                  >
-                    {delegacaoSaving ? "Atribuindo..." : "Confirmar Atribuição"}
-                  </button>
-                </>
-              ) : (
-                <>
+                ) : (
                   <div className="space-y-3">
-                    {[
-                      { key: "nome",     label: "Nome completo *",  type: "text",     placeholder: "Ex: Maria Oliveira" },
-                      { key: "email",    label: "E-mail *",         type: "email",    placeholder: "ex@mail.com" },
-                      { key: "telefone", label: "Telefone",         type: "tel",      placeholder: "(81) 99999-9999" },
-                      { key: "senha",    label: "Senha provisória *",type: "text",    placeholder: "mín. 6 caracteres" },
-                    ].map(({ key, label, type, placeholder }) => (
-                      <div key={key}>
-                        <label className="text-xs text-white/50 mb-1 block">{label}</label>
-                        <input
-                          type={type}
-                          value={(delegacaoForm as any)[key]}
-                          onChange={e => setDelegacaoForm(f => ({ ...f, [key]: e.target.value }))}
-                          placeholder={placeholder}
-                          className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors"
-                        />
-                      </div>
-                    ))}
+                    {lista.map(p => {
+                      const isRec = p.uid === recomendado;
+                      const cids  = modalDelegacao.tipo === "assessor" ? (p.cidades ?? []) : [];
+                      const coords = modalDelegacao.tipo === "assessor" ? coordenadores.filter(c => c.assessorId === p.uid).length : 0;
+                      return (
+                        <button
+                          key={p.uid}
+                          onClick={() => setSelectedUid(p.uid)}
+                          className={`w-full text-left p-3 rounded-xl border transition-all ${selectedUid === p.uid ? "bg-amber-500/15 border-amber-500/40" : isRec ? "bg-white/[0.04] border-amber-500/20 hover:border-amber-500/30" : "bg-white/[0.02] border-white/[0.06] hover:border-white/10"}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center font-bold text-sm ${isRec ? "bg-amber-500/20 text-amber-300" : "bg-white/5 text-white/50"}`}>
+                              {p.nome.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm font-semibold text-white truncate">{p.nome}</p>
+                                {isRec && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 shrink-0">⭐ Recomendado</span>}
+                              </div>
+                              <div className="flex gap-2 mt-0.5 flex-wrap">
+                                {cids.length > 0 && <span className="text-[10px] text-white/30">{cids.join(", ")}</span>}
+                                {modalDelegacao.tipo === "assessor" && coords > 0 && <span className="text-[10px] text-emerald-400/50">{coords} coord{coords > 1 ? "s" : ""}</span>}
+                                {cids.length === 0 && modalDelegacao.tipo === "assessor" && <span className="text-[10px] text-amber-400/50">sem cidade atribuída</span>}
+                              </div>
+                            </div>
+                            {selectedUid === p.uid && <div className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center shrink-0"><div className="w-2 h-2 rounded-full bg-white" /></div>}
+                          </div>
+                          {isRec && selectedUid !== p.uid && (
+                            <p className="text-[10px] text-amber-300/50 mt-1.5 pl-10">
+                              {cids.length === 0 ? "✓ Disponível — sem cidades atribuídas" : cids.length === 1 ? `✓ Baixa carga — cobre apenas ${cids[0]}` : `✓ ${cids.length} cidades · maior capacidade de expansão`}
+                            </p>
+                          )}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={atribuirExistente}
+                      disabled={delegacaoSaving || !selectedUid}
+                      className="w-full py-3 rounded-xl bg-amber-500/20 text-amber-400 font-semibold text-sm border border-amber-500/30 hover:bg-amber-500/30 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                    >
+                      {delegacaoSaving ? "Atribuindo..." : "Confirmar Atribuição"}
+                    </button>
+                  </div>
+                );
+              })() : modoDelegacao === "criar" ? (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="col-span-2">
+                      <label className="text-xs text-white/50 mb-1 block">Nome completo *</label>
+                      <input type="text" value={delegacaoForm.nome} onChange={e => setDelegacaoForm(f => ({ ...f, nome: e.target.value }))} placeholder="Ex: Maria Oliveira" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    </div>
+                    <div className="col-span-2">
+                      <label className="text-xs text-white/50 mb-1 block">E-mail *</label>
+                      <input type="email" value={delegacaoForm.email} onChange={e => setDelegacaoForm(f => ({ ...f, email: e.target.value }))} placeholder="ex@mail.com" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/50 mb-1 block">Telefone</label>
+                      <input type="tel" value={delegacaoForm.telefone} onChange={e => setDelegacaoForm(f => ({ ...f, telefone: e.target.value }))} placeholder="(81) 99999-9999" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/50 mb-1 block">Senha provisória *</label>
+                      <input type="text" value={delegacaoForm.senha} onChange={e => setDelegacaoForm(f => ({ ...f, senha: e.target.value }))} placeholder="mín. 6 caracteres" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/50 mb-1 block">Região</label>
+                      <input type="text" value={delegacaoForm.regiao} onChange={e => setDelegacaoForm(f => ({ ...f, regiao: e.target.value }))} placeholder="Ex: Agreste" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-white/50 mb-1 block">Estado</label>
+                      <input type="text" value={(delegacaoForm as any).estado ?? "PE"} onChange={e => setDelegacaoForm(f => ({ ...f, estado: e.target.value } as any))} placeholder="PE" className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/20 focus:outline-none focus:border-amber-500/50 transition-colors" />
+                    </div>
                   </div>
                   <div className="flex items-center gap-2 p-3 bg-amber-500/5 border border-amber-500/15 rounded-xl">
-                    <MapPin size={14} className="text-amber-400 shrink-0" />
-                    <p className="text-xs text-amber-300/70">Será criado com cidade <span className="font-semibold text-amber-300">{modalDelegacao.cidade}</span> já atribuída</p>
+                    <MapPin size={13} className="text-amber-400 shrink-0" />
+                    <p className="text-xs text-amber-300/70">Cidade <span className="font-semibold text-amber-300">{modalDelegacao.cidade}</span> já preenchida automaticamente</p>
                   </div>
                   <button
                     onClick={criarNovo}
@@ -739,6 +796,32 @@ function ViewForcaTerritorial({
                     {delegacaoSaving ? "Criando..." : `Criar ${modalDelegacao.tipo === "assessor" ? "Assessor" : "Coordenador"} e Atribuir`}
                   </button>
                 </>
+              ) : (
+                /* Tab: Criar Missão */
+                <div className="space-y-4">
+                  <p className="text-xs text-white/40">Criar uma missão territorial para que o Assessor Executivo ou Regional planeje a cobertura de <span className="text-white/60 font-medium">{modalDelegacao.cidade}</span>.</p>
+                  <div className="space-y-2">
+                    {[
+                      { tipo: "criar_assessoria", label: "Abrir Assessoria Regional", desc: "Criar assessor para esta cidade", cor: "amber" },
+                      { tipo: "criar_coordenacao", label: "Criar Coordenação Local", desc: "Nomear coordenador de campo", cor: "blue" },
+                      { tipo: "expansao_territorial", label: "Expansão Territorial", desc: "Ampliar base de eleitores", cor: "emerald" },
+                    ].map(({ tipo, label, desc, cor }) => (
+                      <a
+                        key={tipo}
+                        href={`/missoes?acao=nova&tipo=${tipo}&cidade=${encodeURIComponent(modalDelegacao.cidade)}&prioridade=P1`}
+                        onClick={() => setModalDelegacao(null)}
+                        className={`flex items-center gap-3 p-3 rounded-xl border border-${cor}-500/20 bg-${cor}-500/5 hover:bg-${cor}-500/10 transition-colors`}
+                      >
+                        <div>
+                          <p className={`text-sm font-semibold text-${cor}-300`}>{label}</p>
+                          <p className="text-[10px] text-white/30 mt-0.5">{desc}</p>
+                        </div>
+                        <span className="text-white/20 ml-auto text-lg">→</span>
+                      </a>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-white/20 text-center">A missão será criada na página de Missões com a cidade pré-preenchida.</p>
+                </div>
               )}
             </div>
           </div>

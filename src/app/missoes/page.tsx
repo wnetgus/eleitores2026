@@ -626,7 +626,7 @@ export default function MissoesPage() {
         criadoPorNome: userData?.nome ?? "",
         criadoEm:      Timestamp.now(),
       });
-      toast.success("Missão criada e delegada ao Assessor Executivo!");
+      toast.success(isPolitico(userData) ? "Missão criada e delegada ao Assessor Executivo!" : "Missão criada! Delegue ao assessor regional a partir da lista.");
       setModalCriar(false);
       setForm({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
       await loadData();
@@ -826,7 +826,9 @@ export default function MissoesPage() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-xs text-white/30 uppercase tracking-wider mb-0.5">Nova Missão</p>
-                <p className="text-lg font-bold text-white">Delegar ao Assessor Executivo</p>
+                <p className="text-lg font-bold text-white">
+                  {isPolitico(userData) ? "Delegar ao Assessor Executivo" : isAssessorExecutivo(userData) ? "Delegar ao Assessor Regional" : "Nova Missão Territorial"}
+                </p>
               </div>
               <button onClick={() => setModalCriar(false)} className="text-white/30 hover:text-white transition-colors"><X size={20} /></button>
             </div>
@@ -910,7 +912,7 @@ export default function MissoesPage() {
                 <textarea
                   value={form.descricao}
                   onChange={(e) => setForm((f) => ({ ...f, descricao: e.target.value }))}
-                  placeholder="Contexto e instruções para o Assessor Executivo..."
+                  placeholder={isPolitico(userData) ? "Contexto e instruções para o Assessor Executivo..." : "Contexto e instruções para o Assessor Regional..."}
                   rows={3}
                   className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50 resize-none"
                   style={{ colorScheme: "dark" }}
@@ -925,7 +927,7 @@ export default function MissoesPage() {
                 <p className="text-sm text-white font-medium">{TITULO_AUTO[form.tipo](form.cidade.trim())}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${PRIO_STYLE[form.prioridade]}`}>{form.prioridade}</span>
-                  <span className="text-[10px] text-white/30">→ Assessor Executivo</span>
+                  <span className="text-[10px] text-white/30">{isPolitico(userData) ? "→ Assessor Executivo" : "→ Assessor Regional"}</span>
                 </div>
               </div>
             )}
