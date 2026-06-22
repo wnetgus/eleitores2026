@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Archive, ExternalLink, Filter, X } from "lucide-react";
+import { Bell, CheckCheck, Archive, ExternalLink, X } from "lucide-react";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { useNotificacoes } from "@/contexts/NotificacoesContext";
 import { Notificacao, TIPO_CONFIG, PRIO_COR, NotifTipo, tempoRelativo } from "@/lib/notificacoes";

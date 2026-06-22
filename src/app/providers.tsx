@@ -18,13 +18,6 @@ function CacheBuster() {
       try { localStorage.removeItem(k); } catch {}
     });
 
-    // Unregister any accidental service workers
-    if ("serviceWorker" in navigator) {
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((r) => r.unregister());
-      });
-    }
-
     try {
       const stored = localStorage.getItem(BUILD_KEY);
       if (stored && stored !== buildId) {

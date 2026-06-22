@@ -9,6 +9,7 @@ import { estados, cidades as cidadesMap } from "@/lib/estados-cidades";
 import { useNetworkStatus } from "@/hooks/useNetworkStatus";
 import { CheckCircle2, WifiOff, ChevronLeft, Zap } from "lucide-react";
 import { isColaborador, isCoordenador, isAssessor } from "@/lib/permissions";
+import toast from "react-hot-toast";
 
 type GrauApoio = "forte" | "medio" | "indeciso" | "fraco";
 
@@ -89,7 +90,6 @@ export default function CadastroRapidoPage() {
         colaboradorId: userData.uid || "",
         colaboradorNome: userData.nome || "",
         coordenadorId: userData.coordenadorId || "",
-        coordenadorNome: userData.coordenadorNome || "",
         tipoDocumento: "cpf",
         documento: "",
         criadoEm: Timestamp.now(),
@@ -98,10 +98,13 @@ export default function CadastroRapidoPage() {
       });
       setCount((c) => c + 1);
       setSaved(true);
-    } catch (e) {
-      // Firestore offline: write queued locally, will sync on reconnect
-      setCount((c) => c + 1);
-      setSaved(true);
+    } catch (e: unknown) {
+      // With persistentLocalCache, addDoc resolves locally when offline — this catch
+      // only fires on genuine errors (permission denied, invalid data, etc.)
+      console.error("Cadastro Rápido:", e);
+      const code = (e as { code?: string })?.code;
+      const msg = code === "permission-denied" ? "Sem permissão para salvar." : "Erro ao salvar. Tente novamente.";
+      toast.error(msg);
     } finally {
       setSaving(false);
     }

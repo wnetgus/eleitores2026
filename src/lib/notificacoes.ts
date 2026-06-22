@@ -30,7 +30,12 @@ export async function criarNotificacao(dados: Omit<Notificacao, "id" | "lida" | 
     // Dedup: se chave fornecida, não cria se já existe
     if (dados.chave) {
       const existe = await getDocs(
-        query(collection(db, "notificacoes"), where("chave", "==", dados.chave), limit(1))
+        query(
+          collection(db, "notificacoes"),
+          where("campanhaId", "==", dados.campanhaId),
+          where("chave", "==", dados.chave),
+          limit(1)
+        )
       );
       if (!existe.empty) return;
     }

@@ -408,8 +408,12 @@ service cloud.firestore {
 
     // ── Notificações (Sprint 23) ────────────────────────────────────────────
     match /notificacoes/{id} {
-      // Qualquer usuário autenticado pode criar (criador != destinatário em cross-role)
-      allow create: if isAuth();
+      // Criação: usuário autenticado, com campanha válida, dentro da própria campanha.
+      // Permite cross-role (deputado → AE, AE → deputado) sem expor outros tenants.
+      allow create: if isAuth() &&
+        hasCampanha() &&
+        request.resource.data.get("campanhaId", "") == myCampanha() &&
+        request.resource.data.get("campanhaId", "") != "";
       // Só o destinatário lê, atualiza (marcar lida/arquivada) e deleta
       allow read, update, delete: if isAuth() && request.auth.uid == resource.data.usuarioId;
     }
