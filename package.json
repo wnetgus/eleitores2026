@@ -26,6 +26,7 @@
     "audit:fase6": "node scripts/audit-fase6.mjs"
   },
   "dependencies": {
+    "@ducanh2912/next-pwa": "^10.2.9",
     "date-fns": "^4.1.0",
     "exceljs": "^4.4.0",
     "firebase": "^12.13.0",

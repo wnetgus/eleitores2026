@@ -6,21 +6,42 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Eleitores 2026 - Plataforma de Gestão Política",
-  description: "Sistema de gerenciamento de eleitores e colaboradores",
+  title: "ELEITORES2026",
+  description: "Plataforma de gestão política e territorial",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "ELEITORES",
+  },
+  icons: {
+    icon: "/icons/icon-192.png",
+    apple: "/icons/icon-192.png",
+  },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  themeColor: "#6366f1",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className="dark">
-      <body className={`${inter.className} bg-[#0a0a0f] text-white antialiased`}>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if ('serviceWorker' in navigator) { window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {})); }`,
+          }}
+        />
+      </head>
+      <body className={`${inter.className} bg-background text-white antialiased overflow-x-hidden`}>
         <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
+

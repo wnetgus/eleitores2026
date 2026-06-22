@@ -116,13 +116,15 @@ function CardMissao({
         )}
       </div>
 
-      {/* Ação */}
+      {/* Ação — botão grande para touch mobile */}
       {podeExecutar && proximaAcao && (
-        <div className="pt-2 border-t border-white/5 flex justify-end">
+        <div className="pt-2 border-t border-white/5">
           <button
             onClick={() => !atualizando && proximaAcao.fn?.(missao)}
             disabled={atualizando}
-            className="text-[11px] font-medium text-violet-400 hover:text-violet-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-full h-11 rounded-xl bg-violet-600/20 border border-violet-500/30 text-violet-300 text-sm font-semibold
+              hover:bg-violet-600/30 active:bg-violet-600/40 active:scale-[0.98] transition-all
+              disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {atualizando ? "Atualizando..." : proximaAcao.label}
           </button>
@@ -351,7 +353,7 @@ function ModalExecucao({
                   value={nomeNovo}
                   onChange={(e) => setNomeNovo(e.target.value)}
                   placeholder={`Nome do ${entidade.toLowerCase()}`}
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
                   style={{ colorScheme: "dark" }}
                 />
               </div>
@@ -362,7 +364,7 @@ function ModalExecucao({
                   onChange={(e) => setEmailNovo(e.target.value)}
                   placeholder="email@exemplo.com"
                   type="email"
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
                   style={{ colorScheme: "dark" }}
                 />
               </div>
@@ -372,7 +374,7 @@ function ModalExecucao({
                   value={telefoneNovo}
                   onChange={(e) => setTelefoneNovo(e.target.value)}
                   placeholder="(00) 00000-0000"
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
                   style={{ colorScheme: "dark" }}
                 />
               </div>
@@ -842,7 +844,7 @@ export default function MissoesPage() {
                 <select
                   value={form.tipo}
                   onChange={(e) => setForm((f) => ({ ...f, tipo: e.target.value as MissaoTipo }))}
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-violet-500/50"
                   style={{ colorScheme: "dark" }}
                 >
                   {Object.entries(TIPO_CONFIG).map(([k, v]) => (
@@ -858,7 +860,7 @@ export default function MissoesPage() {
                   <select
                     value={form.cidade}
                     onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
-                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/50"
+                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-violet-500/50"
                     style={{ colorScheme: "dark" }}
                   >
                     <option value="">Selecione o município</option>
@@ -871,7 +873,7 @@ export default function MissoesPage() {
                     value={form.cidade}
                     onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
                     placeholder="Ex: Petrolina"
-                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
+                    className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm placeholder-white/20 focus:outline-none focus:border-violet-500/50"
                     style={{ colorScheme: "dark" }}
                   />
                 )}
@@ -885,7 +887,7 @@ export default function MissoesPage() {
                     <button
                       key={p}
                       onClick={() => setForm((f) => ({ ...f, prioridade: p }))}
-                      className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all border ${
+                      className={`flex-1 py-3 rounded-xl text-sm font-bold transition-all border active:scale-95 ${
                         form.prioridade === p ? PRIO_STYLE[p] : "bg-white/5 text-white/30 border-white/5"
                       }`}
                     >
@@ -903,7 +905,7 @@ export default function MissoesPage() {
                   value={form.prazo}
                   onChange={(e) => setForm((f) => ({ ...f, prazo: e.target.value }))}
                   min={new Date().toISOString().split("T")[0]}
-                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-violet-500/50"
+                  className="w-full bg-zinc-900 border border-zinc-700 text-white rounded-xl px-3 py-3 text-sm focus:outline-none focus:border-violet-500/50"
                   style={{ colorScheme: "dark" }}
                 />
               </div>

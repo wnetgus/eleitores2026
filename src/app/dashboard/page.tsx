@@ -14,11 +14,12 @@ import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter,
 import Link from "next/link";
 import { Select } from "@/components/ui/Select";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { ApoiadoresPorCidade } from "@/components/charts/ApoiadoresPorCidade";
-import { ApoiadoresPorBairro } from "@/components/charts/ApoiadoresPorBairro";
-import { CrescimentoDiario } from "@/components/charts/CrescimentoDiario";
-import { RankingColaboradores } from "@/components/charts/RankingColaboradores";
-import { ApoiadoresPorEstado } from "@/components/charts/ApoiadoresPorEstado";
+import dynamic from "next/dynamic";
+const ApoiadoresPorCidade = dynamic(() => import("@/components/charts/ApoiadoresPorCidade").then(m => ({ default: m.ApoiadoresPorCidade })), { ssr: false });
+const ApoiadoresPorBairro = dynamic(() => import("@/components/charts/ApoiadoresPorBairro").then(m => ({ default: m.ApoiadoresPorBairro })), { ssr: false });
+const CrescimentoDiario = dynamic(() => import("@/components/charts/CrescimentoDiario").then(m => ({ default: m.CrescimentoDiario })), { ssr: false });
+const RankingColaboradores = dynamic(() => import("@/components/charts/RankingColaboradores").then(m => ({ default: m.RankingColaboradores })), { ssr: false });
+const ApoiadoresPorEstado = dynamic(() => import("@/components/charts/ApoiadoresPorEstado").then(m => ({ default: m.ApoiadoresPorEstado })), { ssr: false });
 import { GlassCard } from "@/components/ui/GlassCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { formatDate, parseDate } from "@/lib/utils";

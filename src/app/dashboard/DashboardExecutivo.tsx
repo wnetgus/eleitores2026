@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, Timestamp, type DocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, Timestamp, onSnapshot, type DocumentSnapshot } from "firebase/firestore";
 import toast from "react-hot-toast";
 import { db } from "@/lib/firebase";
 import { AppUser, Missao } from "@/types";
@@ -104,7 +104,7 @@ export function DashboardExecutivo({ userData }: Props) {
         setSolicitacoesPendentes(solSnap.value.size);
       if (gabSnap.status === "fulfilled" && gabSnap.value.exists())
         setGabineteNome(gabSnap.value.data()?.nome || "");
-      // Determinações recebidas pelo AE (P4 — Sprint 20)
+      // determinações: carregamento inicial via getDocs (onSnapshot montado abaixo)
       try {
         const detSnap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", campanhaId), where("destinatarioId", "==", userData.uid)));
         setDeterminacoesRecebidas(detSnap.docs.map((d) => ({ id: d.id, ...d.data() })));
@@ -119,11 +119,34 @@ export function DashboardExecutivo({ userData }: Props) {
   useEffect(() => {
     if (!campanhaId) { setLoading(false); return; }
     loadAll();
-    // Revalida ao voltar para esta aba — dados nunca ficam obsoletos
     const onVisible = () => { if (document.visibilityState === "visible") loadAll(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [campanhaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Listener em tempo real para determinações — AE vê nova ordem sem reload
+  useEffect(() => {
+    if (!campanhaId || !userData.uid) return;
+    const q = query(
+      collection(db, "determinacoes"),
+      where("campanhaId", "==", campanhaId),
+      where("destinatarioId", "==", userData.uid)
+    );
+    let primeiro = true;
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      if (!primeiro) {
+        const novas = snap.docChanges().filter((c) => c.type === "added");
+        if (novas.length > 0) {
+          const det = novas[0].doc.data();
+          toast(`Nova determinação: ${det.assunto || ""}`, { icon: "📋", duration: 5000 });
+        }
+      }
+      primeiro = false;
+      setDeterminacoesRecebidas(docs);
+    });
+    return () => unsub();
+  }, [campanhaId, userData.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── KPIs de Missões ──────────────────────────────────────────────────────────
 

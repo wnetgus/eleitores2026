@@ -4,7 +4,7 @@ import {
   browserSessionPersistence,
   setPersistence,
 } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import { initializeFirestore, persistentLocalCache, persistentSingleTabManager } from "firebase/firestore";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -17,7 +17,14 @@ const firebaseConfig = {
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const auth = getAuth(app);
-const db = getFirestore(app);
+
+// Persistent local cache: reads served from IndexedDB when offline,
+// pending writes queued locally and synced automatically on reconnect.
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentSingleTabManager({ forceOwnership: true }),
+  }),
+});
 
 // Android Chrome treats http://192.168.x.x as a non-secure context (unlike localhost).
 // Firebase Auth's default IndexedDB persistence fails silently on non-secure origins,

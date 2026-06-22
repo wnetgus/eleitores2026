@@ -125,8 +125,9 @@ const coordenadorMenu = [
 ];
 
 const colaboradorMenu = [
-  { href: "/eleitores", label: "Novo Cadastro", icon: UserPlus },
-  { href: "/dashboard", label: "Meus Cadastros", icon: LayoutDashboard },
+  { href: "/cadastro-rapido", label: "Cadastro Rápido", icon: Zap },
+  { href: "/eleitores", label: "Todos os Cadastros", icon: UserPlus },
+  { href: "/dashboard", label: "Meus Resultados", icon: LayoutDashboard },
   { href: "/metas", label: "Minha Meta", icon: Flag },
 ];
 
@@ -209,15 +210,15 @@ export function Sidebar() {
       </button>
 
       <aside
-        className={`fixed top-0 left-0 z-40 h-full bg-black/40 backdrop-blur-2xl border-r border-white/[0.06] 
+        className={`fixed top-0 left-0 z-40 h-full bg-black/40 backdrop-blur-2xl border-r border-white/6
           transition-all duration-300 flex flex-col
-          ${collapsed ? "w-[72px]" : "w-[260px]"}
+          ${collapsed ? "w-18" : "w-65"}
           ${mobileOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        <div className={`flex items-center px-5 h-16 border-b border-white/[0.06] ${collapsed ? "justify-center" : ""}`}>
+        <div className={`flex items-center px-5 h-16 border-b border-white/6 ${collapsed ? "justify-center" : ""}`}>
           {!collapsed && (
             <div className="flex items-center gap-3">
-              <div className={`w-8 h-8 rounded-lg bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center`}>
+              <div className={`w-8 h-8 rounded-lg bg-linear-to-br ${roleInfo.gradient} flex items-center justify-center`}>
                 <Shield size={16} className="text-white" />
               </div>
               <div>
@@ -274,10 +275,10 @@ export function Sidebar() {
           )}
         </nav>
 
-        <div className={`p-3 border-t border-white/[0.06] ${collapsed ? "text-center" : ""}`}>
+        <div className={`p-3 border-t border-white/6 ${collapsed ? "text-center" : ""}`}>
           {!collapsed && (
             <div className="px-3 py-2 mb-1 flex items-center gap-3">
-              <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${roleInfo.gradient} flex items-center justify-center text-sm`}>
+              <div className={`w-9 h-9 rounded-xl bg-linear-to-br ${roleInfo.gradient} flex items-center justify-center text-sm`}>
                 {roleInfo.icon}
               </div>
               <div className="flex-1 min-w-0">
