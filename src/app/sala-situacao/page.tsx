@@ -14,6 +14,7 @@ import { AppUser, Eleitor, Missao } from "@/types";
 import { parseDate } from "@/lib/utils";
 import { buscarEleitoresPorGabinetes } from "@/lib/firestore";
 import toast from "react-hot-toast";
+import { criarNotificacao } from "@/lib/notificacoes";
 import Link from "next/link";
 import {
   Shield, AlertTriangle, TrendingUp, TrendingDown,
@@ -264,6 +265,44 @@ export default function SalaDeSituacao() {
   );
 
   const totalAlertas = cidadesRisco.filter((c) => c.sinal === "critico").length + coordInativos.length + missoesAtrasadas.length;
+
+  // ─── Geração automática de alertas (dedup por chave diária) ──────────────
+  useEffect(() => {
+    if (!userData?.uid || !campanhaId || loading) return;
+    const hoje = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+
+    cidadesRisco.filter((c) => c.sinal === "critico").forEach((c) => {
+      criarNotificacao({
+        campanhaId,
+        usuarioId:  userData.uid!,
+        tipo:       "alerta",
+        titulo:     "Alerta Territorial",
+        descricao:  `IRT elevado em ${c.nome} · ${c.alertas[0] || "Território em risco crítico"}`,
+        link:       "/sala-situacao",
+        prioridade: "critica",
+        chave:      `alerta-${c.nome.replace(/\s/g, "")}-${hoje}`,
+      });
+    });
+
+    missoesAtrasadas.forEach((m) => {
+      if (!m.responsavelId && !m.criadoPorId) return;
+      const diasAtraso = m.prazo
+        ? Math.ceil((Date.now() - new Date(m.prazo + "T23:59:59").getTime()) / 86400000)
+        : 0;
+      criarNotificacao({
+        campanhaId,
+        usuarioId:  (m.responsavelId || m.criadoPorId || "") as string,
+        tipo:       "missao",
+        titulo:     "Missão atrasada",
+        descricao:  `${m.titulo}${diasAtraso > 0 ? ` · ${diasAtraso} dia${diasAtraso !== 1 ? "s" : ""} de atraso` : ""}`,
+        link:       "/missoes",
+        prioridade: diasAtraso > 7 ? "critica" : "alta",
+        chave:      `missao-atrasada-${m.id}-${hoje}`,
+        origem:     m.id,
+        origemTipo: "missao",
+      });
+    });
+  }, [cidadesRisco, missoesAtrasadas, userData?.uid, campanhaId, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Handler enviar determinação ──────────────────────────────────────────
 

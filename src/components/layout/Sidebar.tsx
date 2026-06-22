@@ -26,9 +26,11 @@ import {
   Map,
   Clock,
   BookOpen,
+  Bell,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useNotificacoes } from "@/contexts/NotificacoesContext";
 import { signOut } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 import { db } from "@/lib/firebase";
@@ -57,6 +59,7 @@ const superAdminMenu = [
 
 const politicoMenu = [
   { href: "/dashboard", label: "Centro de Mandato", icon: Crown },
+  { href: "/notificacoes", label: "Notificações", icon: Bell },
   { href: "/sala-situacao", label: "Sala de Situação", icon: Shield },
   { href: "/mapa-politico", label: "Força Territorial", icon: Map },
   { href: "/missoes", label: "Missões", icon: Zap },
@@ -68,6 +71,7 @@ const politicoMenu = [
 
 const assessorExecutivoMenu = [
   { href: "/dashboard",       label: "Gabinete Executivo",   icon: Crown         },
+  { href: "/notificacoes",    label: "Notificações",         icon: Bell          },
   { href: "/missoes",         label: "Missões",              icon: Zap           },
   { href: "/mapa-politico",   label: "Força Territorial",    icon: Map           },
   { href: "/assessores",      label: "Assessores Regionais", icon: Shield        },
@@ -102,6 +106,7 @@ const vereadorMenu = [
 
 const assessorMenu = [
   { href: "/dashboard", label: "Painel Regional", icon: Crown },
+  { href: "/notificacoes", label: "Notificações", icon: Bell },
   { href: "/missoes", label: "Minhas Missões", icon: Zap },
   { href: "/mapa-politico", label: "Mapa Político", icon: Map },
   { href: "/solicitacoes", label: "Solicitações", icon: Clock },
@@ -118,6 +123,7 @@ const assessorMenu = [
 
 const coordenadorMenu = [
   { href: "/dashboard", label: "Dashboard", icon: Target },
+  { href: "/notificacoes", label: "Notificações", icon: Bell },
   { href: "/colaboradores", label: "Colaboradores", icon: Users },
   { href: "/eleitores", label: "Eleitores", icon: TrendingUp },
   { href: "/relatorios", label: "Relatórios", icon: BarChart3 },
@@ -126,6 +132,7 @@ const coordenadorMenu = [
 
 const colaboradorMenu = [
   { href: "/cadastro-rapido", label: "Cadastro Rápido", icon: Zap },
+  { href: "/notificacoes", label: "Notificações", icon: Bell },
   { href: "/eleitores", label: "Todos os Cadastros", icon: UserPlus },
   { href: "/dashboard", label: "Meus Resultados", icon: LayoutDashboard },
   { href: "/metas", label: "Minha Meta", icon: Flag },
@@ -138,6 +145,7 @@ export function Sidebar() {
   const [hierarquia, setHierarquia] = useState<{ coordenador?: string; assessor?: string }>({});
   const pathname = usePathname();
   const { userData } = useAuth();
+  const { naoLidas } = useNotificacoes();
   const router = useRouter();
 
   useEffect(() => {
@@ -258,6 +266,11 @@ export function Sidebar() {
                 {!collapsed && item.href === "/solicitacoes" && pendentesCount > 0 && (
                   <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 border border-red-500/30">
                     {pendentesCount}
+                  </span>
+                )}
+                {!collapsed && item.href === "/notificacoes" && naoLidas > 0 && (
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                    {naoLidas > 99 ? "99+" : naoLidas}
                   </span>
                 )}
               </Link>

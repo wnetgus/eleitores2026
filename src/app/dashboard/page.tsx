@@ -30,6 +30,7 @@ import { AgendaExecutiva, AgendaItem } from "@/components/politico/AgendaExecuti
 import { CentralAlertas, AlertaExecutivo } from "@/components/politico/CentralAlertas";
 import { MemoriaMandato, EventoMandato } from "@/components/politico/MemoriaMandato";
 import toast from "react-hot-toast";
+import { criarNotificacao } from "@/lib/notificacoes";
 
 export default function DashboardPage() {
   const { userData } = useAuth();
@@ -2795,15 +2796,18 @@ export default function DashboardPage() {
           if (!userData || !ae || !modalDeterminacao) return;
           setDeterminacaoEnviando(true);
           try {
+            const campanhaId = userData.campanhaId || userData.gabineteId || "";
+            const assunto = determinacaoForm.assunto || modalDeterminacao.acao;
+            const municipios = modalDeterminacao.territorio.split(",").map((s) => s.trim()).filter(Boolean);
             await addDoc(collection(db, "determinacoes"), {
-              campanhaId:       userData.campanhaId || userData.gabineteId || "",
+              campanhaId,
               criadoPorId:      userData.uid,
               criadoPorNome:    userData.nome,
               destinatarioId:   ae.uid,
               destinatarioNome: ae.nome,
               destinatarioRole: "assessor_executivo",
-              municipios:       modalDeterminacao.territorio.split(",").map((s) => s.trim()).filter(Boolean),
-              assunto:          determinacaoForm.assunto || modalDeterminacao.acao,
+              municipios,
+              assunto,
               descricao:        determinacaoForm.descricao,
               prioridade:       determinacaoForm.prioridade,
               prazo:            Timestamp.fromDate(prazoData),
@@ -2811,7 +2815,19 @@ export default function DashboardPage() {
               criadoEm:         Timestamp.now(),
               atualizadoEm:     Timestamp.now(),
             });
-            const snap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", userData.campanhaId || userData.gabineteId || ""), where("criadoPorId", "==", userData.uid)));
+            // Notificar AE em tempo real
+            await criarNotificacao({
+              campanhaId,
+              usuarioId:      ae.uid,
+              tipo:           "determinacao",
+              titulo:         "Nova determinação recebida",
+              descricao:      `${assunto}${municipios.length ? ` · ${municipios[0]}` : ""} · Prioridade ${determinacaoForm.prioridade}`,
+              link:           "/dashboard",
+              prioridade:     determinacaoForm.prioridade === "Alta" ? "alta" : determinacaoForm.prioridade === "Critica" ? "critica" : "media",
+              remetenteNome:  userData.nome,
+              origemTipo:     "determinacao",
+            });
+            const snap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", campanhaId), where("criadoPorId", "==", userData.uid)));
             setDeterminacoes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
             setModalDeterminacao(null);
             setDeterminacaoForm({ assunto: "", prioridade: "Alta", prazo: 7, descricao: "" });
