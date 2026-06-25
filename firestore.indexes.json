@@ -157,16 +157,6 @@
       "queryScope": "COLLECTION",
       "fields": [
         {
-          "fieldPath": "criadoEm",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
-      "collectionGroup": "atividades",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
           "fieldPath": "gabineteId",
           "order": "ASCENDING"
         },
@@ -507,16 +497,6 @@
       ]
     },
     {
-      "collectionGroup": "_erros",
-      "queryScope": "COLLECTION",
-      "fields": [
-        {
-          "fieldPath": "criadoEm",
-          "order": "DESCENDING"
-        }
-      ]
-    },
-    {
       "collectionGroup": "usuarios",
       "queryScope": "COLLECTION",
       "fields": [
@@ -572,6 +552,20 @@
       "fields": [
         {
           "fieldPath": "campanhaId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "chave",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
+      "collectionGroup": "notificacoes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "usuarioId",
           "order": "ASCENDING"
         },
         {

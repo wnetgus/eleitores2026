@@ -26,19 +26,25 @@ export interface Notificacao {
 }
 
 export async function criarNotificacao(dados: Omit<Notificacao, "id" | "lida" | "arquivada" | "criadaEm">): Promise<void> {
-  try {
-    // Dedup: se chave fornecida, não cria se já existe
-    if (dados.chave) {
+  // Dedup: verifica chave separado do write para que falha de leitura (cross-user)
+  // não impeça a criação da notificação. A read rule exige uid == usuarioId, então
+  // só funciona quando o criador é o próprio destinatário; caso contrário, prossegue.
+  if (dados.chave) {
+    try {
       const existe = await getDocs(
         query(
           collection(db, "notificacoes"),
-          where("campanhaId", "==", dados.campanhaId),
-          where("chave", "==", dados.chave),
+          where("usuarioId", "==", dados.usuarioId),
+          where("chave",     "==", dados.chave),
           limit(1)
         )
       );
       if (!existe.empty) return;
+    } catch {
+      // Sem permissão de leitura (notificação cross-user) — prossegue com escrita.
     }
+  }
+  try {
     await addDoc(collection(db, "notificacoes"), {
       ...dados,
       lida: false,

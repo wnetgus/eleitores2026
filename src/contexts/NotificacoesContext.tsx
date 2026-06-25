@@ -58,7 +58,7 @@ export function NotificacoesProvider({ children }: { children: React.ReactNode }
       primeiroRef.current = false;
       setNotificacoes(docs);
       setLoading(false);
-    }, () => setLoading(false));
+    }, (err) => { console.error("[onSnapshot notificacoes]", err); setLoading(false); });
 
     return () => unsub();
   }, [user?.uid]);
