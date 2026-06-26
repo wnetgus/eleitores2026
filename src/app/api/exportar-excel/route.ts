@@ -763,6 +763,6 @@ export async function POST(req: NextRequest) {
       );
     }
     console.error("Erro ao gerar Excel:", error);
-    return NextResponse.json({ error: "Erro ao gerar Excel" }, { status: 500 });
+    return NextResponse.json({ error: `Erro ao gerar Excel: ${msg.slice(0, 300)}` }, { status: 500 });
   }
 }

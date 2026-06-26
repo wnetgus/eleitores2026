@@ -155,7 +155,7 @@ export default function RelatoriosPage() {
         }),
       });
       if (res.status === 503) { toast.error("Base de dados temporariamente indisponível. Tente em alguns minutos."); return; }
-      if (!res.ok) throw new Error();
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || "Erro ao exportar Excel"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
