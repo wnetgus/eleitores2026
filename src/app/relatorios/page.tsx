@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { Eleitor, AppUser } from "@/types";
 import { estados } from "@/lib/estados-cidades";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -134,9 +134,10 @@ export default function RelatoriosPage() {
 
   async function exportExcelPremiumAction() {
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({
           titulo: userData?.gabineteNome || "Relatório",
           campanhaId: userData?.campanhaId || userData?.gabineteId,

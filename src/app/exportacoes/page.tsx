@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
 import { Eleitor, AppUser } from "@/types";
@@ -87,9 +87,10 @@ export default function ExportacoesPage() {
 
   async function exportExcelPremiumAction() {
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ titulo: userData?.gabineteNome || "Relatório", campanhaId: userData?.campanhaId || userData?.gabineteId }),
       });
       if (!res.ok) throw new Error();
@@ -156,9 +157,10 @@ export default function ExportacoesPage() {
 
   async function exportBaseAction() {
     try {
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
         body: JSON.stringify({ titulo: userData?.gabineteNome || "Relatório", gabineteNome: userData?.gabineteNome, tipo: "executivo", campanhaId: userData?.campanhaId || userData?.gabineteId }),
       });
       if (!res.ok) throw new Error();
