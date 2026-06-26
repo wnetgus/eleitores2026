@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, limit } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { db, auth } from "@/lib/firebase";
 import { Eleitor, AppUser } from "@/types";
@@ -49,7 +49,7 @@ export default function RelatoriosPage() {
     async function load() {
       try {
         const gabId = userData?.campanhaId || userData?.gabineteId;
-        const constraints: any[] = [orderBy("criadoEm", "desc")];
+        const constraints: any[] = [orderBy("criadoEm", "desc"), limit(500)];
         if (isCoordenador(userData)) {
           constraints.unshift(where("coordenadorId", "==", userData!.uid));
         } else {
@@ -714,7 +714,10 @@ export default function RelatoriosPage() {
           <div><label className="block text-sm font-medium text-white/70 mb-1.5">Data Fim</label><input type="date" value={filtros.dataFim} onChange={(e) => setFiltros({ ...filtros, dataFim: e.target.value })} className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div>
           <div><label className="block text-sm font-medium text-white/70 mb-1.5">Busca</label><div className="relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30" /><input type="text" value={filtros.search} onChange={(e) => setFiltros({ ...filtros, search: e.target.value })} placeholder="Nome do eleitor..." className="w-full pl-9 pr-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all" /></div></div>
         </div>
-        <div className="mt-4 text-sm text-white/40">{filtered.length} de {eleitores.length} registros encontrados</div>
+        <div className="mt-4 text-sm text-white/40">
+          {filtered.length} de {eleitores.length} registros encontrados
+          {eleitores.length >= 500 && <span className="ml-2 text-amber-400/70">· limitado aos 500 mais recentes — use Exportação para base completa</span>}
+        </div>
       </GlassCard>
 
       {/* Radar Territorial — assessor */}

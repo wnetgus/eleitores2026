@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, getDocs, onSnapshot, query, where, orderBy } from "firebase/firestore";
+import { collection, getDocs, onSnapshot, query, where, orderBy, limit, startAfter, QueryDocumentSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { cadastrarEleitor, buscarEleitores, verificarDocumentoDuplicado, registrarAtividade, excluirEleitor, buscarCandidatos } from "@/lib/firestore";
 import { estados, getCidades, getBairros } from "@/lib/estados-cidades";
@@ -71,6 +71,8 @@ function limparRascunho() {
   try { localStorage.removeItem("rascunho_eleitor"); } catch {}
 }
 
+const PAGE_SIZE = 50;
+
 const opcoesVoto = [
   { value: "sim", label: "Votará no candidato" },
   { value: "branco", label: "Branco" },
@@ -99,6 +101,9 @@ export default function EleitoresPage() {
   const [responsavelColaboradorId, setResponsavelColaboradorId] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; nome: string } | null>(null);
   const [camposComErro, setCamposComErro] = useState<string[]>([]);
+  const [lastDoc, setLastDoc] = useState<QueryDocumentSnapshot | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // Real-time listener para colaborador e coordenador; getDocs para roles de maior escopo
   useEffect(() => {
@@ -107,7 +112,7 @@ export default function EleitoresPage() {
 
     if (isColaborador(userData)) {
       setLoading(true);
-      const q = query(collection(db, "eleitores"), where("colaboradorId", "==", userData.uid), orderBy("criadoEm", "desc"));
+      const q = query(collection(db, "eleitores"), where("colaboradorId", "==", userData.uid), orderBy("criadoEm", "desc"), limit(100));
       const unsub = onSnapshot(q, (snap) => {
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
         setLoading(false);
@@ -117,7 +122,7 @@ export default function EleitoresPage() {
 
     if (isCoordenador(userData)) {
       setLoading(true);
-      const q = query(collection(db, "eleitores"), where("coordenadorId", "==", userData.uid), orderBy("criadoEm", "desc"));
+      const q = query(collection(db, "eleitores"), where("coordenadorId", "==", userData.uid), orderBy("criadoEm", "desc"), limit(200));
       const unsub = onSnapshot(q, (snap) => {
         setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
         setLoading(false);
@@ -167,31 +172,37 @@ export default function EleitoresPage() {
 
   useEffect(() => { salvarRascunho(form); }, [form]);
 
-  async function loadEleitores() {
-    setLoading(true);
+  async function loadEleitores(cursor?: QueryDocumentSnapshot) {
+    if (cursor) setLoadingMore(true); else setLoading(true);
     try {
+      const paginacao = cursor
+        ? [orderBy("criadoEm", "desc"), startAfter(cursor), limit(PAGE_SIZE)]
+        : [orderBy("criadoEm", "desc"), limit(PAGE_SIZE)];
+
+      let q;
       if (isCoordenador(userData)) {
-        const q = query(collection(db, "eleitores"), where("coordenadorId", "==", userData!.uid), orderBy("criadoEm", "desc"));
-        const snap = await getDocs(q);
-        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-        return;
+        q = query(collection(db, "eleitores"), where("coordenadorId", "==", userData!.uid), ...paginacao);
+      } else if (isAssessor(userData) || isAssessorExecutivo(userData)) {
+        q = query(collection(db, "eleitores"), where("campanhaId", "==", userData!.campanhaId), ...paginacao);
+      } else {
+        const campanhaId = isSuperOrMaster(userData) ? undefined : userData?.campanhaId;
+        const colaboradorId = isColaborador(userData) ? userData?.uid : undefined;
+        if (!isSuperOrMaster(userData) && !campanhaId && !colaboradorId) { setEleitores([]); return; }
+        const extraWhere = campanhaId
+          ? [where("campanhaId", "==", campanhaId), ...paginacao]
+          : colaboradorId
+          ? [where("colaboradorId", "==", colaboradorId), ...paginacao]
+          : paginacao;
+        q = query(collection(db, "eleitores"), ...extraWhere);
       }
-      if (isAssessor(userData)) {
-        const q = query(collection(db, "eleitores"), where("campanhaId", "==", userData!.campanhaId), orderBy("criadoEm", "desc"));
-        const snap = await getDocs(q);
-        setEleitores(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-        return;
-      }
-      const campanhaId = isSuperOrMaster(userData) ? undefined : userData?.campanhaId;
-      const colaboradorId = isColaborador(userData) ? userData?.uid : undefined;
-      // Guard: não-admin sem filtro algum → race condition, aguarda próxima resolução do userData
-      if (!isSuperOrMaster(userData) && !campanhaId && !colaboradorId) {
-        setEleitores([]);
-        return;
-      }
-      const data = await buscarEleitores(campanhaId, colaboradorId);
-      setEleitores(data);
-    } catch (e) { console.error(e); } finally { setLoading(false); }
+
+      const snap = await getDocs(q);
+      const novos = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor));
+      setEleitores((prev) => cursor ? [...prev, ...novos] : novos);
+      setLastDoc(snap.docs[snap.docs.length - 1] ?? null);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch (e) { console.error(e); }
+    finally { if (cursor) setLoadingMore(false); else setLoading(false); }
   }
 
   const isOperacional = !!(userData && (isColaborador(userData) || isCoordenador(userData) || isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)));
@@ -895,7 +906,8 @@ export default function EleitoresPage() {
       )}
       <div className="flex items-center gap-3">
         <span className="text-sm text-white/40">
-          {eleitoresExibidos.length} registros{grauPill ? ` de ${eleitoresFiltrados.length}` : ""}
+          {eleitoresExibidos.length} registros{grauPill ? ` de ${eleitoresFiltrados.length}` : eleitores.length > eleitoresExibidos.length ? ` de ${eleitores.length} carregados` : ""}
+          {hasMore && !grauPill ? " · mais disponíveis" : ""}
         </span>
       </div>
       {loading ? (
@@ -949,12 +961,24 @@ export default function EleitoresPage() {
           </table>
         </div>
       )}
+      {hasMore && !loading && (
+        <div className="flex justify-center pt-4 pb-2">
+          <button
+            onClick={() => loadEleitores(lastDoc ?? undefined)}
+            disabled={loadingMore}
+            className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm font-medium hover:bg-white/10 transition-colors flex items-center gap-2 disabled:opacity-50"
+          >
+            {loadingMore && <Loader2 size={14} className="animate-spin" />}
+            Ver mais {PAGE_SIZE}
+          </button>
+        </div>
+      )}
       {editingEleitor && (
         <EditarEleitorModal
           eleitor={editingEleitor}
           open={!!editingEleitor}
           onClose={() => setEditingEleitor(null)}
-          onSaved={loadEleitores}
+          onSaved={() => loadEleitores()}
         />
       )}
       {confirmDelete && (

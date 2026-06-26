@@ -50,6 +50,8 @@ type ColabStat = Omit<AppUser, "status"> & {
 export default function MetasPage() {
   const { userData } = useAuth();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [eleitores, setEleitores] = useState<Eleitor[]>([]);
   const [colaboradores, setColaboradores] = useState<AppUser[]>([]);
   const [metas, setMetas] = useState<Record<string, number>>({});
@@ -1641,8 +1643,8 @@ export default function MetasPage() {
       {crescimentoData.length > 0 && (
         <GlassCard className="p-5">
           <h3 className="text-white font-semibold mb-4">Evolução Diária</h3>
-          <div className="h-64 min-w-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64">
+            {mounted && <ResponsiveContainer width="100%" height={256}>
               <AreaChart data={crescimentoData}>
                 <defs>
                   <linearGradient id="metaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1655,7 +1657,7 @@ export default function MetasPage() {
                 <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, color: "#fff" }} />
                 <Area type="monotone" dataKey="total" stroke="#10b981" fillOpacity={1} fill="url(#metaGrad)" strokeWidth={2} />
               </AreaChart>
-            </ResponsiveContainer>
+            </ResponsiveContainer>}
           </div>
         </GlassCard>
       )}

@@ -15,9 +15,9 @@ export function CrescimentoDiario({ data }: Props) {
   return (
     <GlassCard className="p-5">
       <h3 className="text-white font-semibold mb-4">Crescimento Diário</h3>
-      <div className="h-64 min-w-0">
+      <div className="h-64">
         {mounted && (
-          <ResponsiveContainer width="100%" height="100%">
+          <ResponsiveContainer width="100%" height={256}>
             <AreaChart data={data}>
               <defs>
                 <linearGradient id="colorTotal" x1="0" y1="0" x2="0" y2="1">

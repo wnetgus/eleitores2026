@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, where, limit } from "firebase/firestore";
 import { db, auth } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
@@ -32,7 +32,7 @@ export default function ExportacoesPage() {
     async function load() {
       try {
         const gabId = userData?.campanhaId || userData?.gabineteId;
-        const constraints: any[] = [orderBy("criadoEm", "desc")];
+        const constraints: any[] = [orderBy("criadoEm", "desc"), limit(500)];
         if (!isSuperOrMaster(userData) && gabId) constraints.unshift(where("campanhaId", "==", gabId));
         const q = query(collection(db, "eleitores"), ...constraints);
         const snap = await getDocs(q);

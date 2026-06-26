@@ -24,6 +24,8 @@ export default function PainelGabinetePage() {
   const params = useParams();
   const id = params?.id as string;
 
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [gabinete, setGabinete] = useState<Gabinete | null>(null);
   const [eleitores, setEleitores] = useState<Eleitor[]>([]);
   const [usuarios, setUsuarios] = useState<AppUser[]>([]);
@@ -279,8 +281,8 @@ export default function PainelGabinetePage() {
           {crescimentoData.length > 0 && (
             <GlassCard className="p-5">
               <h3 className="text-white font-semibold mb-4">Evolução Diária</h3>
-              <div className="h-56 min-w-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
+              <div className="h-56">
+                {mounted && <ResponsiveContainer width="100%" height={224}>
                   <AreaChart data={crescimentoData}>
                     <defs>
                       <linearGradient id="gabGrad" x1="0" y1="0" x2="0" y2="1">
@@ -293,7 +295,7 @@ export default function PainelGabinetePage() {
                     <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, color: "#fff" }} />
                     <Area type="monotone" dataKey="total" stroke="#f43f5e" fillOpacity={1} fill="url(#gabGrad)" strokeWidth={2} />
                   </AreaChart>
-                </ResponsiveContainer>
+                </ResponsiveContainer>}
               </div>
             </GlassCard>
           )}
