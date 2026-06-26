@@ -568,8 +568,8 @@ export default function ColaboradoresPage() {
 
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Trophy size={20} className="text-amber-400" /><h3 className="text-white font-semibold">Ranking de Colaboradores</h3></div>
-        <div className="h-72 min-w-0">
-          {mounted && <ResponsiveContainer width="100%" height="100%">
+        <div className="h-72">
+          {mounted && <ResponsiveContainer width="100%" height={288}>
             <BarChart data={rankingArray} layout="vertical">
               <XAxis type="number" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} />
               <YAxis dataKey="nome" type="category" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} width={140} />
@@ -625,8 +625,8 @@ export default function ColaboradoresPage() {
             <GlassCard className="p-4 text-center"><p className="text-2xl font-bold text-blue-400">{selectedEleitores.length > 0 ? (selectedEleitores.length / Math.max(crescimentoData.length, 1)).toFixed(1) : 0}</p><p className="text-xs text-white/40">Média/dia</p></GlassCard>
           </div>
           {crescimentoData.length > 0 && (
-            <div className="h-48 mb-6 min-w-0">
-              {mounted && <ResponsiveContainer width="100%" height="100%">
+            <div className="h-48 mb-6">
+              {mounted && <ResponsiveContainer width="100%" height={192}>
                 <AreaChart data={crescimentoData}>
                   <defs><linearGradient id="colabGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
                   <XAxis dataKey="dia" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} />

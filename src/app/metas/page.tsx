@@ -1643,8 +1643,8 @@ export default function MetasPage() {
       {crescimentoData.length > 0 && (
         <GlassCard className="p-5">
           <h3 className="text-white font-semibold mb-4">Evolução Diária</h3>
-          <div className="h-64 min-w-0">
-            {mounted && <ResponsiveContainer width="100%" height="100%">
+          <div className="h-64">
+            {mounted && <ResponsiveContainer width="100%" height={256}>
               <AreaChart data={crescimentoData}>
                 <defs>
                   <linearGradient id="metaGrad" x1="0" y1="0" x2="0" y2="1">
