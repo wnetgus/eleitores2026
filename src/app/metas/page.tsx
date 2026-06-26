@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatDate, parseDate } from "@/lib/utils";
 import { TrendingUp, Target, Zap, Flag, Save, Users, MapPin, Crown, AlertTriangle } from "lucide-react";
 import { calcularSFPSimples } from "@/lib/inteligencia";
-import { registrarMemoriaAutomatica } from "@/lib/firestore";
+import { registrarMemoriaAutomatica, queryInChunks } from "@/lib/firestore";
 import toast from "react-hot-toast";
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 
@@ -93,11 +93,12 @@ export default function MetasPage() {
             // Race condition: campanhaId ainda não resolveu — aguarda próxima resolução do userData
             setEleitores([]); setColaboradores([]);
           } else {
-            const eQuery = query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas));
-            const uQuery = query(collection(db, "usuarios"), where("role", "==", "colaborador"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabIdMetas));
-            const [esnap, uSnap] = await Promise.all([getDocs(eQuery), getDocs(uQuery)]);
-            setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
-            setColaboradores(uSnap.docs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
+            const [eDocs, uDocs] = await Promise.all([
+              queryInChunks(collection(db, "eleitores"), "coordenadorId", coordIds, [where("campanhaId", "==", gabIdMetas)]),
+              queryInChunks(collection(db, "usuarios"), "coordenadorId", coordIds, [where("role", "==", "colaborador"), where("campanhaId", "==", gabIdMetas)]),
+            ]);
+            setEleitores(eDocs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+            setColaboradores(uDocs.map((d) => ({ uid: d.id, ...d.data() } as AppUser)));
           }
         } else {
           setEleitores([]); setColaboradores([]);

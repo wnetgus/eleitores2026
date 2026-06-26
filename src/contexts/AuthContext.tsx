@@ -71,6 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           setLoading(false);
         } else if (docSnap.exists()) {
+          if (docSnap.data().ativo === false) {
+            signOut(auth);
+            return;
+          }
           setUserData({ uid: firebaseUser.uid, ...docSnap.data(), ativo: docSnap.data().ativo ?? true } as AppUser);
           setLoading(false);
         } else {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { verifyToken } from "@/lib/firebase-admin";
+import { verifyToken, adminDb, adminAuth } from "@/lib/firebase-admin";
 import { isRateLimited, getClientIp } from "@/lib/rate-limiter";
 
 interface EleitorData {
@@ -528,6 +528,9 @@ function buildFilteredSheet(wb: ExcelJS.Workbook, name: string, headerArgb: stri
 
 export async function POST(req: NextRequest) {
   try {
+    if (!adminDb || !adminAuth) {
+      return NextResponse.json({ error: "Serviço de exportação não disponível (configuração do servidor)." }, { status: 503 });
+    }
     if (await isRateLimited(getClientIp(req), "exportar-excel", 3)) {
       return NextResponse.json({ error: "Muitas exportações. Aguarde um minuto." }, { status: 429 });
     }
@@ -536,10 +539,103 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
+    // Verificar campanha do usuário para escopo de autorização
+    const userDoc = await adminDb.collection("usuarios").doc(uid).get();
+    const userRole      = (userDoc.data()?.role ?? "") as string;
+    const userCampanhaId = (userDoc.data()?.campanhaId || userDoc.data()?.gabineteId || "") as string;
+
     const body = await req.json();
-    const { eleitores, titulo, party, gabineteNome, tipo }: {
-      eleitores: EleitorData[]; titulo: string; party?: string; gabineteNome?: string; tipo?: string;
+    const { titulo, party, gabineteNome, tipo, campanhaId: requestedCampanhaId, filtros }: {
+      titulo: string; party?: string; gabineteNome?: string; tipo?: string; campanhaId?: string;
+      filtros?: {
+        colaboradorId?: string; coordenadorId?: string; assessorId?: string;
+        cidade?: string; estado?: string; bairro?: string;
+        grauApoio?: string; search?: string; dataInicio?: string; dataFim?: string;
+      };
     } = body;
+
+    // Admins exportam qualquer campanha; demais usuários precisam de campanhaId válido
+    if (!["super_admin", "admin_master"].includes(userRole)) {
+      if (!userCampanhaId) {
+        return NextResponse.json({ error: "Sem campanha associada" }, { status: 403 });
+      }
+      if (requestedCampanhaId && requestedCampanhaId !== userCampanhaId) {
+        return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+      }
+    }
+
+    // Determina a campanha efetiva e consulta Firestore server-side
+    // O array do cliente é descartado — o servidor é a única fonte de verdade.
+    const effectiveCampanhaId = ["super_admin", "admin_master"].includes(userRole)
+      ? (requestedCampanhaId || userCampanhaId)
+      : userCampanhaId;
+
+    if (!effectiveCampanhaId) {
+      return NextResponse.json({ error: "Campanha não identificada" }, { status: 400 });
+    }
+
+    // Aplica filtro indexado (apenas o mais específico, para usar o índice composto certo)
+    const baseQ = adminDb.collection("eleitores").where("campanhaId", "==", effectiveCampanhaId);
+    const indexedQ = filtros?.colaboradorId
+      ? baseQ.where("colaboradorId",  "==", filtros.colaboradorId)
+      : filtros?.coordenadorId
+      ? baseQ.where("coordenadorId",  "==", filtros.coordenadorId)
+      : filtros?.assessorId
+      ? baseQ.where("assessorId",     "==", filtros.assessorId)
+      : baseQ;
+    // Timeout de 12s para não pendurar o serverless quando Firestore tiver cota esgotada
+    const snap = await Promise.race([
+      indexedQ.orderBy("criadoEm", "desc").get(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(Object.assign(new Error("query_timeout"), { code: "timeout" })), 12_000)
+      ),
+    ]);
+
+    let eleitores: EleitorData[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        nomeCompleto:    (data.nomeCompleto || data.nome || "") as string,
+        telefone:        data.telefone,
+        tipoDocumento:   data.tipoDocumento,
+        documento:       (data.documento || "") as string,
+        estado:          (data.estado || "") as string,
+        cidade:          (data.cidade || "") as string,
+        bairro:          data.bairro,
+        grauApoio:       (data.grauApoio || "indeciso") as string,
+        voto:            data.voto,
+        colaboradorNome: (data.colaboradorNome || "") as string,
+        coordenadorId:   data.coordenadorId,
+        coordenadorNome: data.coordenadorNome,
+        criadoEm:        data.criadoEm,
+      };
+    });
+
+    // Filtros in-memory (campos não indexados ou combinações)
+    if (filtros?.cidade)    eleitores = eleitores.filter((e) => e.cidade    === filtros!.cidade);
+    if (filtros?.estado)    eleitores = eleitores.filter((e) => e.estado    === filtros!.estado);
+    if (filtros?.bairro)    eleitores = eleitores.filter((e) => e.bairro    === filtros!.bairro);
+    if (filtros?.grauApoio) eleitores = eleitores.filter((e) => e.grauApoio === filtros!.grauApoio);
+    if (filtros?.search) {
+      const s = filtros.search.toLowerCase();
+      eleitores = eleitores.filter((e) =>
+        e.nomeCompleto.toLowerCase().includes(s) || e.cidade.toLowerCase().includes(s)
+      );
+    }
+    if (filtros?.dataInicio) {
+      const inicio = new Date(filtros.dataInicio);
+      eleitores = eleitores.filter((e) => {
+        const d: Date = e.criadoEm?.toDate?.() ?? new Date(e.criadoEm ?? 0);
+        return d >= inicio;
+      });
+    }
+    if (filtros?.dataFim) {
+      const fim = new Date(filtros.dataFim);
+      fim.setHours(23, 59, 59, 999);
+      eleitores = eleitores.filter((e) => {
+        const d: Date = e.criadoEm?.toDate?.() ?? new Date(e.criadoEm ?? 0);
+        return d <= fim;
+      });
+    }
 
     // ── EXECUTIVO format ─────────────────────────────────────────────────────
     if (tipo === "executivo") {
@@ -659,7 +755,14 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota") || msg.includes("query_timeout")) {
+      return NextResponse.json(
+        { error: "Base de dados temporariamente indisponível. Tente novamente em alguns minutos." },
+        { status: 503 }
+      );
+    }
     console.error("Erro ao gerar Excel:", error);
-    return NextResponse.json({ error: "Erro ao gerar Excel" }, { status: 500 });
+    return NextResponse.json({ error: `Erro ao gerar Excel: ${msg.slice(0, 300)}` }, { status: 500 });
   }
 }

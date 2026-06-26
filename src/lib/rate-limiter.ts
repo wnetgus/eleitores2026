@@ -9,11 +9,11 @@ const WINDOW_SECONDS = 60;
  */
 export async function isRateLimited(ip: string, action: string, maxRequests = 10): Promise<boolean> {
   const key = `${action}:${ip}`;
-  const ref = adminDb.doc(`_rate_limits/${key}`);
   const now = Date.now();
   const windowStart = now - WINDOW_SECONDS * 1000;
 
   try {
+    const ref = adminDb.doc(`_rate_limits/${key}`);
     const result = await adminDb.runTransaction(async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists) {

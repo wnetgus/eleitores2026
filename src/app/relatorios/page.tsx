@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, query, orderBy, where } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
-import { db } from "@/lib/firebase";
+import { db, auth } from "@/lib/firebase";
 import { Eleitor, AppUser } from "@/types";
 import { estados } from "@/lib/estados-cidades";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -134,12 +134,28 @@ export default function RelatoriosPage() {
 
   async function exportExcelPremiumAction() {
     try {
+      if (!auth.currentUser) { toast.error("Sessão ainda carregando. Tente novamente em alguns segundos."); return; }
+      const token = await auth.currentUser.getIdToken();
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eleitores: filtered, titulo: userData?.gabineteNome || "Relatório" }),
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({
+          titulo: userData?.gabineteNome || "Relatório",
+          campanhaId: userData?.campanhaId || userData?.gabineteId,
+          filtros: {
+            ...(filtros.colaboradorId ? { colaboradorId: filtros.colaboradorId } : {}),
+            ...(filtros.cidade        ? { cidade:        filtros.cidade        } : {}),
+            ...(filtros.estado        ? { estado:        filtros.estado        } : {}),
+            ...(filtros.bairro        ? { bairro:        filtros.bairro        } : {}),
+            ...(filtros.grauApoio     ? { grauApoio:     filtros.grauApoio     } : {}),
+            ...(filtros.search        ? { search:        filtros.search        } : {}),
+            ...(filtros.dataInicio    ? { dataInicio:    filtros.dataInicio    } : {}),
+            ...(filtros.dataFim       ? { dataFim:       filtros.dataFim       } : {}),
+          },
+        }),
       });
-      if (!res.ok) throw new Error();
+      if (res.status === 503) { toast.error("Base de dados temporariamente indisponível. Tente em alguns minutos."); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || "Erro ao exportar Excel"); return; }
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");

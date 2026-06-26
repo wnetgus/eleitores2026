@@ -32,7 +32,19 @@ service cloud.firestore {
     }
 
     function camposProtegidosAssessor() {
-      return ["role", "campanhaId", "gabineteId", "coordenadorId"].toSet();
+      return ["role", "campanhaId", "gabineteId", "coordenadorId", "assessorId",
+              "nome", "email", "telefone", "criadoPor", "criadoEm"].toSet();
+    }
+
+    function isAtivo() {
+      return me().get("ativo", true) == true;
+    }
+
+    // Valida que userId pertence à mesma campanha (evita forjaria de notificação)
+    function recipientInCampanha(userId) {
+      let d = get(/databases/$(database)/documents/usuarios/$(userId)).data;
+      return d.get("campanhaId", "") == myCampanha() ||
+             d.get("gabineteId", "") == myCampanha();
     }
 
     // ─── campanhas ────────────────────────────────────────────────────────────
@@ -75,11 +87,13 @@ service cloud.firestore {
         // Criação de usuários Auth (assessor, coordenador, colaborador) ocorre server-side
         // via /api/admin/create-user usando Admin SDK — sem regra de client necessária.
       );
-      allow update: if isAuth() && (
+      allow update: if isAuth() && isAtivo() && (
         (request.auth.uid == uid &&
          !request.resource.data.diff(resource.data).affectedKeys().hasAny(camposProtegidosSelf())) ||
         isAdmin() ||
-        (me().get("role", "") in ["assessor_executivo", "assessor"] && (
+        // assessor/AE só pode gerir coordenadores e colaboradores — nunca pares ou superiores
+        (me().get("role", "") in ["assessor_executivo", "assessor"] &&
+         resource.data.get("role", "") in ["coordenador", "colaborador"] && (
           resource.data.get("campanhaId", "") == myCampanha() ||
           resource.data.get("gabineteId", "") == myCampanha()
         ) &&
@@ -154,9 +168,13 @@ service cloud.firestore {
          request.resource.data.get("campanhaId", "") == myCampanha() &&
          request.resource.data.get("colaboradorId", "") != "")
       );
-      allow update: if isAuth() && (
+      allow update: if isAuth() && isAtivo() && (
         isAdmin() ||
-        (resource.data.get("campanhaId", "") == myCampanha() && (
+        (resource.data.get("campanhaId", "") == myCampanha() &&
+         // Campos de vínculo territorial são imutáveis após criação
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+           ["campanhaId", "colaboradorId", "coordenadorId", "assessorId", "criadoPor", "criadoEm"].toSet()
+         ) && (
           me().get("role", "") in ["politico", "assessor_executivo", "prefeito", "vereador", "assessor"] ||
           resource.data.get("colaboradorId", "") == request.auth.uid ||
           resource.data.get("coordenadorId", "") == request.auth.uid
@@ -213,16 +231,23 @@ service cloud.firestore {
           request.resource.data.get("campanhaId", "") != ""
         )
       );
-      allow update: if isAuth() && (
+      allow update: if isAuth() && isAtivo() && (
         isAdmin() ||
         (
           me().get("role", "") in ["politico", "assessor_executivo"] &&
-          resource.data.get("campanhaId", "") == myCampanha()
+          resource.data.get("campanhaId", "") == myCampanha() &&
+          // Campos de autoria e campanha são imutáveis
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+            ["campanhaId", "criadoPorId", "criadoPorNome", "criadoEm"].toSet()
+          )
         ) ||
         (
           me().get("role", "") == "assessor" &&
           resource.data.get("campanhaId", "") == myCampanha() &&
-          resource.data.get("responsavelId", "") == request.auth.uid
+          resource.data.get("responsavelId", "") == request.auth.uid &&
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(
+            ["campanhaId", "criadoPorId", "criadoPorNome", "criadoEm"].toSet()
+          )
         )
       );
       allow delete: if isAuth() && isAdmin();
@@ -248,13 +273,27 @@ service cloud.firestore {
           request.resource.data.get("criadoPorId", "") == request.auth.uid
         )
       );
-      // AE atualiza (aceitar, prestar contas, concluir)
-      allow update: if isAuth() && (
+      // AE atualiza apenas campos de execução — assunto/prazo/autoria/destinatário são imutáveis
+      allow update: if isAuth() && isAtivo() && (
         isAdmin() ||
         (
           me().get("role", "") == "assessor_executivo" &&
           resource.data.get("campanhaId", "") == myCampanha() &&
-          resource.data.get("destinatarioId", "") == request.auth.uid
+          resource.data.get("destinatarioId", "") == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ["status", "aceitoEm", "aceitoPorId", "aceitoPorNome",
+             "resultado", "conclusaoItems", "concluidoEm", "atualizadoEm", "missaoId",
+             "tempoExecucaoDias"].toSet()
+          )
+        ) ||
+        // Político pode vincular missão criada a partir da determinação
+        (
+          me().get("role", "") == "politico" &&
+          resource.data.get("campanhaId", "") == myCampanha() &&
+          resource.data.get("criadoPorId", "") == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+            ["missaoId", "atualizadoEm"].toSet()
+          )
         )
       );
       allow delete: if isAuth() && isAdmin();
@@ -404,6 +443,25 @@ service cloud.firestore {
           resource.data.get("campanhaId", "") == myCampanha()
         )
       );
+    }
+
+    // ── Notificações (Sprint 23) ────────────────────────────────────────────
+    match /notificacoes/{id} {
+      // Criação: usuário ativo com campanha válida. Tipo e destinatário obrigatórios.
+      // O destinatário deve ser o próprio remetente ou um membro da mesma campanha.
+      allow create: if isAuth() && isAtivo() &&
+        hasCampanha() &&
+        request.resource.data.get("campanhaId", "") == myCampanha() &&
+        request.resource.data.get("campanhaId", "") != "" &&
+        request.resource.data.get("usuarioId", "") != "" &&
+        request.resource.data.get("tipo", "") in
+          ["determinacao", "missao", "alerta", "meta", "prestacao", "sistema"] &&
+        (
+          request.resource.data.get("usuarioId", "") == request.auth.uid ||
+          recipientInCampanha(request.resource.data.usuarioId)
+        );
+      // Só o destinatário lê, atualiza (marcar lida/arquivada) e deleta
+      allow read, update, delete: if isAuth() && request.auth.uid == resource.data.usuarioId;
     }
   }
 }

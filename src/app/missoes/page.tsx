@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { collection, getDocs, query, where, addDoc, updateDoc, doc, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -533,6 +533,9 @@ export default function MissoesPage() {
     prazo: string;
   }>({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
 
+  // Vínculo formal com a determinação que originou esta missão (se houver)
+  const determinacaoIdRef = useRef<string>("");
+
   const canCreateMission  = isPolitico(userData) || isAssessorExecutivo(userData) || isSuperOrMaster(userData);
 
   const cidadesDaCampanha = useMemo(() => {
@@ -598,6 +601,8 @@ export default function MissoesPage() {
         const cidade = params.get("cidade") || "";
         const prioridade = params.get("prioridade") as "P1" | "P2" | "P3" | null;
         const descricao = params.get("descricao") || "";
+        const detId = params.get("determinacaoId") || "";
+        if (detId) determinacaoIdRef.current = detId;
         setForm((f) => ({
           ...f,
           ...(tipo && Object.keys(TIPO_CONFIG).includes(tipo) ? { tipo } : {}),
@@ -616,9 +621,11 @@ export default function MissoesPage() {
     if (!campanhaId) { toast.error("Erro: campanha não identificada. Recarregue a página."); return; }
     setSalvando(true);
     try {
-      await addDoc(collection(db, "missoes"), {
+      const detId = determinacaoIdRef.current;
+      const missaoRef = await addDoc(collection(db, "missoes"), {
         campanhaId,
-        origem:        "deputado",
+        origem:        detId ? "determinacao" : "deputado",
+        ...(detId ? { determinacaoId: detId } : {}),
         tipo:          form.tipo,
         titulo:        TITULO_AUTO[form.tipo](form.cidade.trim()),
         ...(form.descricao.trim() ? { descricao: form.descricao.trim() } : {}),
@@ -630,6 +637,18 @@ export default function MissoesPage() {
         criadoPorNome: userData?.nome ?? "",
         criadoEm:      Timestamp.now(),
       });
+      // Vincula a determinação que originou esta missão
+      if (detId) {
+        try {
+          await updateDoc(doc(db, "determinacoes", detId), {
+            missaoId:     missaoRef.id,
+            atualizadoEm: Timestamp.now(),
+          });
+        } catch (e) {
+          console.error("Erro ao vincular missão à determinação:", e);
+        }
+        determinacaoIdRef.current = "";
+      }
       toast.success(isPolitico(userData) ? "Missão criada e delegada ao Assessor Executivo!" : "Missão criada! Delegue ao assessor regional a partir da lista.");
       setModalCriar(false);
       setForm({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
@@ -710,6 +729,7 @@ export default function MissoesPage() {
   const FILTROS: { key: MissaoStatus | "todas"; label: string }[] = [
     { key: "todas",       label: "Todas"       },
     { key: "pendente",    label: "Pendentes"   },
+    { key: "aceita",      label: "Delegadas"   },
     { key: "em_execucao", label: "Em Execução" },
     { key: "concluida",   label: "Concluídas"  },
   ];

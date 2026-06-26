@@ -13,9 +13,30 @@ import {
   Timestamp,
   serverTimestamp,
   getCountFromServer,
+  CollectionReference,
+  QueryConstraint,
+  QueryDocumentSnapshot,
+  DocumentData,
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { Eleitor, Atividade, Gabinete, Candidato, MemoriaMandato } from "@/types";
+
+// Queries `in` do Firestore são limitadas a 30 itens.
+// Esta função quebra a lista em chunks paralelos e mescla os resultados.
+export async function queryInChunks(
+  col: CollectionReference,
+  inField: string,
+  ids: string[],
+  extra: QueryConstraint[] = []
+): Promise<QueryDocumentSnapshot<DocumentData>[]> {
+  if (!ids.length) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += 30) chunks.push(ids.slice(i, i + 30));
+  const snaps = await Promise.all(
+    chunks.map((c) => getDocs(query(col, where(inField, "in", c), ...extra)))
+  );
+  return snaps.flatMap((s) => s.docs);
+}
 
 const colecoes = {
   eleitores: "eleitores",

@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { collection, getDocs, query, orderBy, where, doc, getDoc, updateDoc, arrayUnion, serverTimestamp } from "firebase/firestore";
 import { db, createAuthUser } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
+import { queryInChunks } from "@/lib/firestore";
 import { Gabinete, Eleitor, AppUser } from "@/types";
 import { isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo, getRoleConfig } from "@/lib/permissions";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -883,14 +884,14 @@ export default function MapaPoliticoPage() {
 
         const allIds = gabs.map((g) => g.id!).filter(Boolean);
         if (allIds.length > 0) {
-          const [eSnap, uSnap1, uSnap2] = await Promise.all([
-            getDocs(query(collection(db, "eleitores"), where("campanhaId", "in", allIds))),
-            getDocs(query(collection(db, "usuarios"), where("campanhaId", "in", allIds))),
-            getDocs(query(collection(db, "usuarios"), where("gabineteId", "in", allIds))),
+          const [eDocs, uDocs1, uDocs2] = await Promise.all([
+            queryInChunks(collection(db, "eleitores"), "campanhaId", allIds),
+            queryInChunks(collection(db, "usuarios"), "campanhaId", allIds),
+            queryInChunks(collection(db, "usuarios"), "gabineteId", allIds),
           ]);
-          setEleitores(eSnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+          setEleitores(eDocs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
           const uMap = new Map<string, AppUser>();
-          [...uSnap1.docs, ...uSnap2.docs].forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
+          [...uDocs1, ...uDocs2].forEach((d) => uMap.set(d.id, { uid: d.id, ...d.data() } as AppUser));
           setUsuarios([...uMap.values()]);
         }
         const gAtual = gabs.find((g) => g.id === gabId);

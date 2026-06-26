@@ -107,7 +107,7 @@ self.addEventListener("fetch", (event) => {
       const fetchPromise = fetch(request).then((res) => {
         if (res.ok) cache.put(request, res.clone());
         return res;
-      }).catch(() => cached);
+      }).catch(() => cached || new Response("Offline", { status: 503 }));
       return cached || fetchPromise;
     })
   );

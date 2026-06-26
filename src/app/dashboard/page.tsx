@@ -9,7 +9,7 @@ import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
 import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo, isCoordenador, isColaborador } from "@/lib/permissions";
 import { DashboardExecutivo } from "./DashboardExecutivo";
 import { getPartyColors, exportRelatorioExecutivo } from "@/lib/reports";
-import { buscarEleitoresPorGabinetes } from "@/lib/firestore";
+import { buscarEleitoresPorGabinetes, queryInChunks } from "@/lib/firestore";
 import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter, AlertTriangle, Bell, Clock, Eye, PlusCircle, FileSpreadsheet, Settings, Shield, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Select } from "@/components/ui/Select";
@@ -30,6 +30,7 @@ import { AgendaExecutiva, AgendaItem } from "@/components/politico/AgendaExecuti
 import { CentralAlertas, AlertaExecutivo } from "@/components/politico/CentralAlertas";
 import { MemoriaMandato, EventoMandato } from "@/components/politico/MemoriaMandato";
 import toast from "react-hot-toast";
+import { criarNotificacao } from "@/lib/notificacoes";
 
 export default function DashboardPage() {
   const { userData } = useAuth();
@@ -114,11 +115,9 @@ export default function DashboardPage() {
           const coordIds = coordSnap.docs.map((d) => d.id);
           setMeusCoordIds(coordIds);
           if (coordIds.length > 0) {
-            const eQuery = gabId
-              ? query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabId))
-              : query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds));
-            const esnap = await getDocs(eQuery);
-            setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+            const extra = gabId ? [where("campanhaId", "==", gabId)] : [];
+            const docs = await queryInChunks(collection(db, "eleitores"), "coordenadorId", coordIds, extra);
+            setEleitores(docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
           }
           eleitoresCarregados = true;
         } else if (!isSuperOrMaster(userData)) {
@@ -2795,15 +2794,18 @@ export default function DashboardPage() {
           if (!userData || !ae || !modalDeterminacao) return;
           setDeterminacaoEnviando(true);
           try {
+            const campanhaId = userData.campanhaId || userData.gabineteId || "";
+            const assunto = determinacaoForm.assunto || modalDeterminacao.acao;
+            const municipios = modalDeterminacao.territorio.split(",").map((s) => s.trim()).filter(Boolean);
             await addDoc(collection(db, "determinacoes"), {
-              campanhaId:       userData.campanhaId || userData.gabineteId || "",
+              campanhaId,
               criadoPorId:      userData.uid,
               criadoPorNome:    userData.nome,
               destinatarioId:   ae.uid,
               destinatarioNome: ae.nome,
               destinatarioRole: "assessor_executivo",
-              municipios:       modalDeterminacao.territorio.split(",").map((s) => s.trim()).filter(Boolean),
-              assunto:          determinacaoForm.assunto || modalDeterminacao.acao,
+              municipios,
+              assunto,
               descricao:        determinacaoForm.descricao,
               prioridade:       determinacaoForm.prioridade,
               prazo:            Timestamp.fromDate(prazoData),
@@ -2811,7 +2813,19 @@ export default function DashboardPage() {
               criadoEm:         Timestamp.now(),
               atualizadoEm:     Timestamp.now(),
             });
-            const snap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", userData.campanhaId || userData.gabineteId || ""), where("criadoPorId", "==", userData.uid)));
+            // Notificar AE em tempo real
+            await criarNotificacao({
+              campanhaId,
+              usuarioId:      ae.uid,
+              tipo:           "determinacao",
+              titulo:         "Nova determinação recebida",
+              descricao:      `${assunto}${municipios.length ? ` · ${municipios[0]}` : ""} · Prioridade ${determinacaoForm.prioridade}`,
+              link:           "/dashboard",
+              prioridade:     determinacaoForm.prioridade === "Alta" ? "alta" : determinacaoForm.prioridade === "Critica" ? "critica" : "media",
+              remetenteNome:  userData.nome,
+              origemTipo:     "determinacao",
+            });
+            const snap = await getDocs(query(collection(db, "determinacoes"), where("campanhaId", "==", campanhaId), where("criadoPorId", "==", userData.uid)));
             setDeterminacoes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
             setModalDeterminacao(null);
             setDeterminacaoForm({ assunto: "", prioridade: "Alta", prazo: 7, descricao: "" });

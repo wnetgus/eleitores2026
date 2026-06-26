@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, Timestamp, onSnapshot, type DocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, addDoc, Timestamp, onSnapshot, type DocumentSnapshot } from "firebase/firestore";
 import toast from "react-hot-toast";
 import { db } from "@/lib/firebase";
+import { criarNotificacao } from "@/lib/notificacoes";
 import { AppUser, Missao } from "@/types";
 import { Eleitor } from "@/types";
 import { GlassCard } from "@/components/ui/GlassCard";
@@ -745,11 +746,12 @@ export function DashboardExecutivo({ userData }: Props) {
                         : "fortalecer_base";
                     const cidade = (det.municipios?.[0] || "").trim();
                     const params = new URLSearchParams({
-                      acao:       "nova",
+                      acao:            "nova",
                       cidade,
                       tipo,
-                      prioridade: prioMap[det.prioridade] || "P1",
-                      descricao:  det.assunto || "",
+                      prioridade:      prioMap[det.prioridade] || "P1",
+                      descricao:       det.assunto || "",
+                      determinacaoId:  det.id,
                     });
                     window.location.href = `/missoes?${params.toString()}`;
                   };
@@ -881,6 +883,7 @@ export function DashboardExecutivo({ userData }: Props) {
                       if (!det?.aceitoEm) return null;
                       return Math.ceil((Date.now() - det.aceitoEm.toDate().getTime()) / 86400000);
                     })();
+                    const det = determinacoesRecebidas.find((d) => d.id === modalConcluir.id);
                     await updateDoc(doc(db, "determinacoes", modalConcluir.id), {
                       status:            "concluida",
                       resultado:         conclusaoForm.resultado,
@@ -889,7 +892,39 @@ export function DashboardExecutivo({ userData }: Props) {
                       atualizadoEm:      Timestamp.now(),
                       ...(tempoExec !== null ? { tempoExecucaoDias: tempoExec } : {}),
                     });
+                    // Notificar Deputado sobre a prestação de contas
+                    if (det?.criadoPorId) {
+                      await criarNotificacao({
+                        campanhaId:    campanhaId,
+                        usuarioId:     det.criadoPorId,
+                        tipo:          "prestacao",
+                        titulo:        "Prestação de contas recebida",
+                        descricao:     `${det.assunto || modalConcluir.assunto}${tempoExec ? ` · Concluído em ${tempoExec} dia${tempoExec !== 1 ? "s" : ""}` : ""}`,
+                        link:          "/dashboard",
+                        prioridade:    "alta",
+                        remetenteNome: userData.nome,
+                        origem:        modalConcluir.id,
+                        origemTipo:    "determinacao",
+                      });
+                    }
                     setDeterminacoesRecebidas((prev) => prev.map((d) => d.id === modalConcluir.id ? { ...d, status: "concluida", resultado: conclusaoForm.resultado } : d));
+                    // Registrar prestação na Memória do Mandato
+                    try {
+                      await addDoc(collection(db, "memoriaMandato"), {
+                        campanhaId,
+                        tipo:            "conquista",
+                        titulo:          `Determinação concluída: ${det?.assunto || modalConcluir.assunto}`,
+                        descricao:       conclusaoForm.resultado || "Determinação política concluída pelo Assessor Executivo.",
+                        status:          "concluido",
+                        prioridade:      "alta",
+                        origem:          "auto",
+                        responsavelId:   userData.uid,
+                        responsavelNome: userData.nome,
+                        resultado:       conclusaoForm.resultado,
+                        ...(tempoExec !== null ? { impacto: `Concluído em ${tempoExec} dia${tempoExec !== 1 ? "s" : ""}` } : {}),
+                        criadoEm:        Timestamp.now(),
+                      });
+                    } catch (e) { console.error("Memória determinação:", e); }
                     setModalConcluir(null);
                     setConclusaoForm({ resultado: "", items: ["", "", ""] });
                     toast.success("Prestação de contas registrada com sucesso");
