@@ -729,6 +729,7 @@ export default function MissoesPage() {
   const FILTROS: { key: MissaoStatus | "todas"; label: string }[] = [
     { key: "todas",       label: "Todas"       },
     { key: "pendente",    label: "Pendentes"   },
+    { key: "aceita",      label: "Delegadas"   },
     { key: "em_execucao", label: "Em Execução" },
     { key: "concluida",   label: "Concluídas"  },
   ];

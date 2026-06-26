@@ -281,7 +281,7 @@ export default function SalaDeSituacao() {
         link:       "/sala-situacao",
         prioridade: "critica",
         chave:      `alerta-${c.nome.replace(/\s/g, "")}-${hoje}`,
-      });
+      }).catch((e) => console.error("notif alerta:", e));
     });
 
     missoesAtrasadas.forEach((m) => {
@@ -300,7 +300,7 @@ export default function SalaDeSituacao() {
         chave:      `missao-atrasada-${m.id}-${hoje}`,
         origem:     m.id,
         origemTipo: "missao",
-      });
+      }).catch((e) => console.error("notif missão atrasada:", e));
     });
   }, [cidadesRisco, missoesAtrasadas, userData?.uid, campanhaId, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 

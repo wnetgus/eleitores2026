@@ -90,7 +90,7 @@ export default function ExportacoesPage() {
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eleitores, titulo: userData?.gabineteNome || "Relatório" }),
+        body: JSON.stringify({ eleitores, titulo: userData?.gabineteNome || "Relatório", campanhaId: userData?.campanhaId || userData?.gabineteId }),
       });
       if (!res.ok) throw new Error();
       const blob = await res.blob();
@@ -159,7 +159,7 @@ export default function ExportacoesPage() {
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eleitores, titulo: userData?.gabineteNome || "Relatório", gabineteNome: userData?.gabineteNome, tipo: "executivo" }),
+        body: JSON.stringify({ eleitores, titulo: userData?.gabineteNome || "Relatório", gabineteNome: userData?.gabineteNome, tipo: "executivo", campanhaId: userData?.campanhaId || userData?.gabineteId }),
       });
       if (!res.ok) throw new Error();
       const blob = await res.blob();

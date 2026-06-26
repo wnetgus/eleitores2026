@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, Timestamp, onSnapshot, type DocumentSnapshot } from "firebase/firestore";
+import { collection, getDocs, query, where, getDoc, doc, limit, orderBy, startAfter, updateDoc, addDoc, Timestamp, onSnapshot, type DocumentSnapshot } from "firebase/firestore";
 import toast from "react-hot-toast";
 import { db } from "@/lib/firebase";
 import { criarNotificacao } from "@/lib/notificacoes";
@@ -908,6 +908,23 @@ export function DashboardExecutivo({ userData }: Props) {
                       });
                     }
                     setDeterminacoesRecebidas((prev) => prev.map((d) => d.id === modalConcluir.id ? { ...d, status: "concluida", resultado: conclusaoForm.resultado } : d));
+                    // Registrar prestação na Memória do Mandato
+                    try {
+                      await addDoc(collection(db, "memoriaMandato"), {
+                        campanhaId,
+                        tipo:            "conquista",
+                        titulo:          `Determinação concluída: ${det?.assunto || modalConcluir.assunto}`,
+                        descricao:       conclusaoForm.resultado || "Determinação política concluída pelo Assessor Executivo.",
+                        status:          "concluido",
+                        prioridade:      "alta",
+                        origem:          "auto",
+                        responsavelId:   userData.uid,
+                        responsavelNome: userData.nome,
+                        resultado:       conclusaoForm.resultado,
+                        ...(tempoExec !== null ? { impacto: `Concluído em ${tempoExec} dia${tempoExec !== 1 ? "s" : ""}` } : {}),
+                        criadoEm:        Timestamp.now(),
+                      });
+                    } catch (e) { console.error("Memória determinação:", e); }
                     setModalConcluir(null);
                     setConclusaoForm({ resultado: "", items: ["", "", ""] });
                     toast.success("Prestação de contas registrada com sucesso");

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { verifyToken } from "@/lib/firebase-admin";
+import { verifyToken, adminDb } from "@/lib/firebase-admin";
 import { isRateLimited, getClientIp } from "@/lib/rate-limiter";
 
 interface EleitorData {
@@ -536,10 +536,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
+    // Verificar campanha do usuário para escopo de autorização
+    const userDoc = await adminDb.collection("usuarios").doc(uid).get();
+    const userRole      = (userDoc.data()?.role ?? "") as string;
+    const userCampanhaId = (userDoc.data()?.campanhaId || userDoc.data()?.gabineteId || "") as string;
+
     const body = await req.json();
-    const { eleitores, titulo, party, gabineteNome, tipo }: {
-      eleitores: EleitorData[]; titulo: string; party?: string; gabineteNome?: string; tipo?: string;
+    const { eleitores, titulo, party, gabineteNome, tipo, campanhaId: requestedCampanhaId }: {
+      eleitores: EleitorData[]; titulo: string; party?: string; gabineteNome?: string; tipo?: string; campanhaId?: string;
     } = body;
+
+    // Admins exportam qualquer campanha; demais usuários precisam de campanhaId válido
+    if (!["super_admin", "admin_master"].includes(userRole)) {
+      if (!userCampanhaId) {
+        return NextResponse.json({ error: "Sem campanha associada" }, { status: 403 });
+      }
+      if (requestedCampanhaId && requestedCampanhaId !== userCampanhaId) {
+        return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
+      }
+    }
 
     // ── EXECUTIVO format ─────────────────────────────────────────────────────
     if (tipo === "executivo") {

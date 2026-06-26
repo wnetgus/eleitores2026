@@ -44,16 +44,14 @@ export async function criarNotificacao(dados: Omit<Notificacao, "id" | "lida" | 
       // Sem permissão de leitura (notificação cross-user) — prossegue com escrita.
     }
   }
-  try {
-    await addDoc(collection(db, "notificacoes"), {
-      ...dados,
-      lida: false,
-      arquivada: false,
-      criadaEm: Timestamp.now(),
-    });
-  } catch (e) {
-    console.error("criarNotificacao:", e);
-  }
+  // Throws on write failure — callers em fluxos críticos devem await e capturar.
+  // Chamadas fire-and-forget (useEffect) devem adicionar .catch().
+  await addDoc(collection(db, "notificacoes"), {
+    ...dados,
+    lida: false,
+    arquivada: false,
+    criadaEm: Timestamp.now(),
+  });
 }
 
 export async function marcarLida(id: string): Promise<void> {

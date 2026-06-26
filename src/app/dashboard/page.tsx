@@ -9,7 +9,7 @@ import { Eleitor, AppUser, ROLE_CONFIG } from "@/types";
 import { getRoleConfig, isSuperOrMaster, isPolitico, isPrefeito, isVereador, isAssessor, isAssessorExecutivo, isCoordenador, isColaborador } from "@/lib/permissions";
 import { DashboardExecutivo } from "./DashboardExecutivo";
 import { getPartyColors, exportRelatorioExecutivo } from "@/lib/reports";
-import { buscarEleitoresPorGabinetes } from "@/lib/firestore";
+import { buscarEleitoresPorGabinetes, queryInChunks } from "@/lib/firestore";
 import { Users, UserPlus, TrendingUp, MapPin, Medal, Target, Crown, Zap, Filter, AlertTriangle, Bell, Clock, Eye, PlusCircle, FileSpreadsheet, Settings, Shield, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Select } from "@/components/ui/Select";
@@ -115,11 +115,9 @@ export default function DashboardPage() {
           const coordIds = coordSnap.docs.map((d) => d.id);
           setMeusCoordIds(coordIds);
           if (coordIds.length > 0) {
-            const eQuery = gabId
-              ? query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds), where("campanhaId", "==", gabId))
-              : query(collection(db, "eleitores"), where("coordenadorId", "in", coordIds));
-            const esnap = await getDocs(eQuery);
-            setEleitores(esnap.docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
+            const extra = gabId ? [where("campanhaId", "==", gabId)] : [];
+            const docs = await queryInChunks(collection(db, "eleitores"), "coordenadorId", coordIds, extra);
+            setEleitores(docs.map((d) => ({ id: d.id, ...d.data() } as Eleitor)));
           }
           eleitoresCarregados = true;
         } else if (!isSuperOrMaster(userData)) {
