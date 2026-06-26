@@ -528,11 +528,11 @@ function buildFilteredSheet(wb: ExcelJS.Workbook, name: string, headerArgb: stri
 
 export async function POST(req: NextRequest) {
   try {
-    if (await isRateLimited(getClientIp(req), "exportar-excel", 3)) {
-      return NextResponse.json({ error: "Muitas exportações. Aguarde um minuto." }, { status: 429 });
-    }
     if (!adminDb || !adminAuth) {
       return NextResponse.json({ error: "Serviço de exportação não disponível (configuração do servidor)." }, { status: 503 });
+    }
+    if (await isRateLimited(getClientIp(req), "exportar-excel", 3)) {
+      return NextResponse.json({ error: "Muitas exportações. Aguarde um minuto." }, { status: 429 });
     }
     const uid = await verifyToken(req);
     if (!uid) {
