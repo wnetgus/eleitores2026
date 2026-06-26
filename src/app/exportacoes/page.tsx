@@ -85,24 +85,67 @@ export default function ExportacoesPage() {
 
   // ── Export actions (non-assessor: unchanged) ──────────────────────────────
 
-  async function exportExcelPremiumAction() {
+  function exportExcelPremiumAction() {
     try {
-      if (!auth.currentUser) { toast.error("Sessão ainda carregando. Tente novamente em alguns segundos."); return; }
-      const token = await auth.currentUser.getIdToken();
-      const res = await fetch("/api/exportar-excel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
-        body: JSON.stringify({ titulo: userData?.gabineteNome || "Relatório", campanhaId: userData?.campanhaId || userData?.gabineteId }),
-      });
-      if (res.status === 503) { toast.error("Base de dados temporariamente indisponível. Tente em alguns minutos."); return; }
-      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || "Erro ao exportar"); return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url; a.download = "relatorio-eleitores.xlsx"; a.click();
-      URL.revokeObjectURL(url);
-      toast.success("Excel premium exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      if (eleitores.length === 0) { toast.error("Nenhum eleitor na base para exportar."); return; }
+      const gabinete = userData?.gabineteNome || "Relatório";
+      const data = new Date().toISOString().split("T")[0];
+
+      // Aba 1 — Resumo Geral
+      const fortes   = eleitores.filter(e => e.grauApoio === "forte").length;
+      const medios   = eleitores.filter(e => e.grauApoio === "medio").length;
+      const indecisos = eleitores.filter(e => e.grauApoio === "indeciso").length;
+      const fracos   = eleitores.filter(e => e.grauApoio === "fraco").length;
+      const wsResumo = XLSX.utils.aoa_to_sheet([
+        [`RESUMO GERAL — ${gabinete}`], [`Gerado em ${data}`], [],
+        ["Indicador", "Total"],
+        ["Total de Eleitores", eleitores.length],
+        ["Fortes",    fortes],
+        ["Médios",    medios],
+        ["Indecisos", indecisos],
+        ["Fracos",    fracos],
+        ["Crescimento 30 dias", stats.recentes],
+        ["Coordenadores Ativos", stats.coordsAtivos],
+        ["Municípios Cobertos", stats.topCidades.length],
+      ]);
+
+      // Aba 2 — Municípios
+      const cidadeMap: Record<string, { fortes: number; total: number }> = {};
+      for (const e of eleitores) {
+        if (!cidadeMap[e.cidade]) cidadeMap[e.cidade] = { fortes: 0, total: 0 };
+        cidadeMap[e.cidade].total++;
+        if (e.grauApoio === "forte") cidadeMap[e.cidade].fortes++;
+      }
+      const wsMunicipios = XLSX.utils.aoa_to_sheet([
+        ["Município", "Total", "Fortes", "% Fortes"],
+        ...Object.entries(cidadeMap).sort((a, b) => b[1].total - a[1].total).map(([cidade, s]) => [
+          cidade, s.total, s.fortes, s.total > 0 ? `${Math.round((s.fortes / s.total) * 100)}%` : "—",
+        ]),
+      ]);
+
+      // Aba 3 — Assessorias (coordenadores)
+      const wsAssessorias = XLSX.utils.aoa_to_sheet([
+        ["Coordenador", "Total", "Fortes", "Indecisos", "Fracos", "% Fortes"],
+        ...stats.topCoordenadores.map(c => [
+          c.nome, c.total, c.fortes, c.indecisos, c.fracos,
+          c.total > 0 ? `${Math.round((c.fortes / c.total) * 100)}%` : "—",
+        ]),
+      ]);
+
+      // Aba 4 — Eleitores (lista completa)
+      const wsEleitores = XLSX.utils.aoa_to_sheet([
+        ["Nome", "Telefone", "UF", "Cidade", "Bairro", "Grau de Apoio", "Intenção de Voto", "Mobilizador", "Coordenador"],
+        ...eleitores.map(e => [e.nomeCompleto, e.telefone || "—", e.estado, e.cidade, e.bairro || "—", e.grauApoio, e.voto || "—", e.colaboradorNome || "—", e.coordenadorNome || "—"]),
+      ]);
+
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, wsResumo,      "Resumo Geral");
+      XLSX.utils.book_append_sheet(wb, wsMunicipios,  "Municípios");
+      XLSX.utils.book_append_sheet(wb, wsAssessorias, "Assessorias");
+      XLSX.utils.book_append_sheet(wb, wsEleitores,   "Eleitores");
+      XLSX.writeFile(wb, `excel-premium-${gabinete.replace(/\s+/g, "-").toLowerCase()}-${data}.xlsx`);
+      toast.success("Excel Executivo Premium exportado!");
+    } catch { toast.error("Erro ao exportar Excel"); }
   }
 
   function exportPDFPremiumAction() {
