@@ -31,6 +31,8 @@ export default function ColaboradoresPage() {
   const searchParams = useSearchParams();
   const gabineteIdParam = searchParams.get("gabineteId");
   const assessorIdParam = searchParams.get("assessorId");
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
   const [gabineteContexto, setGabineteContexto] = useState<{ id: string; nome: string; cargo: string } | null>(null);
   const [assessorContexto, setAssessorContexto] = useState<{ id: string; nome: string } | null>(null);
   const [coordenadoresDisponiveis, setCoordenadoresDisponiveis] = useState<AppUser[]>([]);
@@ -567,14 +569,14 @@ export default function ColaboradoresPage() {
       <GlassCard className="p-5">
         <div className="flex items-center gap-2 mb-4"><Trophy size={20} className="text-amber-400" /><h3 className="text-white font-semibold">Ranking de Colaboradores</h3></div>
         <div className="h-72 min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
+          {mounted && <ResponsiveContainer width="100%" height="100%">
             <BarChart data={rankingArray} layout="vertical">
               <XAxis type="number" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} />
               <YAxis dataKey="nome" type="category" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} width={140} />
               <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, color: "#fff" }} />
               <Bar dataKey="total" fill="#10b981" radius={[0, 6, 6, 0]} />
             </BarChart>
-          </ResponsiveContainer>
+          </ResponsiveContainer>}
         </div>
       </GlassCard>
 
@@ -624,7 +626,7 @@ export default function ColaboradoresPage() {
           </div>
           {crescimentoData.length > 0 && (
             <div className="h-48 mb-6 min-w-0">
-              <ResponsiveContainer width="100%" height="100%">
+              {mounted && <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={crescimentoData}>
                   <defs><linearGradient id="colabGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#10b981" stopOpacity={0.3} /><stop offset="95%" stopColor="#10b981" stopOpacity={0} /></linearGradient></defs>
                   <XAxis dataKey="dia" stroke="rgba(255,255,255,0.1)" tick={{ fill: "rgba(255,255,255,0.4)", fontSize: 12 }} />
@@ -632,7 +634,7 @@ export default function ColaboradoresPage() {
                   <Tooltip contentStyle={{ background: "#1a1a2e", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 12, color: "#fff" }} />
                   <Area type="monotone" dataKey="total" stroke="#10b981" fillOpacity={1} fill="url(#colabGrad)" strokeWidth={2} />
                 </AreaChart>
-              </ResponsiveContainer>
+              </ResponsiveContainer>}
             </div>
           )}
           <div className="overflow-x-auto max-h-64 overflow-y-auto">
