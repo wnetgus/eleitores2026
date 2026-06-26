@@ -580,7 +580,13 @@ export async function POST(req: NextRequest) {
       : filtros?.assessorId
       ? baseQ.where("assessorId",     "==", filtros.assessorId)
       : baseQ;
-    const snap = await indexedQ.orderBy("criadoEm", "desc").get();
+    // Timeout de 12s para não pendurar o serverless quando Firestore tiver cota esgotada
+    const snap = await Promise.race([
+      indexedQ.orderBy("criadoEm", "desc").get(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(Object.assign(new Error("query_timeout"), { code: "timeout" })), 12_000)
+      ),
+    ]);
 
     let eleitores: EleitorData[] = snap.docs.map((d) => {
       const data = d.data();
@@ -746,6 +752,13 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (msg.includes("RESOURCE_EXHAUSTED") || msg.includes("quota") || msg.includes("query_timeout")) {
+      return NextResponse.json(
+        { error: "Base de dados temporariamente indisponível. Tente novamente em alguns minutos." },
+        { status: 503 }
+      );
+    }
     console.error("Erro ao gerar Excel:", error);
     return NextResponse.json({ error: "Erro ao gerar Excel" }, { status: 500 });
   }

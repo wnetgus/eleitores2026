@@ -153,6 +153,7 @@ export default function RelatoriosPage() {
           },
         }),
       });
+      if (res.status === 503) { toast.error("Base de dados temporariamente indisponível. Tente em alguns minutos."); return; }
       if (!res.ok) throw new Error();
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
