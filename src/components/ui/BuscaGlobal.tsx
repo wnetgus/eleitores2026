@@ -128,7 +128,7 @@ export function BuscaGlobal({ placeholder, userData }: BuscaProps) {
       } catch (e) { console.error(e); }
     }
     load();
-  }, []);
+  }, [userData?.uid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!query.trim() || !userData) { setResultados([]); return; }

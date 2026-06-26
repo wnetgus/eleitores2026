@@ -310,7 +310,7 @@ export default function SalaDeSituacao() {
     if (!userData || !modalDet || !ae) return;
     setDetEnviando(true);
     try {
-      await addDoc(collection(db, "determinacoes"), {
+      const detRef = await addDoc(collection(db, "determinacoes"), {
         campanhaId,
         criadoPorId:      userData.uid,
         criadoPorNome:    userData.nome,
@@ -330,6 +330,20 @@ export default function SalaDeSituacao() {
       toast.success("Determinação enviada ao Assessor Executivo");
       setModalDet(null);
       setDetForm({ descricao: "", prazo: 7 });
+      // Notificação para o AE — best-effort (determinação já foi salva)
+      criarNotificacao({
+        campanhaId,
+        usuarioId:     ae.uid,
+        tipo:          "determinacao",
+        titulo:        `Nova determinação: ${modalDet.assunto}`,
+        descricao:     `${userData.nome} enviou uma determinação com prioridade ${modalDet.prioridade}`,
+        link:          "/dashboard",
+        prioridade:    modalDet.prioridade === "Alta" ? "alta" : modalDet.prioridade === "Media" ? "media" : "baixa",
+        remetenteNome: userData.nome,
+        origemTipo:    "determinacao",
+        origem:        detRef.id,
+        chave:         `det-${detRef.id}-ae`,
+      }).catch((e) => console.error("Notif determinação:", e));
     } catch (e) {
       console.error(e);
       toast.error("Erro ao enviar determinação");

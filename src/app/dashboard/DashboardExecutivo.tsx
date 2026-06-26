@@ -746,11 +746,12 @@ export function DashboardExecutivo({ userData }: Props) {
                         : "fortalecer_base";
                     const cidade = (det.municipios?.[0] || "").trim();
                     const params = new URLSearchParams({
-                      acao:       "nova",
+                      acao:            "nova",
                       cidade,
                       tipo,
-                      prioridade: prioMap[det.prioridade] || "P1",
-                      descricao:  det.assunto || "",
+                      prioridade:      prioMap[det.prioridade] || "P1",
+                      descricao:       det.assunto || "",
+                      determinacaoId:  det.id,
                     });
                     window.location.href = `/missoes?${params.toString()}`;
                   };
