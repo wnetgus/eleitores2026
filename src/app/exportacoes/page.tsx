@@ -87,7 +87,8 @@ export default function ExportacoesPage() {
 
   async function exportExcelPremiumAction() {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      if (!auth.currentUser) { toast.error("Sessão ainda carregando. Tente novamente em alguns segundos."); return; }
+      const token = await auth.currentUser.getIdToken();
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
@@ -158,7 +159,8 @@ export default function ExportacoesPage() {
 
   async function exportBaseAction() {
     try {
-      const token = await auth.currentUser?.getIdToken();
+      if (!auth.currentUser) { toast.error("Sessão ainda carregando. Tente novamente em alguns segundos."); return; }
+      const token = await auth.currentUser.getIdToken();
       const res = await fetch("/api/exportar-excel", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },

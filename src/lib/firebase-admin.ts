@@ -18,10 +18,13 @@ export const adminAuth = admin.apps[0]?.auth() ?? (null as unknown as admin.auth
 export const adminDb = admin.apps[0]?.firestore() ?? (null as unknown as admin.firestore.Firestore);
 
 export async function verifyToken(req: Request): Promise<string | null> {
+  if (!adminAuth) return null;
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice(7);
+  if (!token || token === "undefined" || token === "null") return null;
   try {
-    const decoded = await adminAuth.verifyIdToken(authHeader.slice(7));
+    const decoded = await adminAuth.verifyIdToken(token);
     return decoded.uid;
   } catch {
     return null;

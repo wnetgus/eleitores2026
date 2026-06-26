@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import ExcelJS from "exceljs";
-import { verifyToken, adminDb } from "@/lib/firebase-admin";
+import { verifyToken, adminDb, adminAuth } from "@/lib/firebase-admin";
 import { isRateLimited, getClientIp } from "@/lib/rate-limiter";
 
 interface EleitorData {
@@ -530,6 +530,9 @@ export async function POST(req: NextRequest) {
   try {
     if (await isRateLimited(getClientIp(req), "exportar-excel", 3)) {
       return NextResponse.json({ error: "Muitas exportações. Aguarde um minuto." }, { status: 429 });
+    }
+    if (!adminDb || !adminAuth) {
+      return NextResponse.json({ error: "Serviço de exportação não disponível (configuração do servidor)." }, { status: 503 });
     }
     const uid = await verifyToken(req);
     if (!uid) {
