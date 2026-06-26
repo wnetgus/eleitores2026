@@ -36,6 +36,7 @@ function CardNotificacao({
 
   return (
     <div
+      data-testid="card-notificacao"
       className={`relative p-4 rounded-2xl border transition-all
         ${n.lida
           ? "bg-white/2 border-white/5"
@@ -81,6 +82,7 @@ function CardNotificacao({
             <div className="flex items-center gap-1">
               {n.link && (
                 <button
+                  data-testid="btn-abrir-origem"
                   onClick={onAbrir}
                   className="flex items-center gap-1 text-[11px] text-violet-400 hover:text-violet-300 px-2 py-1 rounded-lg hover:bg-violet-500/10 transition-all"
                 >
@@ -90,6 +92,7 @@ function CardNotificacao({
               )}
               {!n.lida && (
                 <button
+                  data-testid="btn-marcar-lida"
                   onClick={onLer}
                   className="flex items-center gap-1 text-[11px] text-white/30 hover:text-white/60 px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
                 >
@@ -98,6 +101,7 @@ function CardNotificacao({
                 </button>
               )}
               <button
+                data-testid="btn-arquivar-notificacao"
                 onClick={onArquivar}
                 className="flex items-center gap-1 text-[11px] text-white/20 hover:text-white/40 px-2 py-1 rounded-lg hover:bg-white/5 transition-all"
               >
@@ -136,7 +140,7 @@ export default function NotificacoesPage() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
+    <div data-testid="pagina-notificacoes" className="max-w-2xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">

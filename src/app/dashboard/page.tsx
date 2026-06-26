@@ -1626,6 +1626,7 @@ export default function DashboardPage() {
                             Ver Eleitores de {p.territorio} →
                           </button>
                           <button
+                            data-testid="btn-abrir-determinacao"
                             onClick={() => { setModalPendencia(null); setModalDeterminacao({ territorio: p.territorio, acao: "Recuperar Base Territorial", assessorNome }); }}
                             className="px-4 py-2.5 rounded-xl bg-violet-500/15 text-violet-300 text-sm font-medium border border-violet-500/25 hover:bg-violet-500/25 transition-colors"
                           >
@@ -2625,6 +2626,7 @@ export default function DashboardPage() {
                   <span>→</span> Ver coordenadores
                 </a>
                 <button
+                  data-testid="btn-abrir-determinacao"
                   onClick={() => setModalDeterminacao({
                     territorio: municipiosSemCoordenador.map((m) => m.cidade).join(", "),
                     acao: "Criar coordenação operacional",
@@ -2842,7 +2844,7 @@ export default function DashboardPage() {
           }
         };
         return (
-          <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDeterminacao(null)}>
+          <div data-testid="modal-determinacao" className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDeterminacao(null)}>
             <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-5" onClick={(e) => e.stopPropagation()}>
               {/* Cabeçalho */}
               <div className="flex items-center gap-3">
@@ -2876,6 +2878,7 @@ export default function DashboardPage() {
               <div>
                 <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Assunto</label>
                 <input
+                  data-testid="input-assunto-determinacao"
                   type="text"
                   value={determinacaoForm.assunto || modalDeterminacao.acao}
                   onChange={(e) => setDeterminacaoForm((f) => ({ ...f, assunto: e.target.value }))}
@@ -2889,6 +2892,7 @@ export default function DashboardPage() {
                 <div>
                   <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Prioridade</label>
                   <select
+                    data-testid="select-prioridade-determinacao"
                     value={determinacaoForm.prioridade}
                     onChange={(e) => setDeterminacaoForm((f) => ({ ...f, prioridade: e.target.value }))}
                     className="w-full bg-zinc-800 border border-white/[0.08] rounded-xl px-3 py-2.5 text-sm text-white/80 focus:outline-none focus:border-violet-500/40"
@@ -2916,6 +2920,7 @@ export default function DashboardPage() {
               <div>
                 <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Descrição (opcional)</label>
                 <textarea
+                  data-testid="textarea-descricao-determinacao"
                   rows={2}
                   value={determinacaoForm.descricao}
                   onChange={(e) => setDeterminacaoForm((f) => ({ ...f, descricao: e.target.value }))}
@@ -2927,6 +2932,7 @@ export default function DashboardPage() {
               {/* Botões */}
               <div className="flex gap-3">
                 <button
+                  data-testid={!ae ? "badge-ae-nao-encontrado" : "btn-enviar-determinacao"}
                   onClick={handleEnviarDeterminacao}
                   disabled={determinacaoEnviando || !ae}
                   title={!ae ? "Nenhum Assessor Executivo encontrado neste gabinete" : undefined}

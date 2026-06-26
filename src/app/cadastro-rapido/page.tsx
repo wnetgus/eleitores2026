@@ -113,7 +113,7 @@ export default function CadastroRapidoPage() {
   if (!userData) return null;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex flex-col max-w-lg mx-auto">
+    <div data-testid="pagina-cadastro-rapido" className="min-h-screen bg-[#0a0a0f] flex flex-col max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-14 pb-4 border-b border-white/8">
         <button
@@ -155,6 +155,7 @@ export default function CadastroRapidoPage() {
             Nome completo *
           </label>
           <input
+            data-testid="input-nome-eleitor"
             ref={nomeRef}
             autoFocus
             type="text"
@@ -174,6 +175,7 @@ export default function CadastroRapidoPage() {
             WhatsApp
           </label>
           <input
+            data-testid="input-telefone-eleitor"
             type="tel"
             inputMode="tel"
             autoComplete="tel"
@@ -201,6 +203,7 @@ export default function CadastroRapidoPage() {
           <div>
             <label className="block text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">Cidade *</label>
             <select
+              data-testid="input-cidade-eleitor"
               value={form.cidade}
               onChange={(e) => setForm((f) => ({ ...f, cidade: e.target.value }))}
               className="w-full h-14 rounded-2xl bg-white/5 border border-white/10 text-white text-base px-4 focus:outline-none focus:border-violet-500/50 appearance-none"
@@ -217,6 +220,7 @@ export default function CadastroRapidoPage() {
         <div>
           <label className="block text-xs font-semibold text-white/50 mb-2 uppercase tracking-wider">Bairro</label>
           <input
+            data-testid="input-bairro-eleitor"
             type="text"
             inputMode="text"
             autoCapitalize="words"
@@ -269,6 +273,7 @@ export default function CadastroRapidoPage() {
       {/* Botão fixo no rodapé */}
       <div className="px-4 pb-8 pt-3 border-t border-white/8 bg-[#0a0a0f]">
         <button
+          data-testid="btn-salvar-eleitor"
           onClick={handleSalvar}
           disabled={saving || !form.nomeCompleto.trim() || !form.cidade || !form.grauApoio}
           className={`w-full h-16 rounded-2xl font-bold text-lg transition-all active:scale-98
@@ -280,7 +285,7 @@ export default function CadastroRapidoPage() {
           {saved ? (
             <span className="flex items-center justify-center gap-2">
               <CheckCircle2 size={22} />
-              Salvo!
+              <span data-testid="feedback-salvo-eleitor">Salvo!</span>
             </span>
           ) : saving ? "Salvando..." : "Salvar Eleitor"}
         </button>

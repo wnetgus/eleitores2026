@@ -677,7 +677,7 @@ export default function EleitoresPage() {
   }
 
   return (
-    <div className="space-y-6 animate-in">
+    <div data-testid="pagina-eleitores" className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-white">Cadastro de Eleitores</h1>
@@ -913,7 +913,7 @@ export default function EleitoresPage() {
       {loading ? (
         <div className="flex justify-center py-12"><Loader2 size={24} className="animate-spin text-emerald-500" /></div>
       ) : (
-        <div className="overflow-x-auto">
+        <div data-testid="lista-eleitores" className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-white/40 border-b border-white/[0.06]">
@@ -929,7 +929,7 @@ export default function EleitoresPage() {
             </thead>
             <tbody>
               {eleitoresExibidos.map((eleitor) => (
-                <tr key={eleitor.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
+                <tr data-testid="card-eleitor" key={eleitor.id} className="border-b border-white/[0.03] hover:bg-white/[0.02] transition-colors">
                   <td className="py-3 px-2 text-white/80">{eleitor.nomeCompleto}</td>
                   <td className="py-3 px-2 text-white/60 text-xs">{eleitor.tipoDocumento?.toUpperCase()}: {eleitor.documento}</td>
                   <td className="py-3 px-2 text-white/60">{eleitor.telefone || "-"}</td>
@@ -964,6 +964,7 @@ export default function EleitoresPage() {
       {hasMore && !loading && (
         <div className="flex justify-center pt-4 pb-2">
           <button
+            data-testid="btn-ver-mais-eleitores"
             onClick={() => loadEleitores(lastDoc ?? undefined)}
             disabled={loadingMore}
             className="px-6 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white/60 text-sm font-medium hover:bg-white/10 transition-colors flex items-center gap-2 disabled:opacity-50"

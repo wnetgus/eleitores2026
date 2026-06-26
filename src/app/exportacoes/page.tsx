@@ -592,7 +592,7 @@ export default function ExportacoesPage() {
                     ))}
                   </div>
                   <div className="pt-3 border-t border-white/[0.05]">
-                    <button onClick={exportExcelPremiumAction} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium">
+                    <button data-testid="btn-exportar-xlsx" onClick={exportExcelPremiumAction} className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium">
                       Exportar Excel →
                     </button>
                   </div>
@@ -623,7 +623,7 @@ export default function ExportacoesPage() {
               </div>
               <div className="flex items-center gap-4 pt-3 border-t border-violet-500/10">
                 <button onClick={() => setModalDossie(true)} className="text-xs text-white/35 hover:text-violet-400 transition-colors font-medium">Visualizar →</button>
-                <button onClick={exportPDFPremiumAction} className="text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium">Gerar PDF Premium →</button>
+                <button data-testid="btn-exportar-pdf" onClick={exportPDFPremiumAction} className="text-xs text-violet-400 hover:text-violet-300 transition-colors font-medium">Gerar PDF Premium →</button>
               </div>
             </div>
           </div>
@@ -697,11 +697,13 @@ export default function ExportacoesPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportExcelPremiumAction}>
+          <span data-testid="btn-exportar-xlsx" className="sr-only">Exportar Excel</span>
           <FileSpreadsheet size={32} className="mx-auto mb-3 text-emerald-400" />
           <h3 className="text-white font-semibold">Excel Premium</h3>
           <p className="text-xs text-white/40 mt-1">Planilha com identidade do partido</p>
         </GlassCard>
         <GlassCard className="p-6 text-center hover:border-purple-500/30 transition-all cursor-pointer" onClick={exportPDFPremiumAction}>
+          <span data-testid="btn-exportar-pdf" className="sr-only">Exportar PDF</span>
           <FileText size={32} className="mx-auto mb-3 text-rose-400" />
           <h3 className="text-white font-semibold">PDF Premium</h3>
           <p className="text-xs text-white/40 mt-1">Relatório executivo com capa</p>
@@ -716,7 +718,7 @@ export default function ExportacoesPage() {
       <GlassCard className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-white font-semibold">Resumo dos Dados</h3>
-          <span className="text-sm text-white/40">{eleitores.length} registros</span>
+          <span data-testid={eleitores.length >= 500 ? "aviso-limite-500" : undefined} className="text-sm text-white/40">{eleitores.length} registros</span>
         </div>
         <div className="overflow-x-auto max-h-80 overflow-y-auto">
           <table className="w-full text-sm">
