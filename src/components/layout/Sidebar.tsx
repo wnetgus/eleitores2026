@@ -194,6 +194,14 @@ export function Sidebar() {
   if (!userData) return null;
 
   const roleInfo = ROLE_CONFIG[userData.role] || ROLE_CONFIG.colaborador;
+  const sidebarTestIds: Record<string, string> = {
+    "/dashboard": "sidebar-item-dashboard",
+    "/sala-situacao": "sidebar-item-sala-situacao",
+    "/notificacoes": "sidebar-item-notificacoes",
+    "/eleitores": "sidebar-item-eleitores",
+    "/relatorios": "sidebar-item-relatorios",
+    "/cadastro-rapido": "sidebar-item-cadastro-rapido",
+  };
 
   let menuItems;
   const isAdmin = isSuperAdmin(userData) || isAdminMaster(userData);
@@ -218,6 +226,7 @@ export function Sidebar() {
       </button>
 
       <aside
+        data-testid="sidebar"
         className={`fixed top-0 left-0 z-40 h-full bg-black/40 backdrop-blur-2xl border-r border-white/6
           transition-all duration-300 flex flex-col
           ${collapsed ? "w-18" : "w-65"}
@@ -251,6 +260,7 @@ export function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={sidebarTestIds[item.href]}
                 onClick={() => setMobileOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200
                   ${isActive
@@ -269,7 +279,7 @@ export function Sidebar() {
                   </span>
                 )}
                 {!collapsed && item.href === "/notificacoes" && naoLidas > 0 && (
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
+                  <span data-testid="sidebar-badge-notificacoes" className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500/20 text-violet-300 border border-violet-500/30">
                     {naoLidas > 99 ? "99+" : naoLidas}
                   </span>
                 )}

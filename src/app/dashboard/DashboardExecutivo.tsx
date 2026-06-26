@@ -757,7 +757,7 @@ export function DashboardExecutivo({ userData }: Props) {
                   };
                   return (
                     <GlassCard key={det.id} className="p-4 border-violet-500/10">
-                      <div className="flex items-start gap-3">
+                      <div data-testid="card-determinacao" className="flex items-start gap-3">
                         <div className={`w-2.5 h-2.5 rounded-full mt-1 shrink-0 ${det.status === "pendente" ? "bg-red-400" : det.status === "em_andamento" ? "bg-amber-400" : "bg-emerald-400"}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2 flex-wrap">
@@ -780,7 +780,7 @@ export function DashboardExecutivo({ userData }: Props) {
                             <p className="text-[11px] text-white/30 mt-2 leading-relaxed line-clamp-2">{det.descricao}</p>
                           )}
                           {det.status === "em_andamento" && (
-                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20 font-medium">
+                            <span data-testid="badge-em-andamento" className="inline-flex items-center gap-1 mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20 font-medium">
                               ⚡ Em andamento — aguardando prestação de contas
                             </span>
                           )}
@@ -792,15 +792,15 @@ export function DashboardExecutivo({ userData }: Props) {
                           {det.status !== "concluida" && (
                             <div className="flex items-center gap-2 mt-3 flex-wrap">
                               {det.status === "pendente" && (
-                                <button onClick={handleAceitar} className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors font-medium">
+                                <button data-testid="btn-aceitar-determinacao" onClick={handleAceitar} className="text-[11px] px-3 py-1.5 rounded-lg bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 transition-colors font-medium">
                                   Aceitar
                                 </button>
                               )}
-                              <button onClick={handleAbrirMissao} className="text-[11px] px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 transition-colors font-medium">
+                              <button data-testid="btn-abrir-missao" onClick={handleAbrirMissao} className="text-[11px] px-3 py-1.5 rounded-lg bg-amber-500/15 text-amber-300 border border-amber-500/25 hover:bg-amber-500/25 transition-colors font-medium">
                                 Abrir Missão
                               </button>
                               {det.status === "em_andamento" && (
-                                <button onClick={() => setModalConcluir({ id: det.id, assunto: det.assunto })} className="text-[11px] px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-colors font-medium">
+                                <button data-testid="btn-prestar-contas" onClick={() => setModalConcluir({ id: det.id, assunto: det.assunto })} className="text-[11px] px-3 py-1.5 rounded-lg bg-violet-500/15 text-violet-300 border border-violet-500/25 hover:bg-violet-500/25 transition-colors font-medium">
                                   Prestar Contas
                                 </button>
                               )}
@@ -834,7 +834,7 @@ export function DashboardExecutivo({ userData }: Props) {
 
       {/* MODAL PRESTAÇÃO DE CONTAS — P5 Sprint 20 */}
       {modalConcluir && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalConcluir(null)}>
+        <div data-testid="modal-prestacao" className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalConcluir(null)}>
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-5" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center shrink-0">
@@ -867,6 +867,7 @@ export function DashboardExecutivo({ userData }: Props) {
             <div>
               <label className="block text-[10px] text-white/30 uppercase tracking-wider mb-2">Resultado geral</label>
               <textarea
+                data-testid="textarea-resultado-prestacao"
                 rows={2}
                 value={conclusaoForm.resultado}
                 onChange={(e) => setConclusaoForm((f) => ({ ...f, resultado: e.target.value }))}
@@ -877,6 +878,7 @@ export function DashboardExecutivo({ userData }: Props) {
 
             <div className="flex gap-3">
               <button
+                data-testid="btn-enviar-prestacao"
                 disabled={conclusaoEnviando}
                 onClick={async () => {
                   if (!modalConcluir) return;

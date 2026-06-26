@@ -373,6 +373,7 @@ export default function SalaDeSituacao() {
 
   const btnDeterminar = (cidade: string, assunto: string, prioridade: "Alta" | "Media" | "Baixa", variant: "violet" | "emerald" = "violet") => (
     <button
+      data-testid="btn-determinar-territorio"
       onClick={() => setModalDet({ cidade, assunto, prioridade })}
       className={`shrink-0 px-3 py-1.5 rounded-lg text-[11px] font-semibold transition-colors border ${
         variant === "violet"
@@ -385,7 +386,7 @@ export default function SalaDeSituacao() {
   );
 
   return (
-    <div className="space-y-6 pb-10">
+    <div data-testid="pagina-sala-situacao" className="space-y-6 pb-10">
 
       {/* CABEÇALHO */}
       <div className="flex items-start justify-between">
@@ -422,7 +423,7 @@ export default function SalaDeSituacao() {
 
       {/* IRT */}
       <GlassCard className={`p-4 border ${irtBorder}`}>
-        <div className="flex items-center justify-between gap-4">
+        <div data-testid="kpi-irt" className="flex items-center justify-between gap-4">
           <div>
             <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1">Índice de Risco Territorial</p>
             <div className="flex items-baseline gap-2">
@@ -467,7 +468,7 @@ export default function SalaDeSituacao() {
         ) : (
           <div className="space-y-2">
             {cidadesRisco.map((c) => (
-              <div key={c.nome} className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5 hover:border-white/10 transition-colors">
+              <div data-testid="card-territorio-risco" key={c.nome} className="flex items-center gap-3 p-3 rounded-xl bg-white/3 border border-white/5 hover:border-white/10 transition-colors">
                 <TendenciaIcon t={c.tendencia} />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -600,7 +601,7 @@ export default function SalaDeSituacao() {
 
       {/* MODAL DE DETERMINAÇÃO */}
       {modalDet && (
-        <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDet(null)}>
+        <div data-testid="modal-determinacao-sala" className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDet(null)}>
           <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
@@ -662,6 +663,7 @@ export default function SalaDeSituacao() {
 
             <div className="flex gap-3">
               <button
+                data-testid="btn-enviar-determinacao-sala"
                 onClick={handleEnviarDeterminacao}
                 disabled={detEnviando || !ae}
                 className="flex-1 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
