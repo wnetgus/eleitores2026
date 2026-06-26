@@ -40,6 +40,13 @@ service cloud.firestore {
       return me().get("ativo", true) == true;
     }
 
+    // Valida que userId pertence à mesma campanha (evita forjaria de notificação)
+    function recipientInCampanha(userId) {
+      let d = get(/databases/$(database)/documents/usuarios/$(userId)).data;
+      return d.get("campanhaId", "") == myCampanha() ||
+             d.get("gabineteId", "") == myCampanha();
+    }
+
     // ─── campanhas ────────────────────────────────────────────────────────────
     match /campanhas/{id} {
       allow read: if isAuth() && (
@@ -440,13 +447,18 @@ service cloud.firestore {
     // ── Notificações (Sprint 23) ────────────────────────────────────────────
     match /notificacoes/{id} {
       // Criação: usuário ativo com campanha válida. Tipo e destinatário obrigatórios.
+      // O destinatário deve ser o próprio remetente ou um membro da mesma campanha.
       allow create: if isAuth() && isAtivo() &&
         hasCampanha() &&
         request.resource.data.get("campanhaId", "") == myCampanha() &&
         request.resource.data.get("campanhaId", "") != "" &&
         request.resource.data.get("usuarioId", "") != "" &&
         request.resource.data.get("tipo", "") in
-          ["determinacao", "missao", "alerta", "meta", "prestacao", "sistema"];
+          ["determinacao", "missao", "alerta", "meta", "prestacao", "sistema"] &&
+        (
+          request.resource.data.get("usuarioId", "") == request.auth.uid ||
+          recipientInCampanha(request.resource.data.usuarioId)
+        );
       // Só o destinatário lê, atualiza (marcar lida/arquivada) e deleta
       allow read, update, delete: if isAuth() && request.auth.uid == resource.data.usuarioId;
     }

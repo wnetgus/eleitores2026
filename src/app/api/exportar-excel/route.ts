@@ -542,8 +542,8 @@ export async function POST(req: NextRequest) {
     const userCampanhaId = (userDoc.data()?.campanhaId || userDoc.data()?.gabineteId || "") as string;
 
     const body = await req.json();
-    const { eleitores, titulo, party, gabineteNome, tipo, campanhaId: requestedCampanhaId }: {
-      eleitores: EleitorData[]; titulo: string; party?: string; gabineteNome?: string; tipo?: string; campanhaId?: string;
+    const { titulo, party, gabineteNome, tipo, campanhaId: requestedCampanhaId }: {
+      titulo: string; party?: string; gabineteNome?: string; tipo?: string; campanhaId?: string;
     } = body;
 
     // Admins exportam qualquer campanha; demais usuários precisam de campanhaId válido
@@ -555,6 +555,41 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Acesso negado" }, { status: 403 });
       }
     }
+
+    // Determina a campanha efetiva e consulta Firestore server-side
+    // O array do cliente é descartado — o servidor é a única fonte de verdade.
+    const effectiveCampanhaId = ["super_admin", "admin_master"].includes(userRole)
+      ? (requestedCampanhaId || userCampanhaId)
+      : userCampanhaId;
+
+    if (!effectiveCampanhaId) {
+      return NextResponse.json({ error: "Campanha não identificada" }, { status: 400 });
+    }
+
+    const snap = await adminDb
+      .collection("eleitores")
+      .where("campanhaId", "==", effectiveCampanhaId)
+      .orderBy("criadoEm", "desc")
+      .get();
+
+    const eleitores: EleitorData[] = snap.docs.map((d) => {
+      const data = d.data();
+      return {
+        nomeCompleto:    (data.nomeCompleto || data.nome || "") as string,
+        telefone:        data.telefone,
+        tipoDocumento:   data.tipoDocumento,
+        documento:       (data.documento || "") as string,
+        estado:          (data.estado || "") as string,
+        cidade:          (data.cidade || "") as string,
+        bairro:          data.bairro,
+        grauApoio:       (data.grauApoio || "indeciso") as string,
+        voto:            data.voto,
+        colaboradorNome: (data.colaboradorNome || "") as string,
+        coordenadorId:   data.coordenadorId,
+        coordenadorNome: data.coordenadorNome,
+        criadoEm:        data.criadoEm,
+      };
+    });
 
     // ── EXECUTIVO format ─────────────────────────────────────────────────────
     if (tipo === "executivo") {
