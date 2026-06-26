@@ -307,7 +307,11 @@ export default function SalaDeSituacao() {
   // ─── Handler enviar determinação ──────────────────────────────────────────
 
   async function handleEnviarDeterminacao() {
-    if (!userData || !modalDet || !ae) return;
+    if (!userData || !modalDet) return;
+    if (!ae) {
+      toast.error("Nenhum Assessor Executivo encontrado neste gabinete. Verifique o cadastro do AE.");
+      return;
+    }
     setDetEnviando(true);
     try {
       const detRef = await addDoc(collection(db, "determinacoes"), {
@@ -597,7 +601,7 @@ export default function SalaDeSituacao() {
       {/* MODAL DE DETERMINAÇÃO */}
       {modalDet && (
         <div className="fixed inset-0 z-70 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm" onClick={() => setModalDet(null)}>
-          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md space-y-4" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-zinc-900 border border-zinc-700 rounded-2xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto space-y-4" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-violet-500/15 border border-violet-500/25 flex items-center justify-center shrink-0">
                 <Target size={18} className="text-violet-400" />
@@ -662,7 +666,7 @@ export default function SalaDeSituacao() {
                 disabled={detEnviando || !ae}
                 className="flex-1 py-3 rounded-xl bg-violet-600 text-white text-sm font-semibold hover:bg-violet-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {detEnviando ? "Enviando..." : "Enviar Determinação"}
+                {detEnviando ? "Enviando..." : !ae ? "AE não encontrado" : "Enviar Determinação"}
               </button>
               <button
                 onClick={() => { setModalDet(null); setDetForm({ descricao: "", prazo: 7 }); }}

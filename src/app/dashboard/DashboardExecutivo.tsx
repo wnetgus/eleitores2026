@@ -779,6 +779,11 @@ export function DashboardExecutivo({ userData }: Props) {
                           {det.descricao && (
                             <p className="text-[11px] text-white/30 mt-2 leading-relaxed line-clamp-2">{det.descricao}</p>
                           )}
+                          {det.status === "em_andamento" && (
+                            <span className="inline-flex items-center gap-1 mt-1.5 text-[10px] px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/20 font-medium">
+                              ⚡ Em andamento — aguardando prestação de contas
+                            </span>
+                          )}
                           {det.status === "concluida" && det.resultado && (
                             <div className="mt-2 p-2 rounded-lg bg-emerald-500/[0.07] border border-emerald-500/15">
                               <p className="text-[11px] text-emerald-300/70">{det.resultado}</p>
