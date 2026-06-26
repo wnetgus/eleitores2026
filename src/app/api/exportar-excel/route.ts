@@ -542,8 +542,13 @@ export async function POST(req: NextRequest) {
     const userCampanhaId = (userDoc.data()?.campanhaId || userDoc.data()?.gabineteId || "") as string;
 
     const body = await req.json();
-    const { titulo, party, gabineteNome, tipo, campanhaId: requestedCampanhaId }: {
+    const { titulo, party, gabineteNome, tipo, campanhaId: requestedCampanhaId, filtros }: {
       titulo: string; party?: string; gabineteNome?: string; tipo?: string; campanhaId?: string;
+      filtros?: {
+        colaboradorId?: string; coordenadorId?: string; assessorId?: string;
+        cidade?: string; estado?: string; bairro?: string;
+        grauApoio?: string; search?: string; dataInicio?: string; dataFim?: string;
+      };
     } = body;
 
     // Admins exportam qualquer campanha; demais usuários precisam de campanhaId válido
@@ -566,13 +571,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Campanha não identificada" }, { status: 400 });
     }
 
-    const snap = await adminDb
-      .collection("eleitores")
-      .where("campanhaId", "==", effectiveCampanhaId)
-      .orderBy("criadoEm", "desc")
-      .get();
+    // Aplica filtro indexado (apenas o mais específico, para usar o índice composto certo)
+    const baseQ = adminDb.collection("eleitores").where("campanhaId", "==", effectiveCampanhaId);
+    const indexedQ = filtros?.colaboradorId
+      ? baseQ.where("colaboradorId",  "==", filtros.colaboradorId)
+      : filtros?.coordenadorId
+      ? baseQ.where("coordenadorId",  "==", filtros.coordenadorId)
+      : filtros?.assessorId
+      ? baseQ.where("assessorId",     "==", filtros.assessorId)
+      : baseQ;
+    const snap = await indexedQ.orderBy("criadoEm", "desc").get();
 
-    const eleitores: EleitorData[] = snap.docs.map((d) => {
+    let eleitores: EleitorData[] = snap.docs.map((d) => {
       const data = d.data();
       return {
         nomeCompleto:    (data.nomeCompleto || data.nome || "") as string,
@@ -590,6 +600,33 @@ export async function POST(req: NextRequest) {
         criadoEm:        data.criadoEm,
       };
     });
+
+    // Filtros in-memory (campos não indexados ou combinações)
+    if (filtros?.cidade)    eleitores = eleitores.filter((e) => e.cidade    === filtros!.cidade);
+    if (filtros?.estado)    eleitores = eleitores.filter((e) => e.estado    === filtros!.estado);
+    if (filtros?.bairro)    eleitores = eleitores.filter((e) => e.bairro    === filtros!.bairro);
+    if (filtros?.grauApoio) eleitores = eleitores.filter((e) => e.grauApoio === filtros!.grauApoio);
+    if (filtros?.search) {
+      const s = filtros.search.toLowerCase();
+      eleitores = eleitores.filter((e) =>
+        e.nomeCompleto.toLowerCase().includes(s) || e.cidade.toLowerCase().includes(s)
+      );
+    }
+    if (filtros?.dataInicio) {
+      const inicio = new Date(filtros.dataInicio);
+      eleitores = eleitores.filter((e) => {
+        const d: Date = e.criadoEm?.toDate?.() ?? new Date(e.criadoEm ?? 0);
+        return d >= inicio;
+      });
+    }
+    if (filtros?.dataFim) {
+      const fim = new Date(filtros.dataFim);
+      fim.setHours(23, 59, 59, 999);
+      eleitores = eleitores.filter((e) => {
+        const d: Date = e.criadoEm?.toDate?.() ?? new Date(e.criadoEm ?? 0);
+        return d <= fim;
+      });
+    }
 
     // ── EXECUTIVO format ─────────────────────────────────────────────────────
     if (tipo === "executivo") {
