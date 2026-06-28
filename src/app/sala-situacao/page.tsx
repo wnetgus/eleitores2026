@@ -309,7 +309,7 @@ export default function SalaDeSituacao() {
   async function handleEnviarDeterminacao() {
     if (!userData || !modalDet) return;
     if (!ae) {
-      toast.error("Nenhum Assessor Executivo encontrado neste gabinete. Verifique o cadastro do AE.");
+      toast.error("Nenhum assessor executivo encontrado neste gabinete. Verifique o cadastro do AE", { duration: 4000 });
       return;
     }
     setDetEnviando(true);
@@ -350,7 +350,7 @@ export default function SalaDeSituacao() {
       }).catch((e) => console.error("Notif determinação:", e));
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao enviar determinação");
+      toast.error("Erro ao enviar determinação", { duration: 4000 });
     } finally {
       setDetEnviando(false);
     }

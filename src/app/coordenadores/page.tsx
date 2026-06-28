@@ -129,9 +129,9 @@ export default function CoordenadoresPage() {
   }
 
   async function salvarCoordenacao() {
-    if (!podeGerenciar) { toast.error("Ação restrita ao Assessor Executivo."); return; }
-    if (!formCoord.nomeCoord.trim()) { toast.error("Informe o nome do coordenador responsável."); return; }
-    if (!cidadeParam) { toast.error("Município não identificado."); return; }
+    if (!podeGerenciar) { toast.error("Ação restrita ao assessor executivo", { duration: 4000 }); return; }
+    if (!formCoord.nomeCoord.trim()) { toast.error("Informe o nome do coordenador responsável", { duration: 4000 }); return; }
+    if (!cidadeParam) { toast.error("Município não identificado", { duration: 4000 }); return; }
     setSalvandoCoord(true);
     try {
       await addDoc(collection(db, "coordenacoes"), {
@@ -144,7 +144,7 @@ export default function CoordenadoresPage() {
         criadoEm: new Date(),
         criadoPor: userData?.uid ?? "",
       });
-      toast.success("Coordenação criada com sucesso!");
+      toast.success("Coordenação criada");
       await registrarMemoriaAutomatica({
         campanhaId: userData?.campanhaId || userData?.gabineteId || "",
         tipo: "conquista",
@@ -160,7 +160,7 @@ export default function CoordenadoresPage() {
       router.push("/dashboard");
     } catch (err) {
       console.error(err);
-      toast.error("Erro ao salvar. Tente novamente.");
+      toast.error("Erro ao salvar. Tente novamente", { duration: 4000 });
     } finally {
       setSalvandoCoord(false);
     }
@@ -168,9 +168,9 @@ export default function CoordenadoresPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.email || !form.password || !form.nome) { toast.error("Preencha todos os campos"); return; }
-    if (isSuperOrMaster(userData) && !gabineteIdParam && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o coordenador"); return; }
-    if (gabineteIdParam && isSuperOrMaster(userData) && !form.assessorId) { toast.error("Selecione o assessor responsável"); return; }
+    if (!form.email || !form.password || !form.nome) { toast.error("Preencha todos os campos", { duration: 4000 }); return; }
+    if (isSuperOrMaster(userData) && !gabineteIdParam && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o coordenador", { duration: 4000 }); return; }
+    if (gabineteIdParam && isSuperOrMaster(userData) && !form.assessorId) { toast.error("Selecione o assessor responsável", { duration: 4000 }); return; }
     setSaving(true);
     try {
       const campanhaId = gabineteIdParam || form.gabineteVinculoId || userData?.gabineteId || userData?.campanhaId || "";
@@ -183,17 +183,17 @@ export default function CoordenadoresPage() {
            : {}),
       });
       await registrarAtividade({ acao: "criar_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Criou coordenador ${form.nome}` });
-      toast.success("Coordenador criado!");
+      toast.success("Coordenador criado");
       setForm({ email: "", password: "", nome: "", estado: "", cidadePrincipal: "", regiao: "", assessorId: "", gabineteVinculoId: "" });
       setEmailManual(false);
       setCidadesDisponiveis([]);
       loadCoordenadores();
-    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : "Erro ao criar"); } finally { setSaving(false); }
+    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "E-mail já está em uso" : "Erro ao criar", { duration: 4000 }); } finally { setSaving(false); }
   }
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
-    if (!podeGerenciar) { toast.error("Sem permissão para esta ação."); return; }
-    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Coordenador ${ativo ? "desativado" : "ativado"}`); loadCoordenadores(); } catch (e) { toast.error("Erro"); }
+    if (!podeGerenciar) { toast.error("Sem permissão para esta ação", { duration: 4000 }); return; }
+    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Coordenador ${ativo ? "desativado" : "ativado"}`); loadCoordenadores(); } catch (e) { toast.error("Erro", { duration: 4000 }); }
   }
 
   function openEdit(c: AppUser) {
@@ -210,8 +210,8 @@ export default function CoordenadoresPage() {
     try {
       await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, email: editForm.email, estado: editForm.estado, cidadePrincipal: editForm.cidadePrincipal, regiao: editForm.regiao });
       await registrarAtividade({ acao: "editou_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Editou coordenador ${editModal.nome}` });
-      toast.success("Coordenador atualizado!"); setEditModal(null); loadCoordenadores();
-    } catch (e) { toast.error("Erro ao atualizar"); }
+      toast.success("Coordenador atualizado"); setEditModal(null); loadCoordenadores();
+    } catch (e) { toast.error("Erro ao atualizar", { duration: 4000 }); }
   }
 
   async function handleExcluir() {
@@ -230,10 +230,10 @@ export default function CoordenadoresPage() {
       }
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_coordenador", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu coordenador ${excluirModal.nome}` });
-      toast.success("Coordenador excluído!");
+      toast.success("Coordenador excluído");
       setExcluirModal(null);
       loadCoordenadores();
-    } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
+    } catch (e) { toast.error("Erro ao excluir", { duration: 4000 }); } finally { setExcluirSaving(false); }
   }
 
   const assessorMap = useMemo(() => {
@@ -581,7 +581,20 @@ export default function CoordenadoresPage() {
               </div>
                 );
               })}
-            {coordenadoresFiltrados.length === 0 && <p className="col-span-full text-center text-white/30 py-8">{filtros.texto ? "Nenhum coordenador encontrado" : "Nenhum coordenador cadastrado"}</p>}
+            {coordenadoresFiltrados.length === 0 && (
+              <div className="col-span-full text-center py-10">
+                <p className="text-white/40 font-medium text-sm">
+                  {(filtros.texto || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId || filtros.gabineteId)
+                    ? "Nenhum resultado para os filtros aplicados"
+                    : "Nenhum coordenador cadastrado"}
+                </p>
+                <p className="text-white/25 text-xs mt-1">
+                  {(filtros.texto || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId || filtros.gabineteId)
+                    ? "Tente ajustar ou limpar os filtros."
+                    : "Cadastre coordenadores para organizar as equipes."}
+                </p>
+              </div>
+            )}
             {filtroAtivo && coordenadoresFiltrados.filter((c) => (colaboradoresCount[c.uid] || 0) === 0).length === 0 && (
               <p className="col-span-full text-center text-emerald-400/70 py-8">Todos os coordenadores possuem colaboradores vinculados 🎉</p>
             )}

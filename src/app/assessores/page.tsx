@@ -188,8 +188,8 @@ export default function AssessoresPage() {
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.email || !form.password || !form.nome) { toast.error("Preencha todos os campos"); return; }
-    if (isSuperOrMaster(userData) && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o assessor"); return; }
+    if (!form.email || !form.password || !form.nome) { toast.error("Preencha todos os campos", { duration: 4000 }); return; }
+    if (isSuperOrMaster(userData) && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o assessor", { duration: 4000 }); return; }
     setSaving(true);
     try {
       const gabineteId = isSuperOrMaster(userData) ? form.gabineteVinculoId : (userData?.gabineteId || userData?.campanhaId || "");
@@ -202,16 +202,16 @@ export default function AssessoresPage() {
       if (form.cidades.length > 0) dados.cidadePrincipal = form.cidades[0];
       await createAuthUser(form.email, form.password, dados);
       await registrarAtividade({ acao: "criar_assessor", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Criou assessor ${form.nome}${form.cidades.length > 0 ? ` — território: ${form.cidades.join(", ")}` : ""}` });
-      toast.success("Assessor criado!");
+      toast.success("Assessor criado");
       setForm({ email: "", password: "", nome: "", gabineteVinculoId: "", cidades: [] });
       setEmailManual(false);
       loadAssessores();
-    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : "Erro ao criar"); } finally { setSaving(false); }
+    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "E-mail já está em uso" : "Erro ao criar", { duration: 4000 }); } finally { setSaving(false); }
   }
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
-    if (!podeGerenciar) { toast.error("Sem permissão para esta ação."); return; }
-    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Assessor ${ativo ? "desativado" : "ativado"}`); loadAssessores(); } catch (e) { toast.error("Erro"); }
+    if (!podeGerenciar) { toast.error("Sem permissão para esta ação", { duration: 4000 }); return; }
+    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Assessor ${ativo ? "desativado" : "ativado"}`); loadAssessores(); } catch (e) { toast.error("Erro", { duration: 4000 }); }
   }
 
   function openEdit(c: AppUser) {
@@ -226,8 +226,8 @@ export default function AssessoresPage() {
       if (editForm.cidades.length > 0) patch.cidadePrincipal = editForm.cidades[0];
       await updateDoc(doc(db, "usuarios", editModal.uid), patch);
       await registrarAtividade({ acao: "editou_assessor", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Editou assessor ${editModal.nome}` });
-      toast.success("Assessor atualizado!"); setEditModal(null); loadAssessores();
-    } catch (e) { toast.error("Erro ao atualizar"); }
+      toast.success("Assessor atualizado"); setEditModal(null); loadAssessores();
+    } catch (e) { toast.error("Erro ao atualizar", { duration: 4000 }); }
   }
 
   async function handleExcluir() {
@@ -236,10 +236,10 @@ export default function AssessoresPage() {
     try {
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_assessor", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu assessor ${excluirModal.nome}` });
-      toast.success("Assessor excluído!");
+      toast.success("Assessor excluído");
       setExcluirModal(null);
       loadAssessores();
-    } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
+    } catch (e) { toast.error("Erro ao excluir", { duration: 4000 }); } finally { setExcluirSaving(false); }
   }
 
   const statsExec = useMemo(() => {
@@ -322,12 +322,12 @@ export default function AssessoresPage() {
   const config = getRoleConfig(userData);
 
   async function salvarAssessoria() {
-    if (!podeGerenciar) { toast.error("Ação restrita ao Assessor Executivo."); return; }
+    if (!podeGerenciar) { toast.error("Ação restrita ao assessor executivo", { duration: 4000 }); return; }
     const municipioFinal = (formAssessoria.municipio.trim() || cidadeParam || "").trim();
     if (!formAssessoria.nomeAssessor.trim()) {
-      toast.error("Informe o nome do assessor responsável."); return;
+      toast.error("Informe o nome do assessor responsável", { duration: 4000 }); return;
     }
-    if (!municipioFinal) { toast.error("Informe o município da assessoria."); return; }
+    if (!municipioFinal) { toast.error("Informe o município da assessoria", { duration: 4000 }); return; }
     setSalvandoAssessoria(true);
     try {
       await addDoc(collection(db, "assessorias"), {
@@ -341,7 +341,7 @@ export default function AssessoresPage() {
         criadoEm: new Date(),
         criadoPor: userData?.uid ?? "",
       });
-      toast.success(`Assessoria de ${municipioFinal} criada com sucesso!`);
+      toast.success(`Assessoria de ${municipioFinal} criada`);
       await registrarMemoriaAutomatica({
         campanhaId: userData?.campanhaId || userData?.gabineteId || "",
         tipo: "expansao",
@@ -358,7 +358,7 @@ export default function AssessoresPage() {
       await loadAssessores();
     } catch (err) {
       console.error(err);
-      toast.error("Erro ao salvar. Tente novamente.");
+      toast.error("Erro ao salvar. Tente novamente", { duration: 4000 });
     } finally {
       setSalvandoAssessoria(false);
     }
@@ -846,7 +846,20 @@ export default function AssessoresPage() {
                 </div>
               );
             })}
-            {assessoresFiltrados.length === 0 && <p className="col-span-full text-center text-white/30 py-8">{filtros.texto ? "Nenhum assessor encontrado" : "Nenhum assessor cadastrado neste gabinete"}</p>}
+            {assessoresFiltrados.length === 0 && (
+              <div className="col-span-full text-center py-10">
+                <p className="text-white/40 font-medium text-sm">
+                  {(filtros.texto || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId || filtros.gabineteId)
+                    ? "Nenhum resultado para os filtros aplicados"
+                    : "Nenhum assessor neste gabinete"}
+                </p>
+                <p className="text-white/25 text-xs mt-1">
+                  {(filtros.texto || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId || filtros.gabineteId)
+                    ? "Tente ajustar ou limpar os filtros."
+                    : "Este gabinete ainda não possui assessores vinculados."}
+                </p>
+              </div>
+            )}
           </div>
         )}
       </GlassCard>

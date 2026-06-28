@@ -230,10 +230,10 @@ export default function MetasPage() {
   }
 
   async function definirMeta() {
-    if (!formMeta.colaboradorId || !formMeta.valor) { toast.error("Selecione colaborador e valor"); return; }
+    if (!formMeta.colaboradorId || !formMeta.valor) { toast.error("Selecione colaborador e valor", { duration: 4000 }); return; }
     const gabIdMeta = userData?.gabineteId || userData?.campanhaId;
     if (!gabIdMeta && !isSuperOrMaster(userData)) {
-      toast.error("Gabinete não identificado — não é possível definir meta");
+      toast.error("Gabinete não identificado. Não é possível definir meta", { duration: 4000 });
       return;
     }
     setSavingMeta(true);
@@ -256,7 +256,7 @@ export default function MetasPage() {
           ...(gabIdMeta ? { gabineteId: gabIdMeta } : {}),
         });
       }
-      toast.success("Meta definida!");
+      toast.success("Meta salva");
       const newMeta = Number(formMeta.valor);
       const colabTotal = eleitores.filter((e) => e.colaboradorId === formMeta.colaboradorId).length;
       const prevMeta = metas[formMeta.colaboradorId] || 0;
@@ -277,7 +277,7 @@ export default function MetasPage() {
       }
       setFormMeta({ colaboradorId: "", valor: "" });
       load();
-    } catch (e) { toast.error("Erro ao salvar meta"); } finally { setSavingMeta(false); }
+    } catch (e) { toast.error("Erro ao salvar meta", { duration: 4000 }); } finally { setSavingMeta(false); }
   }
 
   function resolverMeta(colabId: string): { valor: number; tipo: "individual" | "padrao" | "sem_meta"; origem?: "coord" | "assessor" } {
@@ -295,13 +295,13 @@ export default function MetasPage() {
 
   async function salvarMetaPadrao() {
     const val = Number(valorPadrao);
-    if (!val || val < 1) { toast.error("Informe um valor válido"); return; }
+    if (!val || val < 1) { toast.error("Informe um valor válido", { duration: 4000 }); return; }
     setSalvandoPadrao(true);
     try {
       await updateDoc(doc(db, "usuarios", userData!.uid), { metaPadraoEquipe: val });
       setMetaPadraoEquipe(val);
       toast.success(`Meta padrão: ${val} cadastros aplicada a toda a equipe`);
-    } catch { toast.error("Erro ao salvar meta padrão"); } finally { setSalvandoPadrao(false); }
+    } catch { toast.error("Erro ao salvar meta padrão", { duration: 4000 }); } finally { setSalvandoPadrao(false); }
   }
 
   async function limparMetaPadrao() {
@@ -1202,7 +1202,7 @@ export default function MetasPage() {
                                 const { deleteDoc, doc: fsDoc } = await import("firebase/firestore");
                                 await deleteDoc(fsDoc(db, "metas", snap.docs[0].id));
                                 setMetas((prev) => { const n = { ...prev }; delete n[c.uid]; return n; });
-                                toast.success(`Override de ${c.nome.split(" ")[0]} removido → voltou ao padrão`);
+                                toast.success(`Override de ${c.nome.split(" ")[0]} removido — voltou ao padrão`);
                               }
                             }}
                             className="text-[10px] text-white/20 hover:text-red-400 transition-colors ml-1"

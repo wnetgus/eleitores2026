@@ -168,16 +168,16 @@ export default function ColaboradoresPage() {
         }));
         setCidadesDisponiveis(getCidades(siglaEstado));
       }
-    } catch { toast.error("Não foi possível buscar o CEP."); } finally { setBuscandoCep(false); }
+    } catch { toast.error("Não foi possível buscar o CEP", { duration: 4000 }); } finally { setBuscandoCep(false); }
   }
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!userData) return;
-    if (!form.email || !form.nome) { toast.error("Preencha nome e email", { duration: 4000 }); return; }
+    if (!form.email || !form.nome) { toast.error("Preencha nome e e-mail", { duration: 4000 }); return; }
     if (!isCoordenador(userData) && (!form.password || form.password.length < 6)) { toast.error("Senha deve ter no mínimo 6 caracteres", { duration: 4000 }); return; }
     if (isAssessorOuExecutivo(userData) && coordenadoresDisponiveis.length === 0) { toast.error("Não há coordenadores disponíveis. Cadastre um coordenador antes de adicionar colaboradores.", { duration: 5000 }); return; }
-    if (isAssessorOuExecutivo(userData) && !form.coordenadorId) { toast.error("Selecione um Coordenador Responsável", { duration: 4000 }); return; }
+    if (isAssessorOuExecutivo(userData) && !form.coordenadorId) { toast.error("Selecione um coordenador responsável", { duration: 4000 }); return; }
     if (isSuperOrMaster(userData) && !gabineteIdParam && !form.gabineteVinculoId) { toast.error("Selecione o gabinete para vincular o colaborador", { duration: 4000 }); return; }
     setSaving(true);
     try {
@@ -210,7 +210,7 @@ export default function ColaboradoresPage() {
           acao: "solicitou_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Solicitou colaborador ${form.nome}`,
         });
-        toast.success("Colaborador solicitado! Aguardando aprovação do assessor.", { duration: 4000 });
+        toast.success("Colaborador solicitado. Aguardando aprovação do assessor.");
       } else if (gabineteIdParam && isSuperOrMaster(userData)) {
         if (form.coordenadorId) dados.coordenadorId = form.coordenadorId;
         dados.gabineteId = gabineteIdParam;
@@ -222,7 +222,7 @@ export default function ColaboradoresPage() {
           acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome} via contexto`,
         });
-        toast.success("Colaborador criado!", { duration: 4000 });
+        toast.success("Colaborador criado");
       } else {
         if (form.coordenadorId) dados.coordenadorId = form.coordenadorId;
         dados.status = "ativo";
@@ -232,7 +232,7 @@ export default function ColaboradoresPage() {
           acao: "criar_colaborador", usuarioId: userData.uid, usuarioNome: userData.nome,
           usuarioRole: userData.role, detalhes: `Criou colaborador ${form.nome}`,
         });
-        toast.success("Colaborador criado!", { duration: 4000 });
+        toast.success("Colaborador criado");
       }
       setForm({ email: "", password: "", nome: "", telefone: "", tipoDocumento: "", documento: "", cep: "", logradouro: "", numero: "", bairro: "", estado: "", cidade: "", observacoes: "", coordenadorId: "", gabineteVinculoId: "" });
       setCidadesDisponiveis([]);
@@ -249,8 +249,8 @@ export default function ColaboradoresPage() {
     if (!editModal) return;
     try {
       await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, email: editForm.email });
-      toast.success("Colaborador atualizado!"); setEditModal(null); loadData();
-    } catch (e) { toast.error("Erro ao atualizar"); }
+      toast.success("Colaborador atualizado"); setEditModal(null); loadData();
+    } catch (e) { toast.error("Erro ao atualizar", { duration: 4000 }); }
   }
 
   async function handleToggleColabStatus(uid: string, ativo: boolean) {
@@ -272,10 +272,10 @@ export default function ColaboradoresPage() {
         return;
       }
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));
-      toast.success("Colaborador excluído!");
+      toast.success("Colaborador excluído");
       setExcluirModal(null);
       loadData();
-    } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
+    } catch (e) { toast.error("Erro ao excluir", { duration: 4000 }); } finally { setExcluirSaving(false); }
   }
 
   function openCorrecao(c: AppUser) {
@@ -322,7 +322,7 @@ export default function ColaboradoresPage() {
         acao: "reenviou_solicitacao", usuarioId: userData!.uid, usuarioNome: userData!.nome,
         usuarioRole: userData!.role, detalhes: `Corrigiu e reenviou solicitação de ${correcaoForm.nome}`,
       });
-      toast.success("Solicitação reenviada! Aguardando aprovação do assessor.");
+      toast.success("Solicitação reenviada. Aguardando aprovação do assessor.");
       setCorrecaoModal(null);
       loadData();
     } catch (e) {
@@ -738,7 +738,20 @@ export default function ColaboradoresPage() {
               </div>
             </div>
           ))}
-          {colaboradoresFiltrados.length === 0 && <p className="col-span-full text-center text-white/30 py-8">{filtros.texto ? "Nenhum colaborador encontrado" : "Nenhum colaborador"}</p>}
+          {colaboradoresFiltrados.length === 0 && (
+            <div className="col-span-full text-center py-10">
+              <p className="text-white/40 font-medium text-sm">
+                {(filtros.texto || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId || filtros.gabineteId)
+                  ? "Nenhum resultado para os filtros aplicados"
+                  : "Nenhum colaborador cadastrado"}
+              </p>
+              <p className="text-white/25 text-xs mt-1">
+                {(filtros.texto || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId || filtros.gabineteId)
+                  ? "Tente ajustar ou limpar os filtros."
+                  : "Adicione colaboradores para iniciar as operações."}
+              </p>
+            </div>
+          )}
         </div>
       </GlassCard>
 

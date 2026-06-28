@@ -7,10 +7,11 @@ interface StatCardProps {
   value: string | number;
   icon: React.ReactNode;
   trend?: { value: string; positive: boolean };
+  subtitle?: string;
   delay?: number;
 }
 
-export function StatCard({ title, value, icon, trend, delay = 0 }: StatCardProps) {
+export function StatCard({ title, value, icon, trend, subtitle, delay = 0 }: StatCardProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -28,6 +29,9 @@ export function StatCard({ title, value, icon, trend, delay = 0 }: StatCardProps
         <div className="space-y-2">
           <p className="text-sm text-white/50 font-medium">{title}</p>
           <p className="text-3xl font-bold text-white tracking-tight">{value}</p>
+          {subtitle && (
+            <p className="text-xs text-white/35">{subtitle}</p>
+          )}
           {trend && (
             <div className="flex items-center gap-1">
               <span className={`text-xs font-medium ${trend.positive ? "text-emerald-400" : "text-red-400"}`}>

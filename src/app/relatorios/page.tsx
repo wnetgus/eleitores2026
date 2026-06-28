@@ -993,7 +993,12 @@ export default function RelatoriosPage() {
                       </tr>
                     ))}
                     {listaExibicao.length === 0 && (
-                      <tr><td colSpan={9} className="py-12 text-center text-white/30">Nenhum registro encontrado</td></tr>
+                      <tr>
+                        <td colSpan={9} className="py-12 text-center">
+                          <p className="text-white/40 font-medium text-sm">Nenhum dado para o período</p>
+                          <p className="text-white/25 text-xs mt-1">Ajuste os filtros de data ou territórios para ver resultados.</p>
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>

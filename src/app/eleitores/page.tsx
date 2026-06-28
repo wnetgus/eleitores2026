@@ -230,7 +230,7 @@ export default function EleitoresPage() {
         }));
         if (siglaEstado) setCidadesDisponiveis(getCidades(siglaEstado));
       }
-    } catch { toast.error("Não foi possível buscar o CEP."); } finally { setBuscandoCep(false); }
+    } catch { toast.error("Não foi possível buscar o CEP", { duration: 4000 }); } finally { setBuscandoCep(false); }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -243,29 +243,29 @@ export default function EleitoresPage() {
       if (!form.bairro) erros.push("bairro");
       if (!form.grauApoio) erros.push("grauApoio");
       setCamposComErro(erros);
-      toast.error("Preencha os campos obrigatórios destacados em vermelho");
+      toast.error("Corrija os campos indicados", { duration: 4000 });
       return;
     }
     setCamposComErro([]);
     if (!form.consentimentoLGPD) {
-      toast.error("O eleitor deve autorizar o uso dos dados (LGPD)");
+      toast.error("O eleitor deve autorizar o uso dos dados (LGPD)", { duration: 4000 });
       return;
     }
     if ((form.tipoDocumento as string) === "cpf" && form.documento) {
       if (!validarCPF(form.documento)) {
-        toast.error("CPF inválido — verifique os dígitos");
+        toast.error("CPF inválido. Verifique os dígitos", { duration: 4000 });
         return;
       }
     }
     if ((isAssessorOuExecutivo(userData) || isCoordenador(userData)) && !responsavelColaboradorId) {
-      toast.error("Selecione o colaborador responsável");
+      toast.error("Selecione o colaborador responsável", { duration: 4000 });
       return;
     }
     setSaving(true);
     try {
       if (form.documento) {
         const duplicado = await verificarDocumentoDuplicado(form.documento, userData?.gabineteId || userData?.campanhaId);
-        if (duplicado) { toast.error("Documento já cadastrado!"); setSaving(false); return; }
+        if (duplicado) { toast.error("Documento já cadastrado", { duration: 4000 }); setSaving(false); return; }
       }
       const eleitorData: Record<string, any> = {
         campanhaId: userData?.gabineteId || userData?.campanhaId || "",
@@ -293,12 +293,12 @@ export default function EleitoresPage() {
         eleitorData.coordenadorNome = todosCoordenadores.find((c) => c.uid === responsavelCoordenadorId)?.nome || "";
       await cadastrarEleitor(eleitorData);
       await registrarAtividade({ acao: "cadastro_eleitor", usuarioId: userData.uid, usuarioNome: userData.nome, usuarioRole: userData.role, detalhes: `Cadastrou o eleitor ${form.nomeCompleto}` });
-      toast.success("Eleitor cadastrado com sucesso!");
+      toast.success("Eleitor cadastrado");
       setForm({ ...formInitial });
       limparRascunho();
       setCidadesDisponiveis([]);
       loadEleitores();
-    } catch (e) { console.error("ERRO AO CADASTRAR ELEITOR:", e); toast.error("Erro ao cadastrar eleitor"); } finally { setSaving(false); }
+    } catch (e) { console.error("ERRO AO CADASTRAR ELEITOR:", e); toast.error("Erro ao cadastrar eleitor", { duration: 4000 }); } finally { setSaving(false); }
   }
 
   function handleExcluir(id: string, nome: string) {
@@ -307,7 +307,7 @@ export default function EleitoresPage() {
 
   async function executarExclusao() {
     if (!confirmDelete) return;
-    try { await excluirEleitor(confirmDelete.id); toast.success("Eleitor excluído"); loadEleitores(); } catch { toast.error("Erro ao excluir"); } finally { setConfirmDelete(null); }
+    try { await excluirEleitor(confirmDelete.id); toast.success("Eleitor excluído"); loadEleitores(); } catch { toast.error("Erro ao excluir", { duration: 4000 }); } finally { setConfirmDelete(null); }
   }
 
   const docLabel = form.tipoDocumento === "titulo" ? "Título Eleitoral" : form.tipoDocumento === "cpf" ? "CPF" : "RG";
@@ -956,7 +956,18 @@ export default function EleitoresPage() {
                   )}
                 </tr>
               ))}
-              {eleitoresExibidos.length === 0 && <tr><td colSpan={8} className="py-4"><EmptyState icon={filtros.texto || grauPill ? "🔍" : "📋"} title={filtros.texto || grauPill ? "Nenhum resultado encontrado" : "Nenhum eleitor cadastrado"} description={filtros.texto || grauPill ? "Tente ajustar os filtros" : "Colaboradores ainda não cadastraram eleitores"} /></td></tr>}
+              {eleitoresExibidos.length === 0 && (() => {
+                const filtroAtivo = !!(filtros.texto || grauPill || filtros.gabineteId || filtros.assessorId || filtros.coordenadorId || filtros.colaboradorId);
+                return (
+                  <tr><td colSpan={8} className="py-4">
+                    <EmptyState
+                      icon={filtroAtivo ? "🔍" : "📋"}
+                      title={filtroAtivo ? "Nenhum resultado para os filtros aplicados" : "Nenhum eleitor cadastrado"}
+                      description={filtroAtivo ? "Tente ajustar ou limpar os filtros para ver todos os registros." : "Comece cadastrando o primeiro eleitor desta equipe."}
+                    />
+                  </td></tr>
+                );
+              })()}
             </tbody>
           </table>
         </div>

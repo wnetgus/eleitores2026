@@ -196,8 +196,11 @@ export default function NotificacoesPage() {
         <GlassCard className="py-16 text-center">
           <Bell size={32} className="text-white/10 mx-auto mb-3" />
           <p className="text-white/25 font-medium">
-            {filtro === "nao_lidas" ? "Nenhuma notificação não lida" : "Nenhuma notificação"}
+            {filtro === "nao_lidas" ? "Tudo lido — nenhuma notificação pendente" : "Nenhuma notificação"}
           </p>
+          {filtro === "todos" && (
+            <p className="text-white/15 text-xs mt-1">Você está em dia</p>
+          )}
           {filtro !== "todos" && (
             <button onClick={() => setFiltro("todos")} className="mt-3 text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1 mx-auto">
               <X size={12} /> Limpar filtro
