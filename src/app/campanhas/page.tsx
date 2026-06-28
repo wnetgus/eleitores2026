@@ -202,7 +202,7 @@ export default function GabinetesPage() {
   }
 
   async function toggleGabinete(id: string, ativo: boolean) {
-    try { await updateDoc(doc(db, "campanhas", id), { ativo: !ativo }); toast.success(`Gabinete ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro"); }
+    try { await updateDoc(doc(db, "campanhas", id), { ativo: !ativo }); toast.success(`Gabinete ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro ao alterar status do gabinete", { duration: 4000 }); }
   }
 
   async function excluirGabinete(id: string, nome: string) {
@@ -216,9 +216,9 @@ export default function GabinetesPage() {
     try {
       await deleteDoc(doc(db, "campanhas", id));
       await registrarAtividade({ acao: "excluiu_gabinete", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu gabinete ${nome}` });
-      toast.success("Gabinete excluído permanentemente!");
+      toast.success("Gabinete excluído permanentemente");
       loadData();
-    } catch (e) { toast.error("Erro ao excluir gabinete"); }
+    } catch (e) { toast.error("Erro ao excluir gabinete", { duration: 4000 }); }
   }
 
   function openEdit(g: Gabinete) {
@@ -240,8 +240,8 @@ export default function GabinetesPage() {
       if (editForm.metaEleitoral) updateData.metaEleitoral = Number(editForm.metaEleitoral);
       await updateDoc(doc(db, "campanhas", editModal.id), updateData);
       await registrarAtividade({ acao: "editou_gabinete", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: "super_admin", detalhes: `Editou gabinete ${editModal.nome}` });
-      toast.success("Gabinete atualizado!"); setEditModal(null); loadData();
-    } catch (e) { toast.error("Erro ao atualizar"); }
+      toast.success("Gabinete atualizado"); setEditModal(null); loadData();
+    } catch (e) { toast.error("Erro ao atualizar gabinete", { duration: 4000 }); }
   }
 
   if (!userData || !isSuperOrMaster(userData)) return null;

@@ -109,7 +109,7 @@ export default function LogsPage() {
     try {
       await deleteDoc(doc(db, "_erros", id));
       setErros((p) => p.filter((e) => e.id !== id));
-    } catch { toast.error("Erro ao remover"); }
+    } catch { toast.error("Erro ao remover registro", { duration: 4000 }); }
   }
 
   if (!userData || (!isSuperOrMaster(userData) && !isAssessorExecutivo(userData) && !isAssessor(userData))) return null;

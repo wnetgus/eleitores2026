@@ -2046,7 +2046,7 @@ export default function DashboardPage() {
           <StatCard title="Apoiadores da Equipe" value={eleitoresFiltrados.length} icon={<Users size={20} />} trend={cadastrosHoje.length > 0 ? { value: `+${cadastrosHoje.length} hoje`, positive: true } : undefined} subtitle="Eleitores da sua equipe" delay={0} />
           <StatCard title="Cadastros Hoje" value={cadastrosHoje.length} icon={<UserPlus size={20} />} subtitle="Atividade de hoje" delay={100} />
           <StatCard title="Colaboradores na Equipe" value={colaboradoresPorCoordenador} icon={<Target size={20} />} subtitle="Colaboradores ativos" delay={200} />
-          <StatCard title="Meu Território" value={topBairro ? topBairro[0] : territorioCoordenador || "-"} icon={<MapPin size={20} />} delay={300} />
+          <StatCard title="Meu Território" value={topBairro ? topBairro[0] : territorioCoordenador || "-"} icon={<MapPin size={20} />} subtitle="Bairro principal de atuação" delay={300} />
         </div>
       ) : isAssessor(userData) ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -2059,7 +2059,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard title={isPrefeito(userData) ? "Eleitores do Município" : "Total de Eleitores"} value={eleitoresFiltrados.length} icon={<Users size={20} />} trend={cadastrosHoje.length > 0 ? { value: `+${cadastrosHoje.length} hoje`, positive: true } : undefined} subtitle="Base total da campanha" delay={0} />
           <StatCard title="Cadastros Hoje" value={cadastrosHoje.length} icon={<UserPlus size={20} />} subtitle="Atividade de hoje" delay={100} />
-          <StatCard title={isPolitico(userData) ? "Território Mais Forte" : "Cidade Mais Forte"} value={isPolitico(userData) ? (topTerritorio ? topTerritorio.territorio : "-") : (topCidade ? topCidade[0] : "-")} icon={<MapPin size={20} />} delay={200} />
+          <StatCard title={isPolitico(userData) ? "Território Mais Forte" : "Cidade Mais Forte"} value={isPolitico(userData) ? (topTerritorio ? topTerritorio.territorio : "-") : (topCidade ? topCidade[0] : "-")} icon={<MapPin size={20} />} subtitle="Maior concentração de apoiadores" delay={200} />
           <StatCard title={isPolitico(userData) ? "Expansão Territorial" : isPrefeito(userData) ? "Bairros Ativos" : "Penetração Local"} value={isPolitico(userData) ? `${cidadesArray.length} cidades` : isPrefeito(userData) ? `${bairrosDisponiveis.length} bairros` : `${cidadesArray.length} áreas`} icon={<Medal size={20} />} subtitle="Novas áreas com presença" delay={300} />
         </div>
       ) : null}

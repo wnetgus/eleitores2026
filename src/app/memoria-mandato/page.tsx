@@ -105,7 +105,7 @@ export default function MemoriaMandatoPage() {
     if (!campanhaId) { setLoading(false); return; }
     buscarMemoriasMandato(campanhaId)
       .then(setMemorias)
-      .catch(() => toast.error("Erro ao carregar memórias"))
+      .catch(() => toast.error("Erro ao carregar memórias", { duration: 4000 }))
       .finally(() => setLoading(false));
   }, [userData, campanhaId]);
 
@@ -233,16 +233,16 @@ export default function MemoriaMandatoPage() {
       setModalConcluir(null);
       setFormConcluir({ resultado: "", impacto: "" });
     } catch {
-      toast.error("Erro ao concluir memória");
+      toast.error("Erro ao concluir memória", { duration: 4000 });
     } finally {
       setSalvandoConcluir(false);
     }
   }
 
   async function handleSalvar() {
-    if (!form.titulo.trim()) { toast.error("Título obrigatório"); return; }
-    if (!form.descricao.trim()) { toast.error("Descrição obrigatória"); return; }
-    if (!campanhaId) { toast.error("Campanha não encontrada"); return; }
+    if (!form.titulo.trim()) { toast.error("Título obrigatório", { duration: 4000 }); return; }
+    if (!form.descricao.trim()) { toast.error("Descrição obrigatória", { duration: 4000 }); return; }
+    if (!campanhaId) { toast.error("Campanha não encontrada", { duration: 4000 }); return; }
     setSalvando(true);
     try {
       const payload: Omit<MemoriaMandato, "id" | "criadoEm" | "atualizadoEm" | "resolvidoEm"> = {
@@ -270,7 +270,7 @@ export default function MemoriaMandatoPage() {
       const atualizadas = await buscarMemoriasMandato(campanhaId);
       setMemorias(atualizadas);
     } catch {
-      toast.error("Erro ao salvar memória");
+      toast.error("Erro ao salvar memória", { duration: 4000 });
     } finally {
       setSalvando(false);
     }

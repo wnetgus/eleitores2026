@@ -78,7 +78,7 @@ export default function ConfiguracoesPage() {
   }
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
-    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Usuário ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro ao atualizar"); }
+    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Usuário ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro ao atualizar usuário", { duration: 4000 }); }
   }
 
   async function handleReset() {
@@ -128,7 +128,7 @@ export default function ConfiguracoesPage() {
       setShowResetConfirm(false);
       setResetStep(0);
       setTimeout(() => window.location.reload(), 1500);
-    } catch (e) { toast.error("Erro ao resetar"); } finally { setReseting(false); }
+    } catch (e) { toast.error("Erro ao resetar plataforma", { duration: 4000 }); } finally { setReseting(false); }
   }
 
   return (

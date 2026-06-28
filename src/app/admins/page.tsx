@@ -57,11 +57,11 @@ export default function AdminsPage() {
       toast.success("Admin Master criado!");
       setForm({ email: "", password: "", nome: "" });
       loadAdmins();
-    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : "Erro ao criar"); } finally { setSaving(false); }
+    } catch (error: any) { toast.error(error.code === "auth/email-already-in-use" ? "Email já está em uso" : "Erro ao criar admin master", { duration: 4000 }); } finally { setSaving(false); }
   }
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
-    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Admin Master ${ativo ? "desativado" : "ativado"}`); loadAdmins(); } catch (e) { toast.error("Erro"); }
+    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Admin Master ${ativo ? "desativado" : "ativado"}`); loadAdmins(); } catch (e) { toast.error("Erro ao alterar status do admin", { duration: 4000 }); }
   }
 
   function openEdit(c: AppUser) {
@@ -74,8 +74,8 @@ export default function AdminsPage() {
     try {
       await updateDoc(doc(db, "usuarios", editModal.uid), { nome: editForm.nome, email: editForm.email });
       await registrarAtividade({ acao: "editou_admin_master", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Editou admin master ${editModal.nome}` });
-      toast.success("Admin Master atualizado!"); setEditModal(null); loadAdmins();
-    } catch (e) { toast.error("Erro ao atualizar"); }
+      toast.success("Admin Master atualizado"); setEditModal(null); loadAdmins();
+    } catch (e) { toast.error("Erro ao atualizar admin master", { duration: 4000 }); }
   }
 
   async function handleExcluir() {
@@ -84,10 +84,10 @@ export default function AdminsPage() {
     try {
       await deleteDoc(doc(db, "usuarios", excluirModal.uid));
       await registrarAtividade({ acao: "excluiu_admin_master", usuarioId: userData!.uid, usuarioNome: userData!.nome, usuarioRole: userData!.role, detalhes: `Excluiu admin master ${excluirModal.nome}` });
-      toast.success("Admin Master excluído!");
+      toast.success("Admin Master excluído");
       setExcluirModal(null);
       loadAdmins();
-    } catch (e) { toast.error("Erro ao excluir"); } finally { setExcluirSaving(false); }
+    } catch (e) { toast.error("Erro ao excluir admin master", { duration: 4000 }); } finally { setExcluirSaving(false); }
   }
 
   if (!userData || !isSuperOrMaster(userData)) return null;

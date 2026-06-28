@@ -67,11 +67,11 @@ export default function CandidatosPage() {
         acao: "criar_candidato", usuarioId: userData!.uid, usuarioNome: userData!.nome,
         usuarioRole: userData!.role, detalhes: `Cadastrou candidato ${form.nome}`,
       });
-      toast.success("Candidato cadastrado!");
+      toast.success("Candidato cadastrado");
       setForm({ nome: "", partido: "", numero: "", cargo: "" });
       setShowForm(false);
       load();
-    } catch (e) { toast.error("Erro ao cadastrar"); } finally { setSaving(false); }
+    } catch (e) { toast.error("Erro ao cadastrar candidato", { duration: 4000 }); } finally { setSaving(false); }
   }
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -94,7 +94,7 @@ export default function CandidatosPage() {
         if (parsed.length === 0) { toast.error("Nenhum dado válido encontrado na planilha"); return; }
         setPreview(parsed);
         toast.success(`${parsed.length} candidatos detectados`);
-      } catch { toast.error("Erro ao ler planilha"); }
+      } catch { toast.error("Erro ao ler planilha", { duration: 4000 }); }
     };
     reader.readAsArrayBuffer(file);
   }
@@ -112,7 +112,7 @@ export default function CandidatosPage() {
       setPreview([]);
       if (fileRef.current) fileRef.current.value = "";
       load();
-    } catch (e) { toast.error("Erro ao importar"); } finally { setImporting(false); }
+    } catch (e) { toast.error("Erro ao importar candidatos", { duration: 4000 }); } finally { setImporting(false); }
   }
 
   const podeGerenciar = isSuperOrMaster(userData) || isAssessor(userData);

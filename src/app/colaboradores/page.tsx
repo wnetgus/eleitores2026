@@ -254,7 +254,7 @@ export default function ColaboradoresPage() {
   }
 
   async function handleToggleColabStatus(uid: string, ativo: boolean) {
-    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Colaborador ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro"); }
+    try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Colaborador ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro ao alterar status do colaborador", { duration: 4000 }); }
   }
 
   async function handleExcluirColab() {

@@ -233,10 +233,10 @@ function ModalExecucao({
       });
 
       onConcluir(resultado);
-      toast.success("Missão concluída!");
+      toast.success("Missão concluída");
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao executar missão.");
+      toast.error("Erro ao executar missão", { duration: 4000 });
     } finally {
       setSalvando(false);
     }
@@ -618,7 +618,7 @@ export default function MissoesPage() {
   async function criarMissao() {
     if (!form.cidade.trim()) { toast.error("Informe o município."); return; }
     const campanhaId = userData?.campanhaId || userData?.gabineteId || "";
-    if (!campanhaId) { toast.error("Erro: campanha não identificada. Recarregue a página."); return; }
+    if (!campanhaId) { toast.error("Campanha não identificada — recarregue a página", { duration: 4000 }); return; }
     setSalvando(true);
     try {
       const detId = determinacaoIdRef.current;
@@ -649,13 +649,13 @@ export default function MissoesPage() {
         }
         determinacaoIdRef.current = "";
       }
-      toast.success(isPolitico(userData) ? "Missão criada e delegada ao Assessor Executivo!" : "Missão criada! Delegue ao assessor regional a partir da lista.");
+      toast.success(isPolitico(userData) ? "Missão criada e delegada ao Assessor Executivo" : "Missão criada. Delegue ao assessor regional a partir da lista.");
       setModalCriar(false);
       setForm({ tipo: "criar_assessoria", cidade: "", prioridade: "P1", descricao: "", prazo: "" });
       await loadData();
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao criar missão.");
+      toast.error("Erro ao criar missão", { duration: 4000 });
     } finally {
       setSalvando(false);
     }
@@ -673,10 +673,10 @@ export default function MissoesPage() {
         delegadoPorNome: userData?.nome ?? "",
         delegadoEm:      Timestamp.now(),
       });
-      toast.success(`Missão delegada para ${assessorNome}!`);
+      toast.success(`Missão delegada para ${assessorNome}`);
       await loadData();
     } catch (e) {
-      toast.error("Erro ao delegar missão.");
+      toast.error("Erro ao delegar missão", { duration: 4000 });
     } finally {
       setAtualizandoId(null);
     }
@@ -707,7 +707,7 @@ export default function MissoesPage() {
       await loadData();
     } catch (e) {
       console.error(e);
-      toast.error("Erro ao concluir missão.");
+      toast.error("Erro ao concluir missão", { duration: 4000 });
     }
   }
 

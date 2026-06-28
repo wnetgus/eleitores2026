@@ -79,7 +79,7 @@ export default function OnboardingPage() {
       if (error.code === "auth/email-already-in-use") {
         toast.error("Este email já está cadastrado no sistema");
       } else {
-        toast.error("Erro ao criar assessor. Tente novamente.");
+        toast.error("Erro ao criar assessor", { duration: 4000 });
       }
     } finally {
       setSaving(false);

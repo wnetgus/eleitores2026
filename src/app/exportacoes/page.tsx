@@ -145,14 +145,14 @@ export default function ExportacoesPage() {
       XLSX.utils.book_append_sheet(wb, wsEleitores,   "Eleitores");
       XLSX.writeFile(wb, `excel-premium-${gabinete.replace(/\s+/g, "-").toLowerCase()}-${data}.xlsx`);
       toast.success("Excel Executivo Premium exportado!");
-    } catch { toast.error("Erro ao exportar Excel"); }
+    } catch { toast.error("Erro ao exportar Excel premium", { duration: 4000 }); }
   }
 
   function exportPDFPremiumAction() {
     try {
       exportPDFPremium(eleitores, userData?.gabineteNome || "Relatório");
-      toast.success("PDF premium exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("PDF premium exportado");
+    } catch { toast.error("Erro ao exportar PDF premium", { duration: 4000 }); }
   }
 
   function exportJSON() {
@@ -180,8 +180,8 @@ export default function ExportacoesPage() {
         stats.topCidades,
         stats.topCoordenadores.map((c) => ({ nome: c.nome, total: c.total })),
       );
-      toast.success("Relatório Executivo exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("Relatório Executivo exportado");
+    } catch { toast.error("Erro ao exportar relatório executivo", { duration: 4000 }); }
   }
 
   function exportCoordenadoresAction() {
@@ -196,8 +196,8 @@ export default function ExportacoesPage() {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Coordenadores");
       XLSX.writeFile(wb, `producao-coordenadores-${new Date().toISOString().split("T")[0]}.xlsx`);
-      toast.success("Produção dos coordenadores exportada!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("Produção dos coordenadores exportada");
+    } catch { toast.error("Erro ao exportar coordenadores", { duration: 4000 }); }
   }
 
   async function exportBaseAction() {
@@ -210,14 +210,14 @@ export default function ExportacoesPage() {
         body: JSON.stringify({ titulo: userData?.gabineteNome || "Relatório", gabineteNome: userData?.gabineteNome, tipo: "executivo", campanhaId: userData?.campanhaId || userData?.gabineteId }),
       });
       if (res.status === 503) { toast.error("Base de dados temporariamente indisponível. Tente em alguns minutos."); return; }
-      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || "Erro ao exportar"); return; }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); toast.error(d.error || "Erro ao exportar base territorial", { duration: 4000 }); return; }
       const blob = await res.blob();
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href = url; a.download = `relatorio-executivo-${new Date().toISOString().split("T")[0]}.xlsx`; a.click();
       URL.revokeObjectURL(url);
-      toast.success("Base Territorial exportada!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("Base Territorial exportada");
+    } catch { toast.error("Erro ao exportar base territorial", { duration: 4000 }); }
   }
 
   function exportOportunidadesAction() {
@@ -225,8 +225,8 @@ export default function ExportacoesPage() {
       const lista = eleitores.filter((e) => e.grauApoio === "indeciso");
       if (lista.length === 0) { toast.error("Nenhum indeciso na base."); return; }
       exportPDFPremium(lista, `Oportunidades — ${userData?.gabineteNome || "Relatório"}`);
-      toast.success("PDF de Oportunidades exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("PDF de Oportunidades exportado");
+    } catch { toast.error("Erro ao exportar oportunidades", { duration: 4000 }); }
   }
 
   function exportAtencaoAction() {
@@ -234,8 +234,8 @@ export default function ExportacoesPage() {
       const lista = eleitores.filter((e) => e.grauApoio === "fraco");
       if (lista.length === 0) { toast.error("Nenhum registro de rejeição na base."); return; }
       exportPDFPremium(lista, `Áreas de Atenção — ${userData?.gabineteNome || "Relatório"}`);
-      toast.success("PDF de Atenção exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("PDF de Atenção exportado");
+    } catch { toast.error("Erro ao exportar áreas de atenção", { duration: 4000 }); }
   }
 
   // ── Dados para view não-assessor (preservados) ────────────────────────────
@@ -467,8 +467,8 @@ export default function ExportacoesPage() {
                         const titulo = assessorSel
                           ? `Assessoria · ${assessorSel.nome} · ${(assessorSel.cidades ?? []).join(", ") || "Territórios"}`
                           : "Relatório de Assessorias";
-                        try { exportPDFPremium(eleitores, titulo); toast.success("Relatório exportado!"); }
-                        catch { toast.error("Erro ao exportar"); }
+                        try { exportPDFPremium(eleitores, titulo); toast.success("Relatório exportado"); }
+                        catch { toast.error("Erro ao exportar relatório de assessorias", { duration: 4000 }); }
                       }}
                       className="text-xs text-emerald-400 hover:text-emerald-300 transition-colors font-medium"
                     >
@@ -525,8 +525,8 @@ export default function ExportacoesPage() {
                         const lista  = selectedCidade ? eleitores.filter(e => e.cidade === selectedCidade) : eleitores;
                         const titulo = selectedCidade ? `Relatório Territorial · ${selectedCidade}` : "Relatório Territorial";
                         if (lista.length === 0) { toast.error("Nenhum eleitor neste município."); return; }
-                        try { exportPDFPremium(lista, titulo); toast.success("Relatório exportado!"); }
-                        catch { toast.error("Erro ao exportar"); }
+                        try { exportPDFPremium(lista, titulo); toast.success("Relatório exportado"); }
+                        catch { toast.error("Erro ao exportar relatório territorial", { duration: 4000 }); }
                       }}
                       className="text-xs text-amber-400 hover:text-amber-300 transition-colors font-medium"
                     >
@@ -560,8 +560,8 @@ export default function ExportacoesPage() {
                     <button onClick={() => router.push("/metas")} className="text-xs text-white/35 hover:text-red-400 transition-colors font-medium">Visualizar →</button>
                     <button
                       onClick={() => {
-                        try { exportPDFPremium(eleitores, `Metas Estratégicas · ${userData?.gabineteNome || "Mandato"}`); toast.success("Relatório exportado!"); }
-                        catch { toast.error("Erro ao exportar"); }
+                        try { exportPDFPremium(eleitores, `Metas Estratégicas · ${userData?.gabineteNome || "Mandato"}`); toast.success("Relatório exportado"); }
+                        catch { toast.error("Erro ao exportar relatório de metas", { duration: 4000 }); }
                       }}
                       className="text-xs text-red-400 hover:text-red-300 transition-colors font-medium"
                     >

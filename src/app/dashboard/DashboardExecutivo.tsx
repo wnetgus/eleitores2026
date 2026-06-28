@@ -727,7 +727,7 @@ export function DashboardExecutivo({ userData }: Props) {
                       await updateDoc(doc(db, "determinacoes", det.id), { status: "em_andamento", aceitoPorId: userData.uid, aceitoPorNome: userData.nome, aceitoEm: Timestamp.now(), atualizadoEm: Timestamp.now() });
                       setDeterminacoesRecebidas((prev) => prev.map((d) => d.id === det.id ? { ...d, status: "em_andamento" } : d));
                       toast.success("Determinação aceita — em andamento");
-                    } catch (e) { toast.error("Erro ao aceitar"); console.error(e); }
+                    } catch (e) { toast.error("Erro ao aceitar determinação", { duration: 4000 }); console.error(e); }
                   };
                   const handleAbrirMissao = () => {
                     const prioMap: Record<string, string> = { "Alta": "P1", "Media": "P2", "Baixa": "P3" };
@@ -935,7 +935,7 @@ export function DashboardExecutivo({ userData }: Props) {
                     setModalConcluir(null);
                     setConclusaoForm({ resultado: "", items: ["", "", ""] });
                     toast.success("Prestação de contas registrada com sucesso");
-                  } catch (e) { console.error(e); toast.error("Erro ao registrar prestação de contas"); }
+                  } catch (e) { console.error(e); toast.error("Erro ao registrar prestação de contas", { duration: 4000 }); }
                   finally { setConclusaoEnviando(false); }
                 }}
                 className="flex-1 py-3 rounded-xl bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"

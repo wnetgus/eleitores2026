@@ -180,7 +180,7 @@ export default function SolicitacoesPage() {
       toast.success("Colaborador recusado");
     } catch (e) {
       setSolicitacoes((prev) => prev.map((x) => x.uid === original.uid ? original : x));
-      toast.error("Erro ao recusar");
+      toast.error("Erro ao recusar colaborador", { duration: 4000 });
     } finally { setProcessingId(null); }
   }
 

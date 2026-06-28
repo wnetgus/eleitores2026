@@ -144,7 +144,7 @@ function ViewForcaTerritorial({
       }
       setModalDelegacao(null);
       onRefresh();
-    } catch { toast.error("Erro ao atribuir. Tente novamente."); }
+    } catch { toast.error("Erro ao atribuir coordenador", { duration: 4000 }); }
     finally { setDelegacaoSaving(false); }
   }
 

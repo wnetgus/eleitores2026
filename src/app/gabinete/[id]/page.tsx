@@ -135,11 +135,11 @@ export default function PainelGabinetePage() {
         acao: "vinculou_gabinete", usuarioId: userData!.uid, usuarioNome: userData!.nome,
         usuarioRole: userData!.role, detalhes: `Vinculou gabinete ao ${gabinete.nome}`,
       });
-      toast.success("Gabinete vinculado!");
+      toast.success("Gabinete vinculado");
       setShowVincular(false);
       setVincularId("");
       loadAll();
-    } catch (e) { toast.error("Erro ao vincular"); } finally { setVincularSaving(false); }
+    } catch (e) { toast.error("Erro ao vincular gabinete", { duration: 4000 }); } finally { setVincularSaving(false); }
   }
 
   function desvincularGabinete(filhoId: string, nome: string) {
@@ -150,9 +150,9 @@ export default function PainelGabinetePage() {
     if (!confirmDesvincular) return;
     try {
       await updateDoc(doc(db, "campanhas", confirmDesvincular.id), { parentGabineteId: "", parentGabineteNome: "" });
-      toast.success("Gabinete desvinculado!");
+      toast.success("Gabinete desvinculado");
       loadAll();
-    } catch { toast.error("Erro ao desvincular"); } finally { setConfirmDesvincular(null); }
+    } catch { toast.error("Erro ao desvincular gabinete", { duration: 4000 }); } finally { setConfirmDesvincular(null); }
   }
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 size={32} className="animate-spin text-rose-500" /></div>;
@@ -223,16 +223,16 @@ export default function PainelGabinetePage() {
       a.download = `relatorio-${(gabinete.politicoPartido || "gabinete").toLowerCase()}.xlsx`;
       a.click();
       URL.revokeObjectURL(url);
-      toast.success("Excel premium exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("Excel premium exportado");
+    } catch { toast.error("Erro ao exportar Excel do gabinete", { duration: 4000 }); }
   }
 
   function exportPDFPremiumAction() {
     if (!gabinete) return;
     try {
       exportPDFPremium(eleitores, gabinete.nome, gabinete.politicoPartido, gabinete.nome, gabinete.politicoNome, gabinete.cargo);
-      toast.success("PDF exportado!");
-    } catch { toast.error("Erro ao exportar"); }
+      toast.success("PDF exportado");
+    } catch { toast.error("Erro ao exportar PDF do gabinete", { duration: 4000 }); }
   }
 
   return (
