@@ -280,8 +280,20 @@ export default function CoordenadoresPage() {
       <div className="flex items-center gap-3">
         <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${config.gradient} flex items-center justify-center text-lg`}>🎯</div>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">{gabineteContexto ? `Coordenadores — ${gabineteContexto.nome}` : "Coordenadores"}</h1>
-          <p className="text-sm text-purple-400">{gabineteContexto ? `Vincule coordenadores ao gabinete ${gabineteContexto.nome}` : "Gerencie os coordenadores da campanha"}</p>
+          <h1 className="text-2xl font-bold text-white">
+            {gabineteContexto ? `Coordenadores — ${gabineteContexto.nome}` : isAssessor(userData) ? "Estrutura Regional" : "Coordenadores"}
+          </h1>
+          <p className="text-sm text-purple-400">
+            {gabineteContexto ? `Vincule coordenadores ao gabinete ${gabineteContexto.nome}` : isAssessor(userData) ? "Coordenadores da sua equipe" : "Gerencie os coordenadores da campanha"}
+          </p>
+          {isAssessor(userData) && (userData?.cidades?.length || userData?.cidade) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <MapPin size={11} className="text-white/25 shrink-0" />
+              <span className="text-xs text-white/35">
+                {(userData?.cidades?.length ? userData.cidades : [userData?.cidade ?? ""]).join(" · ")}
+              </span>
+            </div>
+          )}
         </div>
         <BuscaGlobal userData={userData} />
       </div>

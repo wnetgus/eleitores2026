@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/Badge";
 import { GlassCard } from "@/components/ui/GlassCard";
 import { BuscaGlobal } from "@/components/ui/BuscaGlobal";
 import { BuscaOperacional, FiltrosOperacionais } from "@/components/ui/BuscaOperacional";
-import { UserPlus, Trash2, Loader2, Pencil, ChevronDown, Printer } from "lucide-react";
+import { UserPlus, Trash2, Loader2, Pencil, ChevronDown, Printer, MapPin } from "lucide-react";
 import { EditarEleitorModal } from "@/components/forms/EditarEleitorModal";
 import { EmptyState } from "@/components/ui/EmptyState";
 
@@ -680,8 +680,20 @@ export default function EleitoresPage() {
     <div data-testid="pagina-eleitores" className="space-y-6 animate-in">
       <div className="flex items-center gap-3">
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">Cadastro de Eleitores</h1>
-          <p className="text-white/50 text-sm mt-1">{isAssessorOuExecutivo(userData) ? "Gestão e consulta da base eleitoral da campanha" : "Cadastro rápido e simplificado para equipes de rua"}</p>
+          <h1 className="text-2xl font-bold text-white">
+            {isAssessor(userData) ? "Base Eleitoral" : "Cadastro de Eleitores"}
+          </h1>
+          <p className="text-white/50 text-sm mt-1">
+            {isAssessorExecutivo(userData) ? "Gestão e consulta da base eleitoral da campanha" : isAssessor(userData) ? "Base eleitoral da sua equipe" : "Cadastro rápido e simplificado para equipes de rua"}
+          </p>
+          {isAssessor(userData) && (userData?.cidades?.length || userData?.cidade) && (
+            <div className="flex items-center gap-1.5 mt-1">
+              <MapPin size={11} className="text-white/25 shrink-0" />
+              <span className="text-xs text-white/35">
+                {(userData?.cidades?.length ? userData.cidades : [userData?.cidade ?? ""]).join(" · ")}
+              </span>
+            </div>
+          )}
         </div>
         {userData && (isCoordenador(userData) || isColaborador(userData) || isAssessor(userData)) && (
           <button
@@ -833,6 +845,11 @@ export default function EleitoresPage() {
           </div>
         </form>
       </GlassCard>
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-white/[0.05]" />
+        <span className="text-[10px] text-white/20 uppercase tracking-wider shrink-0">Consultar base</span>
+        <div className="h-px flex-1 bg-white/[0.05]" />
+      </div>
       <BuscaOperacional
         pagina="eleitores"
         userData={userData}
