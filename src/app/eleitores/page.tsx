@@ -716,140 +716,6 @@ export default function EleitoresPage() {
         )}
         <BuscaGlobal userData={userData} />
       </div>
-      <GlassCard className="p-4 md:p-5">
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Campos essenciais */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <Input label="Nome Completo *" value={form.nomeCompleto} onChange={(e) => { setForm({ ...form, nomeCompleto: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "nomeCompleto")); }} placeholder="Nome do eleitor" error={camposComErro.includes("nomeCompleto") ? " " : undefined} />
-            <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
-            <Select label="Cidade *" value={form.cidade} onChange={(e) => { setForm({ ...form, cidade: e.target.value, bairro: "" }); setCamposComErro((p) => p.filter((c) => c !== "cidade")); }} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} error={camposComErro.includes("cidade") ? " " : undefined} />
-            {isOperacional ? (
-              <div>
-                <label className="block text-sm font-medium text-white/70 mb-1.5">Bairro *</label>
-                <input
-                  list="bairros-datalist"
-                  value={form.bairro}
-                  onChange={(e) => { setForm({ ...form, bairro: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "bairro")); }}
-                  placeholder="Digite ou selecione o bairro"
-                  className={`w-full px-4 py-2.5 bg-white/5 border rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 transition-all ${camposComErro.includes("bairro") ? "border-red-500/50 focus:ring-red-500/50" : "border-white/10 focus:ring-emerald-500/50 focus:border-emerald-500/50"}`}
-                />
-                <datalist id="bairros-datalist">
-                  {getBairros(form.cidade).map((b) => (
-                    <option key={`${form.cidade}-${b}`} value={b} />
-                  ))}
-                </datalist>
-              </div>
-            ) : (
-              <Input label="Bairro *" value={form.bairro} onChange={(e) => { setForm({ ...form, bairro: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "bairro")); }} placeholder="Bairro" error={camposComErro.includes("bairro") ? " " : undefined} />
-            )}
-            <div>
-              <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => { setForm({ ...form, grauApoio: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "grauApoio")); }} options={grauOptions} error={camposComErro.includes("grauApoio") ? " " : undefined} />
-              <p className="mt-1 text-xs text-white/30">
-                Forte = vai votar com certeza · Médio = simpatiza · Fraco = resistência · Indeciso = ainda não decidiu
-              </p>
-            </div>
-            {(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && (
-              <Select
-                label="Coordenador Responsável *"
-                value={responsavelCoordenadorId}
-                onChange={(e) => { setResponsavelCoordenadorId(e.target.value); setResponsavelColaboradorId(""); }}
-                options={[{ value: "", label: "Selecione o coordenador..." }, ...meusCoordenadroes.map((c) => ({ value: c.uid, label: c.nome }))]}
-              />
-            )}
-            {(isAssessorOuExecutivo(userData) || isCoordenador(userData) || isSuperOrMaster(userData)) && (
-              <Select
-                label="Colaborador Responsável *"
-                value={responsavelColaboradorId}
-                onChange={(e) => setResponsavelColaboradorId(e.target.value)}
-                options={[{ value: "", label: colaboradoresResponsaveis.length === 0 ? (isCoordenador(userData) ? "Sem colaboradores ativos" : "Selecione um coordenador primeiro...") : "Selecione o colaborador..." }, ...colaboradoresResponsaveis.map((c) => ({ value: c.uid, label: c.nome }))]}
-                disabled={(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && !responsavelCoordenadorId}
-              />
-            )}
-          </div>
-
-          {/* Toggle complementar */}
-          <button
-            type="button"
-            onClick={() => setExpandirForm(!expandirForm)}
-            className="flex items-center gap-1.5 text-xs text-white/35 hover:text-white/65 transition-colors"
-          >
-            <ChevronDown size={13} className={`transition-transform duration-200 ${expandirForm ? "rotate-180" : ""}`} />
-            {expandirForm ? "Ocultar informações complementares" : "Adicionar informações complementares"}
-            {!expandirForm && <span className="text-white/20 ml-1">— Telefone · Documento · Endereço…</span>}
-          </button>
-
-          {/* Campos complementares */}
-          {expandirForm && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-white/[0.05]">
-              <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value as any, documento: "" })} options={tipoDocOptions} />
-              <Input label={docLabel} value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder={`Número do ${docLabel}`} maxLength={14} />
-              <Input type="tel" label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
-              <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
-              <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
-              <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
-              <Select label="Complemento" value={form.complemento} onChange={(e) => setForm({ ...form, complemento: e.target.value })} options={[{ value: "", label: "Selecione..." }, { value: "Casa", label: "Casa" }, { value: "Apartamento", label: "Apartamento" }, { value: "Sala Comercial", label: "Sala Comercial" }, { value: "Kitnet", label: "Kitnet" }, { value: "Cobertura", label: "Cobertura" }, { value: "Flat", label: "Flat" }, { value: "Loft", label: "Loft" }, { value: "Condomínio", label: "Condomínio" }, { value: "Sítio", label: "Sítio" }, { value: "Chácara", label: "Chácara" }, { value: "Fazenda", label: "Fazenda" }, { value: "__outro__", label: "Outro (digitar)" }]} />
-              {form.complemento === "__outro__" && (
-                <Input label="Digite o complemento" value={""} onChange={(e) => setForm({ ...form, complemento: e.target.value })} placeholder="Ex: Fundos, 2º andar..." />
-              )}
-              <Select label="Intenção de Voto" value={form.voto} onChange={(e) => setForm({ ...form, voto: e.target.value, candidatoId: "" })} options={opcoesVoto} />
-              {form.voto === "sim" && candidatos.length > 0 && (
-                <Select label="Candidato" value={form.candidatoId} onChange={(e) => setForm({ ...form, candidatoId: e.target.value })} options={candidatos.map((c) => ({ value: c.id!, label: `${c.nome} (${c.partido})` }))} />
-              )}
-              {form.voto === "sim" && candidatos.length === 0 && (
-                <p className="text-sm text-amber-400 flex items-center gap-2 self-end pb-2">Cadastre candidatos primeiro na página Candidatos</p>
-              )}
-              {isOperacional && (
-                <Select label="Motivo Principal" value={form.motivoPrincipal} onChange={(e) => setForm({ ...form, motivoPrincipal: e.target.value })} options={MOTIVOS_PRINCIPAIS} />
-              )}
-              {isOperacional ? (
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label className="block text-sm font-medium text-white/70 mb-1.5">Observações</label>
-                  <textarea
-                    value={form.observacoes}
-                    onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
-                    placeholder="Detalhes adicionais (opcional)"
-                    rows={2}
-                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
-                  />
-                </div>
-              ) : (
-                <div className="md:col-span-2 lg:col-span-1">
-                  <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
-            <input
-              type="checkbox"
-              id="consentimento-lgpd"
-              checked={form.consentimentoLGPD}
-              onChange={(e) => setForm({ ...form, consentimentoLGPD: e.target.checked })}
-              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-emerald-500 cursor-pointer accent-emerald-500 shrink-0"
-            />
-            <label htmlFor="consentimento-lgpd" className="text-xs text-amber-200/70 leading-relaxed cursor-pointer">
-              O eleitor autoriza o uso de seus dados pessoais para fins de mobilização eleitoral, em conformidade com a{" "}
-              <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline hover:text-amber-300">
-                Política de Privacidade
-              </a>{" "}
-              (LGPD — Lei 13.709/2018). <span className="text-amber-400">*</span>
-            </label>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <Button type="submit" loading={saving} className="w-full md:w-auto">
-              <UserPlus size={18} />{saving ? "Salvando..." : "Cadastrar Eleitor"}
-            </Button>
-            {buscandoCep && <span className="text-sm text-white/40 animate-pulse">Buscando CEP...</span>}
-          </div>
-        </form>
-      </GlassCard>
-      <div className="flex items-center gap-3">
-        <div className="h-px flex-1 bg-white/[0.05]" />
-        <span className="text-[10px] text-white/20 uppercase tracking-wider shrink-0">Consultar base</span>
-        <div className="h-px flex-1 bg-white/[0.05]" />
-      </div>
       <BuscaOperacional
         pagina="eleitores"
         userData={userData}
@@ -1002,6 +868,140 @@ export default function EleitoresPage() {
           </button>
         </div>
       )}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-white/[0.05]" />
+        <span className="text-[10px] text-white/20 uppercase tracking-wider shrink-0">Cadastrar eleitor</span>
+        <div className="h-px flex-1 bg-white/[0.05]" />
+      </div>
+      <GlassCard className="p-4 md:p-5">
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Campos essenciais */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <Input label="Nome Completo *" value={form.nomeCompleto} onChange={(e) => { setForm({ ...form, nomeCompleto: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "nomeCompleto")); }} placeholder="Nome do eleitor" error={camposComErro.includes("nomeCompleto") ? " " : undefined} />
+            <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
+            <Select label="Cidade *" value={form.cidade} onChange={(e) => { setForm({ ...form, cidade: e.target.value, bairro: "" }); setCamposComErro((p) => p.filter((c) => c !== "cidade")); }} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} error={camposComErro.includes("cidade") ? " " : undefined} />
+            {isOperacional ? (
+              <div>
+                <label className="block text-sm font-medium text-white/70 mb-1.5">Bairro *</label>
+                <input
+                  list="bairros-datalist"
+                  value={form.bairro}
+                  onChange={(e) => { setForm({ ...form, bairro: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "bairro")); }}
+                  placeholder="Digite ou selecione o bairro"
+                  className={`w-full px-4 py-2.5 bg-white/5 border rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 transition-all ${camposComErro.includes("bairro") ? "border-red-500/50 focus:ring-red-500/50" : "border-white/10 focus:ring-emerald-500/50 focus:border-emerald-500/50"}`}
+                />
+                <datalist id="bairros-datalist">
+                  {getBairros(form.cidade).map((b) => (
+                    <option key={`${form.cidade}-${b}`} value={b} />
+                  ))}
+                </datalist>
+              </div>
+            ) : (
+              <Input label="Bairro *" value={form.bairro} onChange={(e) => { setForm({ ...form, bairro: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "bairro")); }} placeholder="Bairro" error={camposComErro.includes("bairro") ? " " : undefined} />
+            )}
+            <div>
+              <Select label="Grau de Apoio *" value={form.grauApoio} onChange={(e) => { setForm({ ...form, grauApoio: e.target.value }); setCamposComErro((p) => p.filter((c) => c !== "grauApoio")); }} options={grauOptions} error={camposComErro.includes("grauApoio") ? " " : undefined} />
+              <p className="mt-1 text-xs text-white/30">
+                Forte = vai votar com certeza · Médio = simpatiza · Fraco = resistência · Indeciso = ainda não decidiu
+              </p>
+            </div>
+            {(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && (
+              <Select
+                label="Coordenador Responsável *"
+                value={responsavelCoordenadorId}
+                onChange={(e) => { setResponsavelCoordenadorId(e.target.value); setResponsavelColaboradorId(""); }}
+                options={[{ value: "", label: "Selecione o coordenador..." }, ...meusCoordenadroes.map((c) => ({ value: c.uid, label: c.nome }))]}
+              />
+            )}
+            {(isAssessorOuExecutivo(userData) || isCoordenador(userData) || isSuperOrMaster(userData)) && (
+              <Select
+                label="Colaborador Responsável *"
+                value={responsavelColaboradorId}
+                onChange={(e) => setResponsavelColaboradorId(e.target.value)}
+                options={[{ value: "", label: colaboradoresResponsaveis.length === 0 ? (isCoordenador(userData) ? "Sem colaboradores ativos" : "Selecione um coordenador primeiro...") : "Selecione o colaborador..." }, ...colaboradoresResponsaveis.map((c) => ({ value: c.uid, label: c.nome }))]}
+                disabled={(isAssessorOuExecutivo(userData) || isSuperOrMaster(userData)) && !responsavelCoordenadorId}
+              />
+            )}
+          </div>
+
+          {/* Toggle complementar */}
+          <button
+            type="button"
+            onClick={() => setExpandirForm(!expandirForm)}
+            className="flex items-center gap-1.5 text-xs text-white/35 hover:text-white/65 transition-colors"
+          >
+            <ChevronDown size={13} className={`transition-transform duration-200 ${expandirForm ? "rotate-180" : ""}`} />
+            {expandirForm ? "Ocultar informações complementares" : "Adicionar informações complementares"}
+            {!expandirForm && <span className="text-white/20 ml-1">— Telefone · Documento · Endereço…</span>}
+          </button>
+
+          {/* Campos complementares */}
+          {expandirForm && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-3 border-t border-white/[0.05]">
+              <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value as any, documento: "" })} options={tipoDocOptions} />
+              <Input label={docLabel} value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder={`Número do ${docLabel}`} maxLength={14} />
+              <Input type="tel" label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
+              <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
+              <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
+              <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
+              <Select label="Complemento" value={form.complemento} onChange={(e) => setForm({ ...form, complemento: e.target.value })} options={[{ value: "", label: "Selecione..." }, { value: "Casa", label: "Casa" }, { value: "Apartamento", label: "Apartamento" }, { value: "Sala Comercial", label: "Sala Comercial" }, { value: "Kitnet", label: "Kitnet" }, { value: "Cobertura", label: "Cobertura" }, { value: "Flat", label: "Flat" }, { value: "Loft", label: "Loft" }, { value: "Condomínio", label: "Condomínio" }, { value: "Sítio", label: "Sítio" }, { value: "Chácara", label: "Chácara" }, { value: "Fazenda", label: "Fazenda" }, { value: "__outro__", label: "Outro (digitar)" }]} />
+              {form.complemento === "__outro__" && (
+                <Input label="Digite o complemento" value={""} onChange={(e) => setForm({ ...form, complemento: e.target.value })} placeholder="Ex: Fundos, 2º andar..." />
+              )}
+              <Select label="Intenção de Voto" value={form.voto} onChange={(e) => setForm({ ...form, voto: e.target.value, candidatoId: "" })} options={opcoesVoto} />
+              {form.voto === "sim" && candidatos.length > 0 && (
+                <Select label="Candidato" value={form.candidatoId} onChange={(e) => setForm({ ...form, candidatoId: e.target.value })} options={candidatos.map((c) => ({ value: c.id!, label: `${c.nome} (${c.partido})` }))} />
+              )}
+              {form.voto === "sim" && candidatos.length === 0 && (
+                <p className="text-sm text-amber-400 flex items-center gap-2 self-end pb-2">Cadastre candidatos primeiro na página Candidatos</p>
+              )}
+              {isOperacional && (
+                <Select label="Motivo Principal" value={form.motivoPrincipal} onChange={(e) => setForm({ ...form, motivoPrincipal: e.target.value })} options={MOTIVOS_PRINCIPAIS} />
+              )}
+              {isOperacional ? (
+                <div className="md:col-span-2 lg:col-span-3">
+                  <label className="block text-sm font-medium text-white/70 mb-1.5">Observações</label>
+                  <textarea
+                    value={form.observacoes}
+                    onChange={(e) => setForm({ ...form, observacoes: e.target.value })}
+                    placeholder="Detalhes adicionais (opcional)"
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all resize-none"
+                  />
+                </div>
+              ) : (
+                <div className="md:col-span-2 lg:col-span-1">
+                  <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-500/5 border border-amber-500/20">
+            <input
+              type="checkbox"
+              id="consentimento-lgpd"
+              checked={form.consentimentoLGPD}
+              onChange={(e) => setForm({ ...form, consentimentoLGPD: e.target.checked })}
+              className="mt-0.5 h-4 w-4 rounded border-white/20 bg-white/5 text-emerald-500 cursor-pointer accent-emerald-500 shrink-0"
+            />
+            <label htmlFor="consentimento-lgpd" className="text-xs text-amber-200/70 leading-relaxed cursor-pointer">
+              O eleitor autoriza o uso de seus dados pessoais para fins de mobilização eleitoral, em conformidade com a{" "}
+              <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline hover:text-amber-300">
+                Política de Privacidade
+              </a>{" "}
+              (LGPD — Lei 13.709/2018). <span className="text-amber-400">*</span>
+            </label>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button type="submit" loading={saving} className="w-full md:w-auto">
+              <UserPlus size={18} />{saving ? "Salvando..." : "Cadastrar Eleitor"}
+            </Button>
+            {buscandoCep && <span className="text-sm text-white/40 animate-pulse">Buscando CEP...</span>}
+          </div>
+        </form>
+      </GlassCard>
       {editingEleitor && (
         <EditarEleitorModal
           eleitor={editingEleitor}

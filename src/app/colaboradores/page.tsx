@@ -457,58 +457,6 @@ export default function ColaboradoresPage() {
         <BuscaGlobal userData={userData} />
       </div>
 
-      {podeGerenciar && (
-      <GlassCard className="p-5">
-        <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className={roleInfo.text} /><h3 className="text-white font-semibold">Criar Colaborador</h3></div>
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {isSuperOrMaster(userData) && !gabineteIdParam && (
-              <Select
-                label="Vincular ao gabinete"
-                value={form.gabineteVinculoId}
-                onChange={(e) => setForm({ ...form, gabineteVinculoId: e.target.value })}
-                options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
-              />
-            )}
-            {(isAssessorOuExecutivo(userData) || gabineteContexto) && coordenadoresDisponiveis.length > 0 && (
-              <Select
-                label="Coordenador Responsável *"
-                value={form.coordenadorId}
-                onChange={(e) => setForm({ ...form, coordenadorId: e.target.value })}
-                options={[{ value: "", label: "Selecione o coordenador..." }, ...[...coordenadoresDisponiveis].sort((a, b) => (a.assessorId || "").localeCompare(b.assessorId || "") || a.nome.localeCompare(b.nome)).map((c) => ({ value: c.uid, label: assessorNomeMap[c.assessorId || ""] ? `${c.nome} · ${assessorNomeMap[c.assessorId || ""]}` : c.nome }))]}
-              />
-            )}
-            <Input label="Nome Completo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do colaborador" />
-            <Input label="Email *" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailManual(true); }} onFocus={() => setEmailManual(true)} placeholder="email@exemplo.com" />
-            {!isCoordenador(userData) && (
-              <Input label="Senha *" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
-            )}
-            <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
-            <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value, documento: "" })} options={[{ value: "", label: "Selecione..." }, { value: "titulo", label: "Título de Eleitor" }, { value: "cpf", label: "CPF" }, { value: "rg", label: "RG" }]} />
-            <Input label="Nº do Documento" value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder="Número do documento" maxLength={14} />
-            <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
-            <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
-            <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
-            <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
-            <Select label="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
-            <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
-            <div className="md:col-span-2 lg:col-span-1">
-              <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
-            </div>
-          </div>
-          {isAssessor(userData) && coordenadoresDisponiveis.length === 0 && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
-              <p className="text-sm text-amber-400">⚠ Cadastre ao menos um Coordenador antes de criar Mobilizadores.</p>
-            </div>
-          )}
-          <div className="flex items-center gap-3">
-            <Button type="submit" loading={saving} disabled={isAssessor(userData) && coordenadoresDisponiveis.length === 0}><UserPlus size={18} />{saving ? "Salvando..." : "Criar Colaborador"}</Button>
-            {buscandoCep && <span className="text-sm text-white/40 animate-pulse">Buscando CEP...</span>}
-            {isCoordenador(userData) && <span className="text-xs text-amber-400/70">O colaborador ficará pendente até o assessor aprovar</span>}
-          </div>
-        </form>
-      </GlassCard>
-      )}
 
       {isCoordenador(userData) ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -754,6 +702,59 @@ export default function ColaboradoresPage() {
           )}
         </div>
       </GlassCard>
+
+      {podeGerenciar && (
+      <GlassCard className="p-5">
+        <div className="flex items-center gap-2 mb-4"><UserPlus size={18} className={roleInfo.text} /><h3 className="text-white font-semibold">Criar Colaborador</h3></div>
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isSuperOrMaster(userData) && !gabineteIdParam && (
+              <Select
+                label="Vincular ao gabinete"
+                value={form.gabineteVinculoId}
+                onChange={(e) => setForm({ ...form, gabineteVinculoId: e.target.value })}
+                options={[{ value: "", label: "Selecione o gabinete..." }, ...todosGabinetes.map((g) => ({ value: g.id!, label: `${g.nome} (${g.cargo?.replace(/_/g, " ")})` }))]}
+              />
+            )}
+            {(isAssessorOuExecutivo(userData) || gabineteContexto) && coordenadoresDisponiveis.length > 0 && (
+              <Select
+                label="Coordenador Responsável *"
+                value={form.coordenadorId}
+                onChange={(e) => setForm({ ...form, coordenadorId: e.target.value })}
+                options={[{ value: "", label: "Selecione o coordenador..." }, ...[...coordenadoresDisponiveis].sort((a, b) => (a.assessorId || "").localeCompare(b.assessorId || "") || a.nome.localeCompare(b.nome)).map((c) => ({ value: c.uid, label: assessorNomeMap[c.assessorId || ""] ? `${c.nome} · ${assessorNomeMap[c.assessorId || ""]}` : c.nome }))]}
+              />
+            )}
+            <Input label="Nome Completo *" value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Nome do colaborador" />
+            <Input label="Email *" type="email" value={form.email} onChange={(e) => { setForm({ ...form, email: e.target.value }); setEmailManual(true); }} onFocus={() => setEmailManual(true)} placeholder="email@exemplo.com" />
+            {!isCoordenador(userData) && (
+              <Input label="Senha *" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} placeholder="Mínimo 6 caracteres" />
+            )}
+            <Input label="Telefone" value={form.telefone} onChange={(e) => setForm({ ...form, telefone: mascaraTelefone(e.target.value) })} placeholder="(99) 99999-9999" maxLength={15} />
+            <Select label="Tipo de Documento" value={form.tipoDocumento} onChange={(e) => setForm({ ...form, tipoDocumento: e.target.value, documento: "" })} options={[{ value: "", label: "Selecione..." }, { value: "titulo", label: "Título de Eleitor" }, { value: "cpf", label: "CPF" }, { value: "rg", label: "RG" }]} />
+            <Input label="Nº do Documento" value={form.documento} onChange={(e) => setForm({ ...form, documento: mascaraDocumento(form.tipoDocumento, e.target.value) })} placeholder="Número do documento" maxLength={14} />
+            <Input label="CEP" value={form.cep} onChange={(e) => setForm({ ...form, cep: mascaraCEP(e.target.value) })} onBlur={(e) => buscarCep(e.target.value)} placeholder="00000-000" maxLength={9} />
+            <Input label="Logradouro" value={form.logradouro} onChange={(e) => setForm({ ...form, logradouro: e.target.value })} placeholder="Rua, Av..." />
+            <Input label="Número" value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} placeholder="Nº" />
+            <Select label="Estado" value={form.estado} onChange={(e) => handleEstadoChange(e.target.value)} options={estados.map((e) => ({ value: e.sigla, label: `${e.sigla} - ${e.nome}` }))} />
+            <Select label="Cidade" value={form.cidade} onChange={(e) => setForm({ ...form, cidade: e.target.value })} options={cidadesDisponiveis.map((c) => ({ value: c, label: c }))} disabled={!form.estado} />
+            <Input label="Bairro" value={form.bairro} onChange={(e) => setForm({ ...form, bairro: e.target.value })} placeholder="Bairro" />
+            <div className="md:col-span-2 lg:col-span-1">
+              <Input label="Observações" value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações (opcional)" />
+            </div>
+          </div>
+          {isAssessor(userData) && coordenadoresDisponiveis.length === 0 && (
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20">
+              <p className="text-sm text-amber-400">⚠ Cadastre ao menos um Coordenador antes de criar Mobilizadores.</p>
+            </div>
+          )}
+          <div className="flex items-center gap-3">
+            <Button type="submit" loading={saving} disabled={isAssessor(userData) && coordenadoresDisponiveis.length === 0}><UserPlus size={18} />{saving ? "Salvando..." : "Criar Colaborador"}</Button>
+            {buscandoCep && <span className="text-sm text-white/40 animate-pulse">Buscando CEP...</span>}
+            {isCoordenador(userData) && <span className="text-xs text-amber-400/70">O colaborador ficará pendente até o assessor aprovar</span>}
+          </div>
+        </form>
+      </GlassCard>
+      )}
 
       {/* EDITAR COLABORADOR */}
       <Modal open={!!editModal} onClose={() => setEditModal(null)} title="Editar Colaborador">
