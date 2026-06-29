@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import { AppUser, Gabinete } from "@/types";
 import { isSuperOrMaster, isAssessor, isCoordenador, isColaborador } from "@/lib/permissions";
 import { Search, ChevronDown } from "lucide-react";
@@ -165,6 +165,27 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
     [pagina, userData?.role, gabinetes, assessores, coordenadores, colaboradores, gabineteId, assessorId, coordenadorId]
   );
 
+  const breadcrumb = useMemo(() => {
+    const parts: string[] = [];
+    if (gabineteId) {
+      const g = gabinetes?.find((g) => g.id === gabineteId);
+      if (g) parts.push(g.nome);
+    }
+    if (assessorId) {
+      const a = assessores?.find((a) => a.uid === assessorId);
+      if (a) parts.push(a.nome);
+    }
+    if (coordenadorId) {
+      const c = coordenadores?.find((c) => c.uid === coordenadorId);
+      if (c) parts.push(c.nome);
+    }
+    if (colaboradorId) {
+      const c = colaboradores?.find((c) => c.uid === colaboradorId);
+      if (c) parts.push(c.nome);
+    }
+    return parts;
+  }, [gabineteId, assessorId, coordenadorId, colaboradorId, gabinetes, assessores, coordenadores, colaboradores]);
+
   if (!userData) return null;
 
   function emitir(parcial: Partial<FiltrosOperacionais>) {
@@ -195,39 +216,52 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
   }
 
   return (
-    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full">
-      <div className="relative w-full md:w-72">
-        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
-        <input
-          type="text"
-          value={texto}
-          onChange={(e) => handleTexto(e.target.value)}
-          placeholder={getPlaceholder(pagina)}
-          className="w-full pl-10 pr-4 py-[7px] bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
-        />
+    <div className="flex flex-col gap-1.5 w-full">
+      <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full">
+        <div className="relative w-full md:w-72">
+          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+          <input
+            type="text"
+            value={texto}
+            onChange={(e) => handleTexto(e.target.value)}
+            placeholder={getPlaceholder(pagina)}
+            className="w-full pl-10 pr-4 py-[7px] bg-white/5 border border-white/10 rounded-xl text-white placeholder-white/30 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all"
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 min-w-0">
+          {niveis.map((nivel) => (
+            <div key={nivel.chave} className="relative w-full sm:w-52">
+              <select
+                value={filtrosAtuais[nivel.chave] || ""}
+                onChange={(e) => handleNivel(nivel.chave, e.target.value)}
+                className="w-full px-4 py-[7px] pr-8 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none cursor-pointer"
+                style={{ colorScheme: "dark" }}
+              >
+                <option value="" className="bg-zinc-950 text-zinc-400">{nivel.placeholder}</option>
+                {nivel.opcoes.length === 0 && (
+                  <option value="" disabled className="bg-zinc-950 text-zinc-600">Nenhum disponível</option>
+                )}
+                {nivel.opcoes.map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-zinc-950 text-white">{opt.label}</option>
+                ))}
+              </select>
+              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 min-w-0">
-        {niveis.map((nivel) => (
-          <div key={nivel.chave} className="relative w-full sm:w-52">
-            <select
-              value={filtrosAtuais[nivel.chave] || ""}
-              onChange={(e) => handleNivel(nivel.chave, e.target.value)}
-              className="w-full px-4 py-[7px] pr-8 bg-zinc-900 border border-zinc-800 rounded-xl text-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 transition-all appearance-none cursor-pointer"
-              style={{ colorScheme: "dark" }}
-            >
-              <option value="" className="bg-zinc-950 text-zinc-400">{nivel.placeholder}</option>
-              {nivel.opcoes.length === 0 && (
-                <option value="" disabled className="bg-zinc-950 text-zinc-600">Nenhum disponível</option>
-              )}
-              {nivel.opcoes.map((opt) => (
-                <option key={opt.value} value={opt.value} className="bg-zinc-950 text-white">{opt.label}</option>
-              ))}
-            </select>
-            <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-white/30 pointer-events-none" />
-          </div>
-        ))}
-      </div>
+      {breadcrumb.length > 0 && (
+        <div className="flex items-center gap-1 pl-1 flex-wrap">
+          {breadcrumb.map((part, i) => (
+            <Fragment key={i}>
+              {i > 0 && <span className="text-white/20 text-xs">›</span>}
+              <span className="text-xs text-white/50 font-medium">{part}</span>
+            </Fragment>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
