@@ -133,78 +133,72 @@ interface FiltrosOperacionais {
 
 ---
 
-## Cenário de Teste v3.0 — ATIVO (criado 2026-05-22)
+## Cenário de Teste v4 — ATIVO (criado 2026-06-20)
 
-Cenário controlado, determinístico e rastreável para validação hierárquica territorial.
-Script: `scripts/seed-cenario-v3.mjs`
+Cenário executivo de estresse com assimetrias propositais de desempenho territorial.
+Script: `scripts/seed-cenario-v4.mjs`
+Campanha ID: `5Y0Xi6Z1p9KvJiEqQODM`
+
+> ⚠️ **PROIBIDO:** `dep.federal@mail.com` — não existe mais no Firebase. Jamais usar.
 
 ```bash
-npm run seed:v3          # criar
-npm run seed:v3:reset    # apagar e recriar
-npm run clean:fake       # limpar (usa manifesto _seed_manifest/cenario_01)
+npm run seed:v4          # criar
+npm run seed:v4:reset    # apagar e recriar
 ```
 
 ### Estrutura
 | Nível | Qtd | Todos têm Auth |
 |---|---|---|
-| Deputado Federal | 1 | ✅ |
-| Assessores | 3 | ✅ |
-| Coordenadores | 6 | ✅ |
-| Mobilizadores | 14 | ✅ |
-| Eleitores | 141 | — |
+| Deputado Federal | 1 | ✅ (preservado — não criado pelo seed) |
+| Assessor Executivo | 1 | ✅ |
+| Assessores Regionais | 5 | ✅ |
+| Coordenadores | 20 | ✅ |
+| Colaboradores | 100 | ✅ |
+| Eleitores | ~420 | — |
 
-**Território:** Pernambuco — Recife · Caruaru · Petrolina
-**Gabinete:** "Ricardo Alves — Pernambuco 2026"
+**Território:** Pernambuco — 10 municípios
 **Senha padrão:** `111111`
 
 ### Logins completos
 
-| Role | Email | Nome | Território |
+| Role | Email | Nome | Território / Perfil |
 |---|---|---|---|
-| **Deputado** | `dep.federal@mail.com` | Ricardo Alves | PE (geral) |
-| Assessor | `assessor.recife@mail.com` | Carlos Menezes | Recife · dominante |
-| Assessor | `assessor.caruaru@mail.com` | Ana Ferreira | Caruaru · equilibrado |
-| Assessor | `assessor.petrolina@mail.com` | Pedro Santos | Petrolina · crescendo |
-| Coord | `coord.recife.boaviagem@mail.com` | Marcos Lima | Boa Viagem/Recife |
-| Coord | `coord.recife.imbiribeira@mail.com` | Juliana Costa | Imbiribeira/Recife |
-| Coord | `coord.caruaru.centro@mail.com` | Roberto Silva | Centro/Caruaru |
-| Coord | `coord.caruaru.indianopolis@mail.com` | Fernanda Luz | Indianópolis/Caruaru |
-| Coord | `coord.petrolina.centro@mail.com` | Diego Campos | Centro/Petrolina |
-| Coord | `coord.petrolina.areia@mail.com` | Patrícia Neves | Areia/Petrolina |
-| Mob | `mob.recife.boaviagem.1@mail.com` | Tânia Silva | Boa Viagem/Recife |
-| Mob | `mob.recife.boaviagem.2@mail.com` | Lucas Ramos | Boa Viagem/Recife |
-| Mob | `mob.recife.boaviagem.3@mail.com` | Beatriz Moura | Boa Viagem/Recife |
-| Mob | `mob.recife.imbiribeira.1@mail.com` | Rafael Cruz | Imbiribeira/Recife |
-| Mob | `mob.recife.imbiribeira.2@mail.com` | Camila Pinto | Imbiribeira/Recife |
-| Mob | `mob.caruaru.centro.1@mail.com` | Anderson Dias | Centro/Caruaru |
-| Mob | `mob.caruaru.centro.2@mail.com` | Sandra Barros | Centro/Caruaru |
-| Mob | `mob.caruaru.centro.3@mail.com` | Felipe Torres | Centro/Caruaru |
-| Mob | `mob.caruaru.indianopolis.1@mail.com` | Vanessa Rocha | Indianópolis/Caruaru |
-| Mob | `mob.caruaru.indianopolis.2@mail.com` | Eduardo Melo | Indianópolis/Caruaru |
-| Mob | `mob.petrolina.centro.1@mail.com` | Simone Araújo | Centro/Petrolina |
-| Mob | `mob.petrolina.centro.2@mail.com` | Henrique Lima | Centro/Petrolina |
-| Mob | `mob.petrolina.areia.1@mail.com` | Letícia Souza | Areia/Petrolina |
-| Mob | `mob.petrolina.areia.2@mail.com` | Rodrigo Fonseca | Areia/Petrolina |
+| **Deputado** | `deputado@teste.com` | Ricardo Fonseca | PE (geral) |
+| Assessor Executivo | `assessor.executivo@mail.com` | Lucas Viana | PE (todos os municípios) |
+| Assessor Regional | `assessor.a1.exec@mail.com` | Rafael Drummond | Recife · Olinda — EXCELENTE |
+| Assessor Regional | `assessor.a2.exec@mail.com` | Juliana Melo | Caruaru · Surubim · Santa Cruz · Arcoverde — BOM |
+| Assessor Regional | `assessor.a3.exec@mail.com` | Diego Costa | Petrolina — P2 NOVO (0 coords) |
+| Assessor Regional | `assessor.a4.exec@mail.com` | Roberto Alves | Salgueiro — FRACO |
+| Assessor Regional | `assessor.a5.exec@mail.com` | Sandra Lima | Garanhuns — QUEDA (inativo 45d) |
+| Coord | `coord.r.boaviagem.exec@mail.com` | Daniela Ferraz | Boa Viagem/Recife |
+| Coord | `coord.r.imbiribeira.exec@mail.com` | Sandro Leal | Imbiribeira/Recife |
+| Coord | `coord.r.torre.exec@mail.com` | Natália Vasconcelos | Torre/Recife |
+| Coord | `coord.r.encruzilhada.exec@mail.com` | Fábio Tavares | Encruzilhada/Recife |
+| Coord | `coord.o.casacaiada.exec@mail.com` | Thiago Cavalcante | Casa Caiada/Olinda |
+| Coord | `coord.ga.centro.exec@mail.com` | Tânia Vieira | Centro/Garanhuns |
+| Coord | `coord.sa.centro.exec@mail.com` | Hélio Lima | Centro/Salgueiro |
+| Colab (direto) | `mob.pe.li.1@mail.com` | Marcos Lima | Petrolina — 25 eleitores |
+| Colab (direto) | `mob.pe.li.2@mail.com` | Juliana Costa | Petrolina — 25 eleitores |
 
-### Cadeia de teste recomendada (Recife · dominante)
+### Cadeia de teste recomendada (Recife · excelente)
 ```
-dep.federal@mail.com          (Ricardo Alves — Deputado)
-  └─ assessor.recife@mail.com         (Carlos Menezes — Assessor)
-       └─ coord.recife.boaviagem@mail.com  (Marcos Lima — Coord)
-            └─ mob.recife.boaviagem.1@mail.com (Tânia Silva — Mob)
-                 └─ 15 eleitores vinculados · Boa Viagem/Recife
+deputado@teste.com                    (Ricardo Fonseca — Deputado)
+  └─ assessor.executivo@mail.com      (Lucas Viana — Assessor Executivo)
+       └─ assessor.a1.exec@mail.com   (Rafael Drummond — Assessor Regional · Recife/Olinda)
+            └─ coord.r.boaviagem.exec@mail.com (Daniela Ferraz — Coord)
+                 └─ mob.r.bv.1@mail.com (Tatiane Braga — Mob · 5 eleitores)
 ```
 
-### Distribuição de eleitores por território
-| Território | Eleitores | Perfil |
-|---|---|---|
-| Recife — Boa Viagem | 45 | dominante |
-| Recife — Imbiribeira | 24 | dominante |
-| Caruaru — Centro | 30 | equilibrado |
-| Caruaru — Indianópolis | 16 | equilibrado |
-| Petrolina — Centro | 14 | crescendo |
-| Petrolina — Areia | 12 | crescendo |
-| **Total** | **141** | |
+### Distribuição de eleitores por assessor regional
+| Assessor | Municípios | Eleitores | Perfil |
+|---|---|---|---|
+| Rafael Drummond (A1) | Recife + Olinda | 135 | EXCELENTE |
+| Juliana Melo (A2) | Caruaru + Surubim + Santa Cruz + Arcoverde | 145 | BOM |
+| Diego Costa (A3) | Petrolina | 50 | P2 NOVO |
+| Roberto Alves (A4) | Salgueiro | 30 | FRACO |
+| Sandra Lima (A5) | Garanhuns | 40 | QUEDA |
+| (sem liderança) | Serra Talhada | 20 | DESCOBERTO |
+| **Total** | **10 municípios** | **~420** | |
 
 ### Super Admin preservado
 `wnetgus@gmail.com` — não pertence ao cenário fake, não é removido em nenhum reset.
