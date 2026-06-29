@@ -166,25 +166,25 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
   );
 
   const breadcrumb = useMemo(() => {
-    const parts: string[] = [];
+    const parts: { label: string; valor: string }[] = [];
     if (gabineteId) {
       const g = gabinetes?.find((g) => g.id === gabineteId);
-      if (g) parts.push(g.nome);
+      if (g) parts.push({ label: nivelLabel(pagina, "gabineteId"), valor: g.nome });
     }
     if (assessorId) {
       const a = assessores?.find((a) => a.uid === assessorId);
-      if (a) parts.push(a.nome);
+      if (a) parts.push({ label: nivelLabel(pagina, "assessorId"), valor: a.nome });
     }
     if (coordenadorId) {
       const c = coordenadores?.find((c) => c.uid === coordenadorId);
-      if (c) parts.push(c.nome);
+      if (c) parts.push({ label: nivelLabel(pagina, "coordenadorId"), valor: c.nome });
     }
     if (colaboradorId) {
       const c = colaboradores?.find((c) => c.uid === colaboradorId);
-      if (c) parts.push(c.nome);
+      if (c) parts.push({ label: nivelLabel(pagina, "colaboradorId"), valor: c.nome });
     }
     return parts;
-  }, [gabineteId, assessorId, coordenadorId, colaboradorId, gabinetes, assessores, coordenadores, colaboradores]);
+  }, [pagina, gabineteId, assessorId, coordenadorId, colaboradorId, gabinetes, assessores, coordenadores, colaboradores]);
 
   if (!userData) return null;
 
@@ -253,11 +253,14 @@ export function BuscaOperacional({ pagina, userData, gabinetes, assessores, coor
       </div>
 
       {breadcrumb.length > 0 && (
-        <div className="flex items-center gap-1 pl-1 flex-wrap">
+        <div className="flex items-center gap-2 pl-1 py-1 flex-wrap">
+          <span className="text-[10px] text-white/30 uppercase tracking-wider shrink-0">Filtros ativos:</span>
           {breadcrumb.map((part, i) => (
-            <Fragment key={i}>
-              {i > 0 && <span className="text-white/20 text-xs">›</span>}
-              <span className="text-xs text-white/50 font-medium">{part}</span>
+            <Fragment key={part.label}>
+              {i > 0 && <span className="text-white/15 text-xs">·</span>}
+              <span className="text-xs px-2 py-0.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-emerald-300/90 font-medium whitespace-nowrap">
+                {part.label} <span className="text-emerald-300/50">›</span> {part.valor}
+              </span>
             </Fragment>
           ))}
         </div>
