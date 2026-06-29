@@ -2,15 +2,25 @@
 
 import { ButtonHTMLAttributes } from "react";
 
+type ButtonSize = "sm" | "md" | "lg";
+
+const SIZE_CLASSES: Record<ButtonSize, string> = {
+  sm: "px-3 py-1.5 text-xs",
+  md: "px-5 py-2.5 text-sm",
+  lg: "px-6 py-3 text-base",
+};
+
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: "primary" | "secondary" | "danger" | "ghost";
   loading?: boolean;
+  size?: ButtonSize;
 }
 
 export function Button({
   children,
   variant = "primary",
   loading = false,
+  size = "md",
   className = "",
   disabled,
   ...props
@@ -24,7 +34,7 @@ export function Button({
 
   return (
     <button
-      className={`px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 
+      className={`${SIZE_CLASSES[size]} rounded-xl font-medium transition-all duration-200
         disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2
         ${variants[variant]} ${className}`}
       disabled={disabled || loading}

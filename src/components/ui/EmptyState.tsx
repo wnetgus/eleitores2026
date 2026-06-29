@@ -1,11 +1,14 @@
+import React from "react";
+
 interface EmptyStateProps {
   icon?: string;
   title: string;
   description?: string;
   action?: { label: string; href: string };
+  actions?: React.ReactNode[];
 }
 
-export function EmptyState({ icon = "📭", title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon = "📭", title, description, action, actions }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 px-4">
       <div className="w-16 h-16 rounded-2xl bg-white/[0.03] border border-white/[0.06] flex items-center justify-center text-2xl mb-4">
@@ -20,6 +23,13 @@ export function EmptyState({ icon = "📭", title, description, action }: EmptyS
         >
           {action.label}
         </a>
+      )}
+      {actions && actions.length > 0 && (
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-2">
+          {actions.map((node, i) => (
+            <React.Fragment key={i}>{node}</React.Fragment>
+          ))}
+        </div>
       )}
     </div>
   );
