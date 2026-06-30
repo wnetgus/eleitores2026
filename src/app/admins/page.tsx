@@ -28,6 +28,7 @@ export default function AdminsPage() {
   const [editForm, setEditForm] = useState({ nome: "", email: "" });
   const [excluirModal, setExcluirModal] = useState<AppUser | null>(null);
   const [excluirSaving, setExcluirSaving] = useState(false);
+  const [desativarModal, setDesativarModal] = useState<AppUser | null>(null);
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData)) { router.push("/dashboard"); return; }
@@ -140,7 +141,7 @@ export default function AdminsPage() {
                 <div className="flex items-center justify-between text-xs pt-1">
                   <span className="text-white/30">Criado em: {formatDate(c.criadoEm)}</span>
                   {userData?.uid !== c.uid && (
-                    <button onClick={() => handleToggleStatus(c.uid, c.ativo)} className={`${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
+                    <button onClick={() => c.ativo ? setDesativarModal(c) : handleToggleStatus(c.uid, c.ativo)} className={`${c.ativo ? "text-red-400 hover:text-red-300" : "text-emerald-400 hover:text-emerald-300"} transition-colors`}>
                       {c.ativo ? "Desativar" : "Ativar"}
                     </button>
                   )}
@@ -159,6 +160,20 @@ export default function AdminsPage() {
           <div className="flex gap-3 pt-2">
             <Button onClick={handleEdit} className="flex-1">Salvar</Button>
             <Button variant="ghost" onClick={() => setEditModal(null)} className="flex-1">Cancelar</Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL DESATIVAR */}
+      <Modal open={!!desativarModal} onClose={() => setDesativarModal(null)} title="Desativar Admin Master">
+        <div className="space-y-4">
+          <p className="text-white/60 text-sm">
+            Tem certeza que deseja desativar <strong className="text-white">{desativarModal?.nome}</strong>?
+          </p>
+          <p className="text-amber-400/70 text-xs">Desativar remove o acesso administrativo dentro do ELEITORES2026, mas não remove a conta de login no Firebase Auth.</p>
+          <div className="flex gap-3 pt-2">
+            <Button onClick={() => { if (desativarModal) { handleToggleStatus(desativarModal.uid, true); setDesativarModal(null); } }} className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30">Desativar</Button>
+            <Button variant="ghost" onClick={() => setDesativarModal(null)} className="flex-1">Cancelar</Button>
           </div>
         </div>
       </Modal>
