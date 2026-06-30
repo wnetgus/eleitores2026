@@ -35,6 +35,8 @@ export default function ConfiguracoesPage() {
   const [reseting, setReseting] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [resetStep, setResetStep] = useState(0);
+  const [resetCounts, setResetCounts] = useState<{ eleitores: number; usuarios: number; gabinetes: number } | null>(null);
+  const [loadingCounts, setLoadingCounts] = useState(false);
 
   useEffect(() => {
     if (userData && !isSuperOrMaster(userData) && !isAssessor(userData)) { router.push("/dashboard"); return; }
@@ -62,6 +64,10 @@ export default function ConfiguracoesPage() {
     e.preventDefault();
     if (!form.email || !form.password || !form.nome) { toast.error("Preencha todos os campos"); return; }
     if (form.password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
+    if (["assessor", "assessor_executivo", "coordenador", "colaborador"].includes(form.role) && !form.gabineteId) {
+      toast.error("Selecione um gabinete para este perfil");
+      return;
+    }
     setSaving(true);
     try {
       await createAuthUser(form.email, form.password, {
@@ -79,6 +85,20 @@ export default function ConfiguracoesPage() {
 
   async function handleToggleStatus(uid: string, ativo: boolean) {
     try { await updateDoc(doc(db, "usuarios", uid), { ativo: !ativo }); toast.success(`Usuário ${ativo ? "desativado" : "ativado"}`); loadData(); } catch (e) { toast.error("Erro ao atualizar usuário", { duration: 4000 }); }
+  }
+
+  async function buscarContagensReset() {
+    setLoadingCounts(true);
+    try {
+      const [eSnap, uSnap, gSnap] = await Promise.all([
+        getDocs(collection(db, "eleitores")),
+        getDocs(collection(db, "usuarios")),
+        getDocs(collection(db, "campanhas")),
+      ]);
+      const usuariosOp = uSnap.docs.filter((d) => d.data().role !== "super_admin" && d.data().role !== "admin_master").length;
+      setResetCounts({ eleitores: eSnap.size, usuarios: usuariosOp, gabinetes: gSnap.size });
+    } catch {} finally { setLoadingCounts(false); }
+    setShowResetConfirm(true);
   }
 
   async function handleReset() {
@@ -189,8 +209,8 @@ export default function ConfiguracoesPage() {
           </p>
 
           {!showResetConfirm ? (
-            <Button variant="danger" onClick={() => setShowResetConfirm(true)} loading={reseting}>
-              <Trash2 size={16} /> Resetar Dados de Teste
+            <Button variant="danger" onClick={buscarContagensReset} loading={reseting || loadingCounts}>
+              <Trash2 size={16} /> {loadingCounts ? "Calculando..." : "Resetar Dados de Teste"}
             </Button>
           ) : (
             <div className="space-y-3">
@@ -199,6 +219,14 @@ export default function ConfiguracoesPage() {
                   ? "Tem certeza? Todos os dados de teste serão desativados permanentemente."
                   : "Esta é a última confirmação. Esta ação não pode ser desfeita."}
               </p>
+              {resetCounts && (
+                <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-xs space-y-1">
+                  <p className="text-red-400 font-semibold mb-1">Impacto desta operação:</p>
+                  <p className="text-white/60">• {resetCounts.eleitores.toLocaleString("pt-BR")} eleitores</p>
+                  <p className="text-white/60">• {resetCounts.usuarios.toLocaleString("pt-BR")} usuários operacionais</p>
+                  <p className="text-white/60">• {resetCounts.gabinetes.toLocaleString("pt-BR")} gabinetes</p>
+                </div>
+              )}
               <div className="flex items-center gap-3">
                 {resetStep === 0 ? (
                   <Button variant="danger" onClick={() => setResetStep(1)}>
@@ -209,7 +237,7 @@ export default function ConfiguracoesPage() {
                     {reseting ? "Resetando..." : "Sim, tenho certeza. Resetar tudo!"}
                   </Button>
                 )}
-                <Button variant="ghost" onClick={() => { setShowResetConfirm(false); setResetStep(0); }}>
+                <Button variant="ghost" onClick={() => { setShowResetConfirm(false); setResetStep(0); setResetCounts(null); }}>
                   Cancelar
                 </Button>
               </div>

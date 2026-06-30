@@ -720,6 +720,12 @@ export default function ExportacoesPage() {
           <h3 className="text-white font-semibold">Resumo dos Dados</h3>
           <span data-testid={eleitores.length >= 500 ? "aviso-limite-500" : undefined} className="text-sm text-white/40">{eleitores.length} registros</span>
         </div>
+        {eleitores.length >= 500 && (
+          <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+            <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+            <p className="text-xs text-amber-300">Exibindo os 500 registros mais recentes. A exportação pode estar incompleta.</p>
+          </div>
+        )}
         <div className="overflow-x-auto max-h-80 overflow-y-auto">
           <table className="w-full text-sm">
             <thead>

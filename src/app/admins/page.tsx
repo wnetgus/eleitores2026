@@ -155,6 +155,7 @@ export default function AdminsPage() {
         <div className="space-y-4">
           <Input label="Nome" value={editForm.nome} onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })} />
           <Input label="Email" type="email" value={editForm.email} onChange={(e) => setEditForm({ ...editForm, email: e.target.value })} />
+          <p className="text-xs text-amber-400/70">⚠ O e-mail de login no Firebase Auth não será alterado. Para alterar o acesso, exclua e recrie o usuário.</p>
           <div className="flex gap-3 pt-2">
             <Button onClick={handleEdit} className="flex-1">Salvar</Button>
             <Button variant="ghost" onClick={() => setEditModal(null)} className="flex-1">Cancelar</Button>
@@ -169,6 +170,7 @@ export default function AdminsPage() {
             Tem certeza que deseja excluir <strong className="text-white">{excluirModal?.nome}</strong>?
           </p>
           <p className="text-red-400/70 text-xs">Esta ação remove permanentemente o acesso e os dados do usuário. Não é reversível.</p>
+          <p className="text-amber-400/70 text-xs">A conta de login no Firebase Auth será mantida. Apenas o vínculo administrativo será removido.</p>
           <div className="flex gap-3 pt-2">
             <Button onClick={handleExcluir} loading={excluirSaving} className="flex-1 bg-red-500/20 text-red-400 hover:bg-red-500/30">Excluir</Button>
             <Button variant="ghost" onClick={() => setExcluirModal(null)} className="flex-1">Cancelar</Button>
