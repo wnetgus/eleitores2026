@@ -113,7 +113,7 @@ export default function CadastroRapidoPage() {
   if (!userData) return null;
 
   return (
-    <div data-testid="pagina-cadastro-rapido" className="min-h-screen bg-[#0a0a0f] flex flex-col max-w-lg mx-auto">
+    <div data-testid="pagina-cadastro-rapido" className="h-dvh bg-[#0a0a0f] flex flex-col max-w-lg mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 px-4 pt-14 pb-4 border-b border-white/8">
         <button
